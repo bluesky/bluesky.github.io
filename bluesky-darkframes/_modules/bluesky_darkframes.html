@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.1.1.post1+g8600a14 documentation</title>
+  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.1.2 documentation</title>
   
 
   
@@ -63,7 +63,7 @@
             
             
               <div class="version">
-                0.1.1.post1+g8600a14
+                0.1.2
               </div>
             
           
@@ -275,7 +275,7 @@
         <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Captured snapshot for state </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
         <span class="n">state</span> <span class="o">=</span> <span class="n">state</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_evict_old_entries</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_limit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="p">)</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_limit</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_limit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_limit</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">popitem</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="p">[</span><span class="n">frozendict</span><span class="p">(</span><span class="n">state</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">(),</span> <span class="n">snapshot</span><span class="p">)</span>
 
@@ -310,8 +310,12 @@
             <span class="c1"># Acquire a fresh Snapshot if we need one, or retrieve a cached one.</span>
             <span class="n">state</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">signal</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">locked_signals</span><span class="p">:</span>
-                <span class="n">reading</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">bluesky</span><span class="o">.</span><span class="n">plan_stubs</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">signal</span><span class="p">)</span>
-                <span class="n">state</span><span class="p">[</span><span class="n">signal</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">reading</span>
+                <span class="n">reading</span> <span class="o">=</span> <span class="k">yield from</span> <span class="n">bluesky</span><span class="o">.</span><span class="n">plan_stubs</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">signal</span><span class="p">)</span>
+                <span class="c1"># Restructure</span>
+                <span class="c1"># {&#39;data_key&#39;: {&#39;value&#39;: &lt;value&gt;, &#39;timestamp&#39;: &lt;timestamp&gt;}, ...}</span>
+                <span class="c1"># into ((&#39;data_key&#39;, &lt;value&gt;) ...).</span>
+                <span class="n">values_only</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">reading</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+                <span class="n">state</span><span class="p">[</span><span class="n">signal</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">values_only</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">snapshot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_snapshot</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">NoMatchingSnapshot</span><span class="p">:</span>
