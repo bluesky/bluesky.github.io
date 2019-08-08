@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.1.3.post8+g8ead7a4 documentation</title>
+  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.1.3.post10+g2ebffde documentation</title>
   
 
   
@@ -63,7 +63,7 @@
             
             
               <div class="version">
-                0.1.3.post8+g8ead7a4
+                0.1.3.post10+g2ebffde
               </div>
             
           
@@ -228,6 +228,20 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_assets_collected</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 
+<span class="k">class</span> <span class="nc">_SnapshotShell</span><span class="p">:</span>
+    <span class="c1"># This enables us to hot-swap Snapshot instances in the middle of a Run.</span>
+    <span class="c1"># We hand this object to the RunEngine, so it sees one consistent</span>
+    <span class="c1"># instance throughout the Run.</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__snapshot</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">set_snaphsot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snapshot</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__snapshot</span> <span class="o">=</span> <span class="n">snapshot</span>
+
+    <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__snapshot</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="DarkFramePreprocessor"><a class="viewcode-back" href="../reference.html#bluesky_darkframes.DarkFramePreprocessor">[docs]</a><span class="k">class</span> <span class="nc">DarkFramePreprocessor</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    A plan preprocessor that ensures each Run records a dark frame.</span>
@@ -266,6 +280,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span> <span class="o">=</span> <span class="n">stream_name</span>
         <span class="c1"># Map state to (creation_time, snapshot).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span> <span class="o">=</span> <span class="n">_SnapshotShell</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_state</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -327,7 +343,7 @@
 <div class="viewcode-block" id="DarkFramePreprocessor.__call__"><a class="viewcode-back" href="../reference.html#bluesky_darkframes.DarkFramePreprocessor.__call__">[docs]</a>    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plan</span><span class="p">):</span>
         <span class="s2">&quot;Preprocessor: Takes in a plan and creates a modified plan.&quot;</span>
 
-        <span class="k">def</span> <span class="nf">tail</span><span class="p">():</span>
+        <span class="k">def</span> <span class="nf">tail</span><span class="p">(</span><span class="n">force_read</span><span class="p">):</span>
             <span class="c1"># Acquire a fresh Snapshot if we need one, or retrieve a cached one.</span>
             <span class="n">state</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">signal</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">locked_signals</span><span class="p">:</span>
@@ -337,19 +353,28 @@
                 <span class="c1"># into ((&#39;data_key&#39;, &lt;value&gt;) ...).</span>
                 <span class="n">values_only</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">[</span><span class="s1">&#39;value&#39;</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">reading</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
                 <span class="n">state</span><span class="p">[</span><span class="n">signal</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">values_only</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_state</span> <span class="o">!=</span> <span class="n">state</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_current_state</span> <span class="o">=</span> <span class="n">state</span>
+                <span class="n">snapshot_changed</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">snapshot_changed</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">snapshot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_snapshot</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">NoMatchingSnapshot</span><span class="p">:</span>
                 <span class="n">snapshot</span> <span class="o">=</span> <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">dark_plan</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">add_snapshot</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
-            <span class="c1"># Read the Snapshot into the &#39;dark&#39; Event stream.</span>
-            <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
-            <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">trigger_and_read</span><span class="p">([</span><span class="n">snapshot</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span><span class="p">)</span>
-            <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">unstage</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">snapshot_changed</span> <span class="ow">or</span> <span class="n">force_read</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="o">.</span><span class="n">set_snaphsot</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
+                <span class="c1"># Read the Snapshot into the &#39;dark&#39; Event stream.</span>
+                <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">)</span>
+                <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">trigger_and_read</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">],</span>
+                                                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span><span class="p">)</span>
+                <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">unstage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">)</span>
 
         <span class="k">def</span> <span class="nf">insert</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;open_run&#39;</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tail</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;open_run&#39;</span><span class="p">,</span> <span class="s1">&#39;save&#39;</span><span class="p">):</span>
+                <span class="c1"># Always stash a reading if this is a new Run.</span>
+                <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tail</span><span class="p">(</span><span class="n">force_read</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;open_run&#39;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
 
