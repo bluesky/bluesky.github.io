@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.2.0 documentation</title>
+  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.2.0.post8+g2ecb8c7 documentation</title>
   
 
   
@@ -63,7 +63,7 @@
             
             
               <div class="version">
-                0.2.0
+                0.2.0.post8+g2ecb8c7
               </div>
             
           
@@ -172,7 +172,7 @@
 <span class="k">del</span> <span class="n">get_versions</span>
 
 
-<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;bluesky_darkframe&#39;</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;bluesky.darkframes&#39;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="SnapshotDevice"><a class="viewcode-back" href="../reference.html#bluesky_darkframes.SnapshotDevice">[docs]</a><span class="k">class</span> <span class="nc">SnapshotDevice</span><span class="p">(</span><span class="n">Device</span><span class="p">):</span>
@@ -255,6 +255,7 @@
 <span class="sd">    ----------</span>
 <span class="sd">    dark_plan: callable</span>
 <span class="sd">        Expected siganture: ``dark_plan() -&gt; snapshot_device``</span>
+<span class="sd">    detector : Device</span>
 <span class="sd">    max_age: float</span>
 <span class="sd">        Time after which a fresh dark frame should be acquired</span>
 <span class="sd">    locked_signals: Iterable, optional</span>
@@ -265,9 +266,10 @@
 <span class="sd">    stream_name: string, optional</span>
 <span class="sd">        Event stream name for dark frames. Default is &#39;dark&#39;.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dark_plan</span><span class="p">,</span> <span class="n">max_age</span><span class="p">,</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dark_plan</span><span class="p">,</span> <span class="n">detector</span><span class="p">,</span> <span class="n">max_age</span><span class="p">,</span>
                  <span class="n">locked_signals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream_name</span><span class="o">=</span><span class="s1">&#39;dark&#39;</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dark_plan</span> <span class="o">=</span> <span class="n">dark_plan</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detector</span> <span class="o">=</span> <span class="n">detector</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_age</span> <span class="o">=</span> <span class="n">max_age</span>
         <span class="c1"># The signals have to have unique names for this to work.</span>
         <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">signal</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">signal</span> <span class="ow">in</span> <span class="n">locked_signals</span> <span class="ow">or</span> <span class="p">()]</span>
@@ -282,6 +284,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">OrderedDict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span> <span class="o">=</span> <span class="n">_SnapshotShell</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_state</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_force_read_before_next_event</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -343,7 +347,7 @@
 <div class="viewcode-block" id="DarkFramePreprocessor.__call__"><a class="viewcode-back" href="../reference.html#bluesky_darkframes.DarkFramePreprocessor.__call__">[docs]</a>    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plan</span><span class="p">):</span>
         <span class="s2">&quot;Preprocessor: Takes in a plan and creates a modified plan.&quot;</span>
 
-        <span class="k">def</span> <span class="nf">tail</span><span class="p">(</span><span class="n">force_read</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">insert_dark_frame</span><span class="p">(</span><span class="n">force_read</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
             <span class="c1"># Acquire a fresh Snapshot if we need one, or retrieve a cached one.</span>
             <span class="n">state</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">for</span> <span class="n">signal</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">locked_signals</span><span class="p">:</span>
@@ -361,24 +365,35 @@
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">snapshot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_snapshot</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">NoMatchingSnapshot</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">f</span><span class="s2">&quot;Taking a new dark frame for state=</span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
                 <span class="n">snapshot</span> <span class="o">=</span> <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">dark_plan</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">add_snapshot</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">snapshot_changed</span> <span class="ow">or</span> <span class="n">force_read</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">f</span><span class="s2">&quot;Creating a &#39;dark&#39; Event for state=</span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="o">.</span><span class="n">set_snaphsot</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
                 <span class="c1"># Read the Snapshot into the &#39;dark&#39; Event stream.</span>
                 <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">)</span>
                 <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">trigger_and_read</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">],</span>
                                                 <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span><span class="p">)</span>
                 <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">unstage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="n">msg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">(</span><span class="k">yield</span> <span class="n">msg</span><span class="p">)</span>
 
-        <span class="k">def</span> <span class="nf">insert</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;open_run&#39;</span><span class="p">,</span> <span class="s1">&#39;save&#39;</span><span class="p">):</span>
-                <span class="c1"># Always stash a reading if this is a new Run.</span>
-                <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">tail</span><span class="p">(</span><span class="n">force_read</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;open_run&#39;</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">maybe_insert_dark_frame</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;trigger&#39;</span> <span class="ow">and</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">detector</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span><span class="p">:</span>
+                <span class="n">force_read</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_force_read_before_next_event</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_force_read_before_next_event</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">return</span> <span class="n">insert_dark_frame</span><span class="p">(</span><span class="n">force_read</span><span class="o">=</span><span class="n">force_read</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">msg</span><span class="p">),</span> <span class="kc">None</span>
+            <span class="k">elif</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;open_run&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_force_read_before_next_event</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
 
-        <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">bluesky</span><span class="o">.</span><span class="n">preprocessors</span><span class="o">.</span><span class="n">plan_mutator</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">insert</span><span class="p">))</span></div></div>
+        <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">bluesky</span><span class="o">.</span><span class="n">preprocessors</span><span class="o">.</span><span class="n">plan_mutator</span><span class="p">(</span>
+            <span class="n">plan</span><span class="p">,</span> <span class="n">maybe_insert_dark_frame</span><span class="p">))</span></div></div>
 
 
 <span class="k">class</span> <span class="nc">DarkSubtraction</span><span class="p">(</span><span class="n">event_model</span><span class="o">.</span><span class="n">DocumentRouter</span><span class="p">):</span>
@@ -474,7 +489,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">dark_frame</span><span class="p">,</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">field</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dark_frame</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pedestal</span>
             <span class="n">numpy</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dark_frame</span><span class="p">,</span> <span class="n">a_min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">a_max</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dark_frame</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">doc</span><span class="p">[</span><span class="s1">&#39;descriptor&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">light_descriptor</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">doc</span><span class="p">[</span><span class="s1">&#39;descriptor&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">light_descriptor</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dark_frame</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">NoDarkFrame</span><span class="p">(</span>
                     <span class="s2">&quot;DarkSubtraction has not received a &#39;dark&#39; Event yet, so &quot;</span>
