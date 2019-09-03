@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Usage &mdash; Bluesky Darkframes 0.3.0 documentation</title>
+  <title>Usage &mdash; Bluesky Darkframes 0.3.0.post4+ga9119f4 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.3.0
+                0.3.0.post4+ga9119f4
               </div>
             
           
@@ -92,7 +92,7 @@
               <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Usage</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#the-user-s-perspective">The User’s Perspective</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#data-model">Data Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#initial-configuration">Initial Configuration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#acquire-and-access-data">Acquire and Access Data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#export-subtracted-images">Export Subtracted Images</a><ul>
@@ -170,11 +170,69 @@
             
   <div class="section" id="usage">
 <h1>Usage<a class="headerlink" href="#usage" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="the-user-s-perspective">
-<h2>The User’s Perspective<a class="headerlink" href="#the-user-s-perspective" title="Permalink to this headline">¶</a></h2>
-<p>The user executes plans with the RunEngine is the usual way, with no extra
-syntax. An Event stream named ‘dark’ is added to every Run automatically.
-If desired subtracted frames can be exported to files or a database.</p>
+<div class="section" id="data-model">
+<h2>Data Model<a class="headerlink" href="#data-model" title="Permalink to this headline">¶</a></h2>
+<p>A typical bluesky Run has an Event Stream named <code class="docutils literal notranslate"><span class="pre">'primary'</span></code>, an Event Stream
+named <code class="docutils literal notranslate"><span class="pre">'baseline`'</span></code>, and potentially other Event Streams for signals that are
+monitored asynchronously during the Run. The names of these Event Streams are
+just convention, encoded by the built-in bluesky plans. Plans can define any
+Event Streams that they like.</p>
+<p>A natural way to include dark frames with a Run is to add a <code class="docutils literal notranslate"><span class="pre">'dark'</span></code> Event
+Stream. Because Events are timestamped, the <code class="docutils literal notranslate"><span class="pre">'dark'</span></code> Events can be associated
+with <code class="docutils literal notranslate"><span class="pre">'primary'</span></code> Events to produce dark-subtracted images. Each Run should
+have at least one <code class="docutils literal notranslate"><span class="pre">'dark'</span></code> Event, and it may have more than one if a
+fresh dark frame is needed mid-run. The most direct way to achieve this is to
+write <code class="docutils literal notranslate"><span class="pre">trigger_and_read(...,</span> <span class="pre">name='dark')</span></code> into a custom plan:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">bluesky.plan_stubs</span> <span class="kn">as</span> <span class="nn">bps</span>
+
+<span class="k">def</span> <span class="nf">count_with_darkframe</span><span class="p">(</span><span class="n">detector</span><span class="p">,</span> <span class="n">md</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="n">detector</span><span class="p">)</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">open_run</span><span class="p">(</span><span class="n">md</span><span class="o">=</span><span class="n">md</span><span class="p">)</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">mv</span><span class="p">(</span><span class="n">shutter</span><span class="p">,</span> <span class="s1">&#39;closed&#39;</span><span class="p">)</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">trigger_and_read</span><span class="p">([</span><span class="n">detector</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dark&#39;</span><span class="p">)</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">mv</span><span class="p">(</span><span class="n">shutter</span><span class="p">,</span> <span class="s1">&#39;open&#39;</span><span class="p">)</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">trigger_and_read</span><span class="p">([</span><span class="n">detector</span><span class="p">])</span>  <span class="c1"># name=&#39;primary&#39; by default</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">close_run</span><span class="p">()</span>
+    <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">unstage</span><span class="p">(</span><span class="n">detector</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This direct solution is best one for some circumstances. However, if you find
+yourself looking at the prospect of rewriting a large number of plans just to
+add this dark frame logic, it may be simpler to use a bluesky <em>preprocessor</em>. A
+preprocessor can augment or modify the steps in a plan. The
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DarkFramePreprocessor</span></code> watches for a given detector to be triggered and
+inserts steps in the plan to acquire and/or record a dark frame when needed.
+Depending on how you configure it, it can reuse a given dark frame multiple
+times. Thus, it will not necessarily <em>acquire</em> a dark frame for every Run, but
+it will ensure that at least one ‘dark’ Event is <em>recorded</em> in every Run.</p>
+<p>The preprocessor can be applied to specific plans, using Python’s decorator
+syntax</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">bluesky.preprocessors</span> <span class="kn">import</span> <span class="n">make_decorator</span>
+
+<span class="c1"># Do this just once.</span>
+<span class="n">dark_frame_preprocessor</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># See next section.</span>
+<span class="n">do_dark_frames</span> <span class="o">=</span> <span class="n">make_decorator</span><span class="p">(</span><span class="n">dark_frame_preprocessor</span><span class="p">)()</span>
+
+<span class="c1"># And apply it to as many plans as you like.</span>
+<span class="nd">@do_dark_frames</span>
+<span class="k">def</span> <span class="nf">my_custom_plan</span><span class="p">(</span><span class="o">...</span><span class="p">):</span>
+    <span class="o">...</span>
+
+<span class="nd">@do_dark_frames</span>
+<span class="k">def</span> <span class="nf">another_custom_plan</span><span class="p">(</span><span class="o">...</span><span class="p">):</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>or it can be applied to <em>all</em> plans.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Do this just once.</span>
+<span class="n">dark_frame_preprocessor</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># See next section.</span>
+<span class="n">RE</span><span class="o">.</span><span class="n">preprocessors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dark_frame_preprocessor</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This enables the user to use any built-in or user-defined plan and know that
+dark frames will automatically be included in the logic of the plan. Note that
+preprocessor will only have an effect is the detector of interest is used
+during the plan.</p>
 </div>
 <div class="section" id="initial-configuration">
 <h2>Initial Configuration<a class="headerlink" href="#initial-configuration" title="Permalink to this headline">¶</a></h2>
@@ -271,7 +329,7 @@ dark frames included.</p>
 <span class="n">RE</span><span class="p">(</span><span class="n">count</span><span class="p">([</span><span class="n">det</span><span class="p">]))</span>
 </pre></div>
 </div>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="s1">&#39;23138373-136f-4cb3-86a9-f7a451ac153a&#39;</span><span class="p">,)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="s1">&#39;41aaad50-1502-4be7-be9e-84300987091e&#39;</span><span class="p">,)</span>
 </pre></div>
 </div>
 </div>
@@ -325,8 +383,8 @@ original if desired.</p>
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">!</span>ls exported_files
 </pre></div>
 </div>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mi">23138373</span><span class="o">-</span><span class="mi">136</span><span class="n">f</span><span class="o">-</span><span class="mi">4</span><span class="n">cb3</span><span class="o">-</span><span class="mi">86</span><span class="n">a9</span><span class="o">-</span><span class="n">f7a451ac153a</span><span class="o">-</span><span class="n">dark</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
-<span class="mi">23138373</span><span class="o">-</span><span class="mi">136</span><span class="n">f</span><span class="o">-</span><span class="mi">4</span><span class="n">cb3</span><span class="o">-</span><span class="mi">86</span><span class="n">a9</span><span class="o">-</span><span class="n">f7a451ac153a</span><span class="o">-</span><span class="n">primary</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mi">41</span><span class="n">aaad50</span><span class="o">-</span><span class="mi">1502</span><span class="o">-</span><span class="mi">4</span><span class="n">be7</span><span class="o">-</span><span class="n">be9e</span><span class="o">-</span><span class="mi">84300987091</span><span class="n">e</span><span class="o">-</span><span class="n">dark</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
+<span class="mi">41</span><span class="n">aaad50</span><span class="o">-</span><span class="mi">1502</span><span class="o">-</span><span class="mi">4</span><span class="n">be7</span><span class="o">-</span><span class="n">be9e</span><span class="o">-</span><span class="mi">84300987091</span><span class="n">e</span><span class="o">-</span><span class="n">primary</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
 </pre></div>
 </div>
 </div>
@@ -379,7 +437,7 @@ original if desired.</p>
   warnings.warn(&quot;Ignoring attempt to insert Resource with duplicate &quot;
 </pre></div>
 </div>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="s1">&#39;b4c8491b-7dad-4631-b2a1-e7d4615466d1&#39;</span><span class="p">,)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="s1">&#39;2a7f0896-f249-4fc8-b561-db8fe6712027&#39;</span><span class="p">,)</span>
 </pre></div>
 </div>
 </div>
@@ -388,8 +446,8 @@ original if desired.</p>
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">!</span>ls live_exported_files
 </pre></div>
 </div>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">b4c8491b</span><span class="o">-</span><span class="mi">7</span><span class="n">dad</span><span class="o">-</span><span class="mi">4631</span><span class="o">-</span><span class="n">b2a1</span><span class="o">-</span><span class="n">e7d4615466d1</span><span class="o">-</span><span class="n">dark</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
-<span class="n">b4c8491b</span><span class="o">-</span><span class="mi">7</span><span class="n">dad</span><span class="o">-</span><span class="mi">4631</span><span class="o">-</span><span class="n">b2a1</span><span class="o">-</span><span class="n">e7d4615466d1</span><span class="o">-</span><span class="n">primary</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="mi">2</span><span class="n">a7f0896</span><span class="o">-</span><span class="n">f249</span><span class="o">-</span><span class="mi">4</span><span class="n">fc8</span><span class="o">-</span><span class="n">b561</span><span class="o">-</span><span class="n">db8fe6712027</span><span class="o">-</span><span class="n">dark</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
+<span class="mi">2</span><span class="n">a7f0896</span><span class="o">-</span><span class="n">f249</span><span class="o">-</span><span class="mi">4</span><span class="n">fc8</span><span class="o">-</span><span class="n">b561</span><span class="o">-</span><span class="n">db8fe6712027</span><span class="o">-</span><span class="n">primary</span><span class="o">-</span><span class="n">det_image</span><span class="o">-</span><span class="mf">0.</span><span class="n">tiff</span>
 </pre></div>
 </div>
 </div>
