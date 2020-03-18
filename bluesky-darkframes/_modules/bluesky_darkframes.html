@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.3.0.post39+g53808f1 documentation</title>
+  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.3.0.post42+g98899df documentation</title>
   
 
   
@@ -64,7 +64,7 @@
             
             
               <div class="version">
-                0.3.0.post39+g53808f1
+                0.3.0.post42+g98899df
               </div>
             
           
@@ -166,6 +166,7 @@
 <span class="kn">from</span> <span class="nn">frozendict</span> <span class="kn">import</span> <span class="n">frozendict</span>
 <span class="kn">import</span> <span class="nn">bluesky.preprocessors</span>
 <span class="kn">import</span> <span class="nn">bluesky.plan_stubs</span> <span class="k">as</span> <span class="nn">bps</span>
+<span class="kn">from</span> <span class="nn">bluesky.utils</span> <span class="kn">import</span> <span class="n">short_uid</span>
 <span class="kn">import</span> <span class="nn">numpy</span>
 <span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">Device</span>
 
@@ -294,6 +295,9 @@
 
     <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__snapshot</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+
+<span class="n">GROUP_PREFIX</span> <span class="o">=</span> <span class="s1">&#39;bluesky-darkframes-trigger&#39;</span>
 
 
 <div class="viewcode-block" id="DarkFramePreprocessor"><a class="viewcode-back" href="../reference.html#bluesky_darkframes.DarkFramePreprocessor">[docs]</a><span class="k">class</span> <span class="nc">DarkFramePreprocessor</span><span class="p">:</span>
@@ -470,18 +474,29 @@
                 <span class="c1"># bluesky will always see the &quot;Device&quot; self._current_snapshot</span>
                 <span class="c1"># here, and it will be satisfied.</span>
                 <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">)</span>
-                <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">trigger_and_read</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">],</span>
-                                                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span><span class="p">)</span>
+                <span class="k">yield from</span> <span class="n">trigger_and_read</span><span class="p">(</span>
+                    <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">],</span>
+                    <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span><span class="p">,</span>
+                    <span class="n">group</span><span class="o">=</span><span class="n">short_uid</span><span class="p">(</span><span class="n">GROUP_PREFIX</span><span class="p">))</span>
                 <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">unstage</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_snapshot</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">if</span> <span class="n">msg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">return</span> <span class="p">(</span><span class="k">yield</span> <span class="n">msg</span><span class="p">)</span>
 
         <span class="k">def</span> <span class="nf">maybe_insert_dark_frame</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;trigger&#39;</span> <span class="ow">and</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">detector</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span><span class="p">:</span>
+            <span class="c1"># * Is this a &#39;trigger&#39; message?</span>
+            <span class="c1"># * Does it refer to the detector that this preprocessor cares about?</span>
+            <span class="c1"># * Is it *not* from another DarkFramePreprocessor. (There can be</span>
+            <span class="c1"># multiple nested DarkFramePreprocessors watching the same detector</span>
+            <span class="c1"># by applying different dark_plans / recording Events in different</span>
+            <span class="c1"># streams.)</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;trigger&#39;</span>
+                    <span class="ow">and</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">detector</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;group&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">GROUP_PREFIX</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span><span class="p">):</span>
                 <span class="n">force_read</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_force_read_before_next_event</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_force_read_before_next_event</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># prevents infinite recursion</span>
                 <span class="k">return</span> <span class="n">insert_dark_frame</span><span class="p">(</span><span class="n">force_read</span><span class="o">=</span><span class="n">force_read</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">msg</span><span class="p">),</span> <span class="kc">None</span>
             <span class="k">elif</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span> <span class="o">==</span> <span class="s1">&#39;open_run&#39;</span><span class="p">:</span>
                 <span class="c1"># Make sure we get a new Event because we have just started a</span>
@@ -644,6 +659,59 @@
 
 <span class="k">class</span> <span class="nc">NoMatchingSnapshot</span><span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="n">BlueskyDarkframesException</span><span class="p">):</span>
     <span class="o">...</span>
+
+
+<span class="c1"># Vendored from bluesky.plan_stubs, added `group` parameter</span>
+
+
+<span class="k">def</span> <span class="nf">trigger_and_read</span><span class="p">(</span><span class="n">devices</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;primary&#39;</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Trigger and read a list of detectors and bundle readings into one Event.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    devices : iterable</span>
+<span class="sd">        devices to trigger (if they have a trigger method) and then read</span>
+<span class="sd">    name : string, optional</span>
+<span class="sd">        event stream name, a convenient human-friendly identifier; default</span>
+<span class="sd">        name is &#39;primary&#39;</span>
+<span class="sd">    group : string (or any hashable object), optional</span>
+<span class="sd">        identifier used by &#39;trigger&#39; and &#39;wait&#39;</span>
+
+<span class="sd">    Yields</span>
+<span class="sd">    ------</span>
+<span class="sd">    msg : Msg</span>
+<span class="sd">        messages to &#39;trigger&#39;, &#39;wait&#39; and &#39;read&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># If devices is empty, don&#39;t emit &#39;create&#39;/&#39;save&#39; messages.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">devices</span><span class="p">:</span>
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">null</span><span class="p">()</span>
+    <span class="n">devices</span> <span class="o">=</span> <span class="n">bps</span><span class="o">.</span><span class="n">separate_devices</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span>  <span class="c1"># remove redundant entries</span>
+    <span class="n">rewindable</span> <span class="o">=</span> <span class="n">bps</span><span class="o">.</span><span class="n">all_safe_rewind</span><span class="p">(</span><span class="n">devices</span><span class="p">)</span>  <span class="c1"># if devices can be re-triggered</span>
+
+    <span class="k">def</span> <span class="nf">inner_trigger_and_read</span><span class="p">():</span>
+        <span class="k">nonlocal</span> <span class="n">group</span>
+        <span class="k">if</span> <span class="n">group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">group</span> <span class="o">=</span> <span class="n">short_uid</span><span class="p">(</span><span class="s1">&#39;trigger&#39;</span><span class="p">)</span>
+        <span class="n">no_wait</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;trigger&#39;</span><span class="p">):</span>
+                <span class="n">no_wait</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="c1"># Skip &#39;wait&#39; if none of the devices implemented a trigger method.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">no_wait</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># collect and return readings to give plan access to them</span>
+        <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">:</span>
+            <span class="n">reading</span> <span class="o">=</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">reading</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">ret</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">reading</span><span class="p">)</span>
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">ret</span>
+    <span class="kn">from</span> <span class="nn">bluesky.preprocessors</span> <span class="kn">import</span> <span class="n">rewindable_wrapper</span>
+    <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">rewindable_wrapper</span><span class="p">(</span><span class="n">inner_trigger_and_read</span><span class="p">(),</span>
+                                          <span class="n">rewindable</span><span class="p">))</span>
 </pre></div>
 
            </div>
