@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Reference &mdash; Bluesky Darkframes 0.3.0.post18+g8491a7e documentation</title>
+  <title>Reference &mdash; Bluesky Darkframes 0.3.0.post28+g3cf9c7e documentation</title>
   
 
   
@@ -66,7 +66,7 @@
             
             
               <div class="version">
-                0.3.0.post18+g8491a7e
+                0.3.0.post28+g3cf9c7e
               </div>
             
           
@@ -178,7 +178,8 @@ dark frame is taken.</p>
 <dt><strong>max_age: float</strong></dt><dd><p>Time after which a fresh dark frame should be acquired</p>
 </dd>
 <dt><strong>locked_signals: Iterable, optional</strong></dt><dd><p>Any changes to these signals invalidate the current dark frame and
-prompt us to take a new one.</p>
+prompt us to take a new one. Typical examples would be exposure time or
+gain, anything that changes the expected dark frame.</p>
 </dd>
 <dt><strong>limit: integer or None, optional</strong></dt><dd><p>Number of dark frames to cache. If None, do not limit.</p>
 </dd>
@@ -191,6 +192,9 @@ prompt us to take a new one.</p>
 <dt id="bluesky_darkframes.DarkFramePreprocessor.__call__">
 <code class="sig-name descname">__call__</code><span class="sig-paren">(</span><em class="sig-param">self</em>, <em class="sig-param">plan</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bluesky_darkframes.html#DarkFramePreprocessor.__call__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#bluesky_darkframes.DarkFramePreprocessor.__call__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Preprocessor: Takes in a plan and creates a modified plan.</p>
+<p>This inserts messages to add extra readings to the plan. First, it
+decides whether it needs to trigger the detector to get a fresh reading
+or whether it can use a cached reading.</p>
 </dd></dl>
 
 <dl class="method">
@@ -201,7 +205,10 @@ prompt us to take a new one.</p>
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><dl class="simple">
 <dt><strong>snapshot: SnapshotDevice</strong></dt><dd></dd>
-<dt><strong>state: dict, optional</strong></dt><dd></dd>
+<dt><strong>state: dict, optional</strong></dt><dd><p>Mapping each of the names of the locked_signals (if any) to its
+value when the snapshot was taken. When snapshots are accessed via
+<code class="docutils literal notranslate"><span class="pre">get_snapshot(state)</span></code>, the states will be compared via <code class="docutils literal notranslate"><span class="pre">==</span></code>.</p>
+</dd>
 </dl>
 </dd>
 </dl>
@@ -211,6 +218,17 @@ prompt us to take a new one.</p>
 <dt id="bluesky_darkframes.DarkFramePreprocessor.cache">
 <em class="property">property </em><code class="sig-name descname">cache</code><a class="headerlink" href="#bluesky_darkframes.DarkFramePreprocessor.cache" title="Permalink to this definition">¶</a></dt>
 <dd><p>A read-only view of the cached dark frames.</p>
+<p>Each key is a frozendict mapping each of the names of the
+<code class="docutils literal notranslate"><span class="pre">locked_signals</span></code> (if any) to its value at the time the dark frame was
+taken.</p>
+<p>Each value has the structure <code class="docutils literal notranslate"><span class="pre">(creation_time,</span> <span class="pre">snapshot)</span></code> where
+creation_time is the UNIX epoch time that the dark frame was taken and
+snapshot is a <a class="reference internal" href="#bluesky_darkframes.SnapshotDevice" title="bluesky_darkframes.SnapshotDevice"><code class="xref py py-class docutils literal notranslate"><span class="pre">SnapshotDevice</span></code></a> instance.</p>
+<p>The cache is ordered. When an item is accessed, it is moved to the
+front. If <code class="docutils literal notranslate"><span class="pre">limit</span></code> is set, items will be removed from the end as
+needed to abide by the limit.</p>
+<p>Whenver the cache is updated or accessed, any items whose
+<code class="docutils literal notranslate"><span class="pre">creation_time</span></code> is more than <code class="docutils literal notranslate"><span class="pre">max_age</span></code> seconds ago are culled.</p>
 </dd></dl>
 
 <dl class="method">
@@ -226,7 +244,9 @@ prompt us to take a new one.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><dl class="simple">
-<dt><strong>state: dict</strong></dt><dd></dd>
+<dt><strong>state: dict</strong></dt><dd><p>Mapping each of the names of the locked_signals (if any) to its
+value.</p>
+</dd>
 </dl>
 </dd>
 </dl>
