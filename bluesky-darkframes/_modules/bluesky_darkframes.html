@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.3.0.post42+g98899df documentation</title>
+  <title>bluesky_darkframes &mdash; Bluesky Darkframes 0.3.0.post44+g762ced1 documentation</title>
   
 
   
@@ -64,7 +64,7 @@
             
             
               <div class="version">
-                0.3.0.post42+g98899df
+                0.3.0.post44+g762ced1
               </div>
             
           
@@ -158,9 +158,12 @@
   <h1>Source code for bluesky_darkframes</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">import</span> <span class="nn">event_model</span>
 <span class="kn">from</span> <span class="nn">frozendict</span> <span class="kn">import</span> <span class="n">frozendict</span>
@@ -313,6 +316,9 @@
 <span class="sd">    ----------</span>
 <span class="sd">    dark_plan: callable</span>
 <span class="sd">        Expected siganture: ``dark_plan(detector) -&gt; snapshot_device``</span>
+
+<span class="sd">        The old signature ``dark_plan() -&gt; snapshot_device`` is accepted but</span>
+<span class="sd">        will issue a warning.</span>
 <span class="sd">    detector : Device</span>
 <span class="sd">    max_age: float</span>
 <span class="sd">        Time after which a fresh dark frame should be acquired</span>
@@ -327,8 +333,17 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dark_plan</span><span class="p">,</span> <span class="n">detector</span><span class="p">,</span> <span class="n">max_age</span><span class="p">,</span>
                  <span class="n">locked_signals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream_name</span><span class="o">=</span><span class="s1">&#39;dark&#39;</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dark_plan</span> <span class="o">=</span> <span class="n">dark_plan</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">detector</span> <span class="o">=</span> <span class="n">detector</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dark_plan</span> <span class="o">=</span> <span class="n">dark_plan</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">dark_plan</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The dark_plan </span><span class="si">{</span><span class="n">dark_plan</span><span class="si">}</span><span class="s2"> is now expected to accept the &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;detector as an argument. A dark_plan that accepts no &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;arguments is still supported, but it may not be supported &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;in future releases.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_partialed_dark_plan</span> <span class="o">=</span> <span class="n">dark_plan</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_partialed_dark_plan</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">dark_plan</span><span class="p">,</span> <span class="n">detector</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_detector</span> <span class="o">=</span> <span class="n">detector</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_age</span> <span class="o">=</span> <span class="n">max_age</span>
         <span class="c1"># The signals have to have unique names for this to work.</span>
         <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="n">signal</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">signal</span> <span class="ow">in</span> <span class="n">locked_signals</span> <span class="ow">or</span> <span class="p">()]</span>
@@ -336,7 +351,7 @@
             <span class="k">raise</span> <span class="n">BlueskyDarkframesValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The signals in locked_signals need to have unique names. &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;The names given were: </span><span class="si">{</span><span class="n">names</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">locked_signals</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">locked_signals</span> <span class="ow">or</span> <span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_locked_signals</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">locked_signals</span> <span class="ow">or</span> <span class="p">())</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_limit</span> <span class="o">=</span> <span class="n">limit</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span> <span class="o">=</span> <span class="n">stream_name</span>
         <span class="c1"># Map state to (creation_time, snapshot).</span>
@@ -345,6 +360,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_force_read_before_next_event</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_latch</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_disabled</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">detector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_detector</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">dark_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dark_plan</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">locked_signals</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locked_signals</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -455,7 +482,7 @@
                 <span class="c1"># hardware and get a fresh snapshot.</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Taking a new </span><span class="si">%r</span><span class="s2"> reading for state=</span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">stream_name</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
-                <span class="n">snapshot</span> <span class="o">=</span> <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">dark_plan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">detector</span><span class="p">)</span>
+                <span class="n">snapshot</span> <span class="o">=</span> <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partialed_dark_plan</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">add_snapshot</span><span class="p">(</span><span class="n">snapshot</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
             <span class="c1"># If the Snapshot is the same as the one we most recently inserted,</span>
             <span class="c1"># then we don&#39;t need to create a new Event. The previous Event</span>
