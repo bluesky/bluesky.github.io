@@ -1,0 +1,595 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>databroker_pack._pack &mdash; databroker-pack 0.post40+g6e6d8db documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/language_data.js"></script>
+        <script src="../../_static/clipboard.min.js"></script>
+        <script src="../../_static/copybutton.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/copybutton.css" type="text/css" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> databroker-pack
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.post40+g6e6d8db
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reference.html">Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../release-history.html">Release History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../min_versions.html">Minimum Version of Python and NumPy</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">databroker-pack</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>databroker_pack._pack</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for databroker_pack._pack</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">pathlib</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+
+<span class="kn">import</span> <span class="nn">event_model</span>
+<span class="kn">import</span> <span class="nn">databroker.core</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="kn">from</span> <span class="nn">._version</span> <span class="kn">import</span> <span class="n">get_versions</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;export_uids&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;export_catalog&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;export_run&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;write_documents_manifest&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;write_external_files_manifest&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;write_jsonl_catalog_file&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;write_msgpack_catalog_file&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1"># Write through tqdm to avoid overlapping with bars.</span>
+<span class="k">def</span> <span class="nf">print</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="n">tqdm</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="export_uids"><a class="viewcode-back" href="../../reference.html#databroker_pack.export_uids">[docs]</a><span class="k">def</span> <span class="nf">export_uids</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">uids</span><span class="p">,</span>
+    <span class="n">directory</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">external</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">dry_run</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">handler_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">serializer_class</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Export Runs from a Catalog, given a list of RunStart unique IDs.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    source_catalog: Catalog</span>
+<span class="sd">    uids: List[Str]</span>
+<span class="sd">        List of RunStart unique IDs</span>
+<span class="sd">    directory: Union[Str, Manager]</span>
+<span class="sd">        Where files containing documents will be written, or a Manager for</span>
+<span class="sd">        writing to non-file buffers.</span>
+<span class="sd">    strict: Bool, optional</span>
+<span class="sd">        By default, swallow erros and return a lits of them at the end.</span>
+<span class="sd">        Set to True to debug errors.</span>
+<span class="sd">    external: {None, &#39;fill&#39;, &#39;ignore&#39;)</span>
+<span class="sd">        If None, return the paths to external files.</span>
+<span class="sd">        If &#39;fill&#39;, fill the external data into the Documents.</span>
+<span class="sd">        If &#39;ignore&#39;, do not locate external files.</span>
+<span class="sd">    dry_run: Bool, optional</span>
+<span class="sd">        If True, do not write any files. False by default.</span>
+<span class="sd">    handler_registry: Union[Dict, None]</span>
+<span class="sd">        If None, automatic handler discovery is used.</span>
+<span class="sd">    serializer_class: Serializer</span>
+<span class="sd">        Expected to be a lossless serializer that encodes a format for which</span>
+<span class="sd">        there is a corresponding databroker intake driver. Default (None) is</span>
+<span class="sd">        currently ``suitcase.msgpack.Serializer``, but this may change in the</span>
+<span class="sd">        future. If you want ``suitcase.msgpack.Serializer`` specifically, pass</span>
+<span class="sd">        it in explicitly.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    files: Dict[Str, Set[Str]]</span>
+<span class="sd">        Maps each &quot;root&quot; to a set of absolute file paths.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">accumulated_files</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">accumulated_artifacts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">failures</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">uids</span><span class="p">),</span> <span class="n">position</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Writing Documents&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">uid</span> <span class="ow">in</span> <span class="n">uids</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">run</span> <span class="o">=</span> <span class="n">source_catalog</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span>
+                <span class="n">artifacts</span><span class="p">,</span> <span class="n">files</span> <span class="o">=</span> <span class="n">export_run</span><span class="p">(</span>
+                    <span class="n">run</span><span class="p">,</span>
+                    <span class="n">directory</span><span class="p">,</span>
+                    <span class="n">external</span><span class="o">=</span><span class="n">external</span><span class="p">,</span>
+                    <span class="n">dry_run</span><span class="o">=</span><span class="n">dry_run</span><span class="p">,</span>
+                    <span class="n">handler_registry</span><span class="o">=</span><span class="n">handler_registry</span><span class="p">,</span>
+                    <span class="n">root_map</span><span class="o">=</span><span class="n">source_catalog</span><span class="o">.</span><span class="n">root_map</span><span class="p">,</span>
+                    <span class="n">serializer_class</span><span class="o">=</span><span class="n">serializer_class</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">set_</span> <span class="ow">in</span> <span class="n">files</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">accumulated_files</span><span class="p">[</span><span class="n">root</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">set_</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">list_</span> <span class="ow">in</span> <span class="n">artifacts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">accumulated_artifacts</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">list_</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Error while exporting Run </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+                    <span class="k">raise</span>
+                <span class="n">failures</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;FAILED:&quot;</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+            <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">accumulated_artifacts</span><span class="p">),</span> <span class="nb">dict</span><span class="p">(</span><span class="n">accumulated_files</span><span class="p">),</span> <span class="n">failures</span></div>
+
+
+<div class="viewcode-block" id="export_catalog"><a class="viewcode-back" href="../../reference.html#databroker_pack.export_catalog">[docs]</a><span class="k">def</span> <span class="nf">export_catalog</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">directory</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">external</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">dry_run</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">handler_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">serializer_class</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Export all the Runs from a Catalog.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    source_catalog: Catalog</span>
+<span class="sd">    directory: Union[Str, Manager]</span>
+<span class="sd">        Where files containing documents will be written, or a Manager for</span>
+<span class="sd">        writing to non-file buffers.</span>
+<span class="sd">    strict: Bool, optional</span>
+<span class="sd">        By default, swallow erros and return a lits of them at the end.</span>
+<span class="sd">        Set to True to debug errors.</span>
+<span class="sd">    external: {None, &#39;fill&#39;, &#39;ignore&#39;)</span>
+<span class="sd">        If None, return the paths to external files.</span>
+<span class="sd">        If &#39;fill&#39;, fill the external data into the Documents.</span>
+<span class="sd">        If &#39;ignore&#39;, do not locate external files.</span>
+<span class="sd">    dry_run: Bool, optional</span>
+<span class="sd">        If True, do not write any files. False by default.</span>
+<span class="sd">    handler_registry: Union[Dict, None]</span>
+<span class="sd">        If None, automatic handler discovery is used.</span>
+<span class="sd">    serializer_class: Serializer</span>
+<span class="sd">        Expected to be a lossless serializer that encodes a format for which</span>
+<span class="sd">        there is a corresponding databroker intake driver. Default (None) is</span>
+<span class="sd">        currently ``suitcase.msgpack.Serializer``, but this may change in the</span>
+<span class="sd">        future. If you want ``suitcase.msgpack.Serializer`` specifically, pass</span>
+<span class="sd">        it in explicitly.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    files: Dict[Str, Set[Str]]</span>
+<span class="sd">        Maps each &quot;root&quot; to a set of absolute file paths.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">accumulated_files</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">accumulated_artifacts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">failures</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">source_catalog</span><span class="p">),</span> <span class="n">position</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">uid</span><span class="p">,</span> <span class="n">run</span> <span class="ow">in</span> <span class="n">source_catalog</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">artifacts</span><span class="p">,</span> <span class="n">files</span> <span class="o">=</span> <span class="n">export_run</span><span class="p">(</span>
+                    <span class="n">run</span><span class="p">,</span>
+                    <span class="n">directory</span><span class="p">,</span>
+                    <span class="n">external</span><span class="o">=</span><span class="n">external</span><span class="p">,</span>
+                    <span class="n">dry_run</span><span class="o">=</span><span class="n">dry_run</span><span class="p">,</span>
+                    <span class="n">handler_registry</span><span class="o">=</span><span class="n">handler_registry</span><span class="p">,</span>
+                    <span class="n">root_map</span><span class="o">=</span><span class="n">source_catalog</span><span class="o">.</span><span class="n">root_map</span><span class="p">,</span>
+                    <span class="n">serializer_class</span><span class="o">=</span><span class="n">serializer_class</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">set_</span> <span class="ow">in</span> <span class="n">files</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">accumulated_files</span><span class="p">[</span><span class="n">root</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">set_</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">list_</span> <span class="ow">in</span> <span class="n">artifacts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">accumulated_artifacts</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">list_</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Error while exporting Run </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+                    <span class="k">raise</span>
+                <span class="n">failures</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;FAILED:&quot;</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+            <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">accumulated_artifacts</span><span class="p">),</span> <span class="nb">dict</span><span class="p">(</span><span class="n">accumulated_files</span><span class="p">),</span> <span class="n">failures</span></div>
+
+
+<div class="viewcode-block" id="export_run"><a class="viewcode-back" href="../../reference.html#databroker_pack.export_run">[docs]</a><span class="k">def</span> <span class="nf">export_run</span><span class="p">(</span>
+    <span class="n">run</span><span class="p">,</span>
+    <span class="n">directory</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">external</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">dry_run</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">handler_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">root_map</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">serializer_class</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Export one Run.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    run: BlueskyRun</span>
+<span class="sd">    directory: Union[Str, Manager]</span>
+<span class="sd">        Where files containing documents will be written, or a Manager for</span>
+<span class="sd">        writing to non-file buffers.</span>
+<span class="sd">    external: {None, &#39;fill&#39;, &#39;ignore&#39;)</span>
+<span class="sd">        If None, return the paths to external files.</span>
+<span class="sd">        If &#39;fill&#39;, fill the external data into the Documents.</span>
+<span class="sd">        If &#39;ignore&#39;, do not locate external files.</span>
+<span class="sd">    dry_run: Bool, optional</span>
+<span class="sd">        If True, do not write any files. False by default.</span>
+<span class="sd">    handler_registry: Union[Dict, None]</span>
+<span class="sd">        If None, automatic handler discovery is used.</span>
+<span class="sd">    serializer_class: Serializer, optional</span>
+<span class="sd">        Expected to be a lossless serializer that encodes a format for which</span>
+<span class="sd">        there is a corresponding databroker intake driver. Default (None) is</span>
+<span class="sd">        currently ``suitcase.msgpack.Serializer``, but this may change in the</span>
+<span class="sd">        future. If you want ``suitcase.msgpack.Serializer`` specifically, pass</span>
+<span class="sd">        it in explicitly.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    files: Dict[Str, Set[Str]]</span>
+<span class="sd">        Maps each &quot;root&quot; to a set of absolute file paths.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">serializer_class</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">import</span> <span class="nn">suitcase.msgpack</span>
+
+        <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">suitcase</span><span class="o">.</span><span class="n">msgpack</span><span class="o">.</span><span class="n">Serializer</span>
+    <span class="n">root_map</span> <span class="o">=</span> <span class="n">root_map</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">resources</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">handler_registry</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">handler_registry</span> <span class="o">=</span> <span class="n">databroker</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">discover_handlers</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">event_model</span><span class="o">.</span><span class="n">Filler</span><span class="p">(</span>
+        <span class="n">handler_registry</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">root_map</span><span class="o">=</span><span class="n">root_map</span>
+    <span class="p">)</span> <span class="k">as</span> <span class="n">filler</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">serializer_class</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">as</span> <span class="n">serializer</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">position</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">run</span><span class="o">.</span><span class="n">canonical</span><span class="p">(</span><span class="n">fill</span><span class="o">=</span><span class="s2">&quot;no&quot;</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;resource&quot;</span><span class="p">:</span>
+                        <span class="n">resources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">external</span> <span class="o">==</span> <span class="s2">&quot;fill&quot;</span><span class="p">:</span>
+                        <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="o">=</span> <span class="n">filler</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">dry_run</span><span class="p">:</span>
+                        <span class="n">serializer</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+                    <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">external</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">resource</span> <span class="ow">in</span> <span class="n">resources</span><span class="p">:</span>
+                <span class="n">root</span> <span class="o">=</span> <span class="n">root_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">resource</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">],</span> <span class="n">resource</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">])</span>
+                <span class="n">files</span><span class="p">[</span><span class="n">root</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">get_file_list</span><span class="p">(</span><span class="n">resource</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">serializer</span><span class="o">.</span><span class="n">artifacts</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">files</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">_root_hash</span><span class="p">(</span><span class="n">root</span><span class="p">):</span>
+    <span class="c1"># This is just a unique ID to give the manifest file for each</span>
+    <span class="c1"># root a unique name. It is not a cryptographic hash.</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="n">root</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="write_external_files_manifest"><a class="viewcode-back" href="../../reference.html#databroker_pack.write_external_files_manifest">[docs]</a><span class="k">def</span> <span class="nf">write_external_files_manifest</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">root</span><span class="p">,</span> <span class="n">files</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Write a manifest of external files.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    manager: suitcase Manager object</span>
+<span class="sd">    root: Str</span>
+<span class="sd">    files: Iterable[Union[Str, Path]]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">root_hash</span> <span class="o">=</span> <span class="n">_root_hash</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;external_files_manifest_</span><span class="si">{</span><span class="n">root_hash</span><span class="si">}</span><span class="s2">.txt&quot;</span>
+    <span class="k">with</span> <span class="n">manager</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;manifest&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&quot;xt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">files</span><span class="p">)))))</span></div>
+
+
+<span class="k">def</span> <span class="nf">copy_external_files</span><span class="p">(</span><span class="n">target_directory</span><span class="p">,</span> <span class="n">root</span><span class="p">,</span> <span class="n">files</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Make a filesystem copy of the external files.</span>
+
+<span class="sd">    A filesystem copy is not always applicable/desirable. Use the</span>
+<span class="sd">    external_file_manifest_*.txt files to feed other file transfer mechanisms,</span>
+<span class="sd">    such as rsync or globus.</span>
+
+<span class="sd">    This is a wrapper around shutil.copy2.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    target_directory: Union[Str, Path]</span>
+<span class="sd">    root: Str</span>
+<span class="sd">    files: Iterable[Str]</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    new_root, new_files</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">root_hash</span> <span class="o">=</span> <span class="n">_root_hash</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+    <span class="n">dest</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">target_directory</span><span class="p">,</span> <span class="n">root_hash</span><span class="p">))</span>
+    <span class="n">new_files</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">filename</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">),</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Copying external files&quot;</span><span class="p">):</span>
+        <span class="n">relative_path</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+        <span class="n">new_root</span> <span class="o">=</span> <span class="n">target_directory</span> <span class="o">/</span> <span class="n">root_hash</span>
+        <span class="n">dest</span> <span class="o">=</span> <span class="n">new_root</span> <span class="o">/</span> <span class="n">relative_path</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">dest</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">new_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">shutil</span><span class="o">.</span><span class="n">copy2</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">dest</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">new_root</span><span class="p">,</span> <span class="n">new_files</span>
+
+
+<div class="viewcode-block" id="write_msgpack_catalog_file"><a class="viewcode-back" href="../../reference.html#databroker_pack.write_msgpack_catalog_file">[docs]</a><span class="k">def</span> <span class="nf">write_msgpack_catalog_file</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">root_map</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Write a YAML file with configuration for an intake catalog.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    manager: suitcase Manager object</span>
+<span class="sd">    directory: Str</span>
+<span class="sd">        Directory to which paths below are relative</span>
+<span class="sd">    paths: Union[Str, List[Str]]</span>
+<span class="sd">        Relative (s) of JSONL files encoding Documents.</span>
+<span class="sd">    root_map: Dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Ideally, the drivers should be able to cope with relative paths,</span>
+    <span class="c1"># interpreting them as relative to the Catalog file. This requires changes</span>
+    <span class="c1"># to intake (I think) so as a short-term hack, we make the paths aboslute</span>
+    <span class="c1"># here but note the relative paths in a separate place.</span>
+    <span class="n">abs_paths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">())</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;generated_by&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;library&quot;</span><span class="p">:</span> <span class="s2">&quot;databroker_pack&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="n">get_versions</span><span class="p">()[</span><span class="s2">&quot;version&quot;</span><span class="p">],</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;relative_paths&quot;</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">],</span>
+    <span class="p">}</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;driver&quot;</span><span class="p">:</span> <span class="s2">&quot;bluesky-msgpack-catalog&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;paths&quot;</span><span class="p">:</span> <span class="n">abs_paths</span><span class="p">},</span>
+        <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">root_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">source</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">][</span><span class="s2">&quot;root_map&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">root_map</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">sources</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;packed_catalog&quot;</span><span class="p">:</span> <span class="n">source</span><span class="p">}</span>
+    <span class="n">catalog</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;sources&quot;</span><span class="p">:</span> <span class="n">sources</span><span class="p">}</span>
+    <span class="n">FILENAME</span> <span class="o">=</span> <span class="s2">&quot;catalog.yml&quot;</span>  <span class="c1"># expected by unpack</span>
+    <span class="k">with</span> <span class="n">manager</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;catalog_file&quot;</span><span class="p">,</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="s2">&quot;xt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">catalog</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="write_jsonl_catalog_file"><a class="viewcode-back" href="../../reference.html#databroker_pack.write_jsonl_catalog_file">[docs]</a><span class="k">def</span> <span class="nf">write_jsonl_catalog_file</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">root_map</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Write a YAML file with configuration for an intake catalog.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    manager: suitcase Manager object</span>
+<span class="sd">    directory: Str</span>
+<span class="sd">        Directory to which paths below are relative</span>
+<span class="sd">    paths: Union[Str, List[Str]]</span>
+<span class="sd">        Relative (s) of JSONL files encoding Documents.</span>
+<span class="sd">    root_map: Dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># There is clearly some code repetition here with respect to</span>
+    <span class="c1"># write_msgpack_catalog_file, but I expect they may diverge over time as</span>
+    <span class="c1"># the suitcase implementation pick up format-specific options.</span>
+
+    <span class="c1"># Ideally, the drivers should be able to cope with relative paths,</span>
+    <span class="c1"># interpreting them as relative to the Catalog file. This requires changes</span>
+    <span class="c1"># to intake (I think) so as a short-term hack, we make the paths aboslute</span>
+    <span class="c1"># here but note the relative paths in a separate place.</span>
+    <span class="n">abs_paths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">())</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;generated_by&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;library&quot;</span><span class="p">:</span> <span class="s2">&quot;databroker_pack&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="n">get_versions</span><span class="p">()[</span><span class="s2">&quot;version&quot;</span><span class="p">],</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;relative_paths&quot;</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">],</span>
+    <span class="p">}</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;driver&quot;</span><span class="p">:</span> <span class="s2">&quot;bluesky-jsonl-catalog&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;paths&quot;</span><span class="p">:</span> <span class="n">abs_paths</span><span class="p">},</span>
+        <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">root_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">source</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">][</span><span class="s2">&quot;root_map&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">):</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">root_map</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">sources</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;packed_catalog&quot;</span><span class="p">:</span> <span class="n">source</span><span class="p">}</span>
+    <span class="n">catalog</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;sources&quot;</span><span class="p">:</span> <span class="n">sources</span><span class="p">}</span>
+    <span class="n">FILENAME</span> <span class="o">=</span> <span class="s2">&quot;catalog.yml&quot;</span>
+    <span class="k">with</span> <span class="n">manager</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;catalog_file&quot;</span><span class="p">,</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="s2">&quot;xt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">catalog</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">write_documents_manifest</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">artifacts</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Wirte the paths to all the files of Documents relative to the pack directory.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    manager: suitcase Manager object</span>
+<span class="sd">    directory: Str</span>
+<span class="sd">        Pack directory</span>
+<span class="sd">    artifacts: List[Str]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">FILENAME</span> <span class="o">=</span> <span class="s2">&quot;documents_manifest.txt&quot;</span>
+    <span class="k">with</span> <span class="n">manager</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;documents_manifest&quot;</span><span class="p">,</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="s2">&quot;xt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">artifact</span> <span class="ow">in</span> <span class="n">artifacts</span><span class="p">:</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">artifact</span><span class="p">)</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span><span class="si">!s}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Bluesky Collaboration
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
