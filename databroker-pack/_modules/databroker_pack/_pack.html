@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>databroker_pack._pack &mdash; databroker-pack 0.1.4.post5+g7be55f6 documentation</title>
+  <title>databroker_pack._pack &mdash; databroker-pack 0.1.4.post33+ga27dbf3 documentation</title>
   
 
   
@@ -61,7 +61,7 @@
             
             
               <div class="version">
-                0.1.4.post5+g7be55f6
+                0.1.4.post33+ga27dbf3
               </div>
             
           
@@ -155,10 +155,11 @@
             
   <h1>Source code for databroker_pack._pack</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">collections</span>
-<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">pathlib</span>
+<span class="kn">import</span> <span class="nn">secrets</span>
 <span class="kn">import</span> <span class="nn">shutil</span>
 
 <span class="kn">import</span> <span class="nn">event_model</span>
@@ -166,6 +167,7 @@
 <span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
 <span class="kn">import</span> <span class="nn">yaml</span>
 
+<span class="kn">from</span> <span class="nn">._utils</span> <span class="kn">import</span> <span class="n">root_hash</span>
 <span class="kn">from</span> <span class="nn">._version</span> <span class="kn">import</span> <span class="n">get_versions</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span>
@@ -236,13 +238,21 @@
 <span class="sd">      this case) to a list of buffers or filepaths where the documents were</span>
 <span class="sd">      serialized.</span>
 <span class="sd">    * ``files`` is the set of filepaths of all external files referenced by</span>
-<span class="sd">      Resource documents.</span>
+<span class="sd">      Resource documents, keyed on ``(root, unique_id)``.</span>
 <span class="sd">    * ``failures`` is a list of uids of runs that raised Exceptions. (The</span>
 <span class="sd">      relevant tracebacks are logged.)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">accumulated_files</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
     <span class="n">accumulated_artifacts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
     <span class="n">failures</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c1"># We want a hash that is unique to:</span>
+    <span class="c1"># - a root</span>
+    <span class="c1"># - a given batch of exported runs (i.e. a given call to this function)</span>
+    <span class="c1"># so that we can use it as a key in root_map which is guaranteed not to</span>
+    <span class="c1"># collide with keys from other batches. Thus, we create a &quot;salt&quot; here.</span>
+    <span class="c1"># This does not need to be cryptographically secure, just unique.</span>
+    <span class="n">salt</span> <span class="o">=</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+    <span class="n">root_hash_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">root_hash</span><span class="p">,</span> <span class="n">salt</span><span class="p">)</span>
     <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">uids</span><span class="p">),</span> <span class="n">position</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Writing Documents&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">uid</span> <span class="ow">in</span> <span class="n">uids</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
@@ -250,6 +260,7 @@
                 <span class="n">artifacts</span><span class="p">,</span> <span class="n">files</span> <span class="o">=</span> <span class="n">export_run</span><span class="p">(</span>
                     <span class="n">run</span><span class="p">,</span>
                     <span class="n">directory</span><span class="p">,</span>
+                    <span class="n">root_hash_func</span><span class="p">,</span>
                     <span class="n">external</span><span class="o">=</span><span class="n">external</span><span class="p">,</span>
                     <span class="n">dry_run</span><span class="o">=</span><span class="n">dry_run</span><span class="p">,</span>
                     <span class="n">handler_registry</span><span class="o">=</span><span class="n">handler_registry</span><span class="p">,</span>
@@ -282,6 +293,7 @@
     <span class="n">dry_run</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">handler_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">serializer_class</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Export all the Runs from a Catalog.</span>
@@ -309,6 +321,9 @@
 <span class="sd">        currently ``suitcase.msgpack.Serializer``, but this may change in the</span>
 <span class="sd">        future. If you want ``suitcase.msgpack.Serializer`` specifically, pass</span>
 <span class="sd">        it in explicitly.</span>
+<span class="sd">    limit: Union[Integer, None]</span>
+<span class="sd">        Stop after exporting some number of Runs. Useful for testing a subset</span>
+<span class="sd">        before doing a lengthy export.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -320,21 +335,36 @@
 <span class="sd">      this case) to a list of buffers or filepaths where the documents were</span>
 <span class="sd">      serialized.</span>
 <span class="sd">    * ``files`` is the set of filepaths of all external files referenced by</span>
-<span class="sd">      Resource documents.</span>
+<span class="sd">      Resource documents, keyed on ``(root, unique_id)``.</span>
 <span class="sd">    * ``failures`` is a list of uids of runs that raised Exceptions. (The</span>
 <span class="sd">      relevant tracebacks are logged.)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">limit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">limit</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;limit must be None or a number 1 or greater&quot;</span><span class="p">)</span>
+        <span class="n">limit</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">limit</span><span class="p">)</span>
     <span class="n">accumulated_files</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
     <span class="n">accumulated_artifacts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
     <span class="n">failures</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c1"># We want a hash that is unique to:</span>
+    <span class="c1"># - a root</span>
+    <span class="c1"># - a given batch of exported runs (i.e. a given call to this function)</span>
+    <span class="c1"># so that we can use it as a key in root_map which is guaranteed not to</span>
+    <span class="c1"># collide with keys from other batches. Thus, we create a &quot;salt&quot; here.</span>
+    <span class="c1"># This does not need to be cryptographically secure, just unique.</span>
+    <span class="n">salt</span> <span class="o">=</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+    <span class="n">root_hash_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">root_hash</span><span class="p">,</span> <span class="n">salt</span><span class="p">)</span>
     <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span>
-        <span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">source_catalog</span><span class="p">),</span> <span class="n">position</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Writing Documents&quot;</span>
+        <span class="n">total</span><span class="o">=</span><span class="n">limit</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">source_catalog</span><span class="p">),</span> <span class="n">position</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Writing Documents&quot;</span>
     <span class="p">)</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">uid</span><span class="p">,</span> <span class="n">run</span> <span class="ow">in</span> <span class="n">source_catalog</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">run</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">source_catalog</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">limit</span><span class="p">:</span>
+                <span class="k">break</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">artifacts</span><span class="p">,</span> <span class="n">files</span> <span class="o">=</span> <span class="n">export_run</span><span class="p">(</span>
                     <span class="n">run</span><span class="p">,</span>
                     <span class="n">directory</span><span class="p">,</span>
+                    <span class="n">root_hash_func</span><span class="p">,</span>
                     <span class="n">external</span><span class="o">=</span><span class="n">external</span><span class="p">,</span>
                     <span class="n">dry_run</span><span class="o">=</span><span class="n">dry_run</span><span class="p">,</span>
                     <span class="n">handler_registry</span><span class="o">=</span><span class="n">handler_registry</span><span class="p">,</span>
@@ -360,6 +390,7 @@
 <div class="viewcode-block" id="export_run"><a class="viewcode-back" href="../../reference.html#databroker_pack.export_run">[docs]</a><span class="k">def</span> <span class="nf">export_run</span><span class="p">(</span>
     <span class="n">run</span><span class="p">,</span>
     <span class="n">directory</span><span class="p">,</span>
+    <span class="n">root_hash_func</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">external</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">dry_run</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -401,14 +432,14 @@
 <span class="sd">      this case) to a list of buffers or filepaths where the documents were</span>
 <span class="sd">      serialized.</span>
 <span class="sd">    * ``files`` is the set of filepaths of all external files referenced by</span>
-<span class="sd">      Resource documents.</span>
+<span class="sd">      Resource documents, keyed on ``(root, unique_id)``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">EXTERNAL_RELATED_DOCS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;resource&quot;</span><span class="p">,</span> <span class="s2">&quot;datum&quot;</span><span class="p">,</span> <span class="s2">&quot;datum_page&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">serializer_class</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">import</span> <span class="nn">suitcase.msgpack</span>
 
         <span class="n">serializer_class</span> <span class="o">=</span> <span class="n">suitcase</span><span class="o">.</span><span class="n">msgpack</span><span class="o">.</span><span class="n">Serializer</span>
     <span class="n">root_map</span> <span class="o">=</span> <span class="n">root_map</span> <span class="ow">or</span> <span class="p">{}</span>
-    <span class="n">resources</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">files</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">handler_registry</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">handler_registry</span> <span class="o">=</span> <span class="n">databroker</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">discover_handlers</span><span class="p">()</span>
@@ -420,43 +451,48 @@
         <span class="p">)</span> <span class="k">as</span> <span class="n">serializer</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">position</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">as</span> <span class="n">progress</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">run</span><span class="o">.</span><span class="n">canonical</span><span class="p">(</span><span class="n">fill</span><span class="o">=</span><span class="s2">&quot;no&quot;</span><span class="p">):</span>
-                    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;resource&quot;</span><span class="p">:</span>
-                        <span class="n">resources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">external</span> <span class="o">==</span> <span class="s2">&quot;fill&quot;</span><span class="p">:</span>
                         <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="o">=</span> <span class="n">filler</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+                        <span class="c1"># Omit Resource and Datum[Page] because the data was</span>
+                        <span class="c1"># filled in place.</span>
+                        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">EXTERNAL_RELATED_DOCS</span><span class="p">:</span>
+                            <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+                            <span class="k">continue</span>
+                    <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;resource&quot;</span><span class="p">:</span>
+                        <span class="n">root</span> <span class="o">=</span> <span class="n">root_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">doc</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">],</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">])</span>
+                        <span class="n">unique_id</span> <span class="o">=</span> <span class="n">root_hash_func</span><span class="p">(</span><span class="n">doc</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">])</span>
+                        <span class="k">if</span> <span class="n">external</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">resource</span> <span class="o">=</span> <span class="n">doc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                            <span class="n">resource</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">root</span>
+                            <span class="n">files</span><span class="p">[(</span><span class="n">root</span><span class="p">,</span> <span class="n">unique_id</span><span class="p">)]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">get_file_list</span><span class="p">(</span><span class="n">resource</span><span class="p">))</span>
+                        <span class="c1"># Replace root with a unique ID before serialization.</span>
+                        <span class="c1"># We are overriding the local variable name doc here</span>
+                        <span class="c1"># (yuck!) so that serializer(name, doc) below works on</span>
+                        <span class="c1"># all document types.</span>
+                        <span class="n">doc</span> <span class="o">=</span> <span class="n">doc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                        <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">unique_id</span>
                     <span class="k">if</span> <span class="ow">not</span> <span class="n">dry_run</span><span class="p">:</span>
                         <span class="n">serializer</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
                     <span class="n">progress</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">external</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">resource</span> <span class="ow">in</span> <span class="n">resources</span><span class="p">:</span>
-                <span class="n">root</span> <span class="o">=</span> <span class="n">root_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">resource</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">],</span> <span class="n">resource</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">])</span>
-                <span class="n">files</span><span class="p">[</span><span class="n">root</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">get_file_list</span><span class="p">(</span><span class="n">resource</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">serializer</span><span class="o">.</span><span class="n">artifacts</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">files</span><span class="p">)</span></div>
 
 
-<span class="k">def</span> <span class="nf">_root_hash</span><span class="p">(</span><span class="n">root</span><span class="p">):</span>
-    <span class="c1"># This is just a unique ID to give the manifest file for each</span>
-    <span class="c1"># root a unique name. It is not a cryptographic hash.</span>
-    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="n">root</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
-
-
-<div class="viewcode-block" id="write_external_files_manifest"><a class="viewcode-back" href="../../reference.html#databroker_pack.write_external_files_manifest">[docs]</a><span class="k">def</span> <span class="nf">write_external_files_manifest</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">root</span><span class="p">,</span> <span class="n">files</span><span class="p">):</span>
+<div class="viewcode-block" id="write_external_files_manifest"><a class="viewcode-back" href="../../reference.html#databroker_pack.write_external_files_manifest">[docs]</a><span class="k">def</span> <span class="nf">write_external_files_manifest</span><span class="p">(</span><span class="n">manager</span><span class="p">,</span> <span class="n">unique_id</span><span class="p">,</span> <span class="n">files</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Write a manifest of external files.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    manager: suitcase Manager object</span>
-<span class="sd">    root: Str</span>
+<span class="sd">    unique_id: Str</span>
 <span class="sd">    files: Iterable[Union[Str, Path]]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">root_hash</span> <span class="o">=</span> <span class="n">_root_hash</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;external_files_manifest_</span><span class="si">{</span><span class="n">root_hash</span><span class="si">}</span><span class="s2">.txt&quot;</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;external_files_manifest_</span><span class="si">{</span><span class="n">unique_id</span><span class="si">}</span><span class="s2">.txt&quot;</span>
     <span class="k">with</span> <span class="n">manager</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;manifest&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&quot;xt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
         <span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">files</span><span class="p">)))))</span></div>
 
 
-<div class="viewcode-block" id="copy_external_files"><a class="viewcode-back" href="../../reference.html#databroker_pack.copy_external_files">[docs]</a><span class="k">def</span> <span class="nf">copy_external_files</span><span class="p">(</span><span class="n">target_directory</span><span class="p">,</span> <span class="n">root</span><span class="p">,</span> <span class="n">files</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<div class="viewcode-block" id="copy_external_files"><a class="viewcode-back" href="../../reference.html#databroker_pack.copy_external_files">[docs]</a><span class="k">def</span> <span class="nf">copy_external_files</span><span class="p">(</span><span class="n">target_directory</span><span class="p">,</span> <span class="n">root</span><span class="p">,</span> <span class="n">unique_id</span><span class="p">,</span> <span class="n">files</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Make a filesystem copy of the external files.</span>
 
@@ -486,13 +522,11 @@
 <span class="sd">    * ``failures`` is a list of uids of runs that raised Exceptions. (The</span>
 <span class="sd">      relevant tracebacks are logged.)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">root_hash</span> <span class="o">=</span> <span class="n">_root_hash</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
-    <span class="n">dest</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">target_directory</span><span class="p">,</span> <span class="n">root_hash</span><span class="p">))</span>
     <span class="n">new_files</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">failures</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">filename</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">),</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Copying external files&quot;</span><span class="p">):</span>
         <span class="n">relative_path</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
-        <span class="n">new_root</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">target_directory</span><span class="p">,</span> <span class="n">root_hash</span><span class="p">)</span>
+        <span class="n">new_root</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">target_directory</span><span class="p">,</span> <span class="n">unique_id</span><span class="p">)</span>
         <span class="n">dest</span> <span class="o">=</span> <span class="n">new_root</span> <span class="o">/</span> <span class="n">relative_path</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">dest</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
