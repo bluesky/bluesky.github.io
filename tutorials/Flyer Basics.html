@@ -96,15 +96,14 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="Epics Signal.html">Epics Signal</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Flyer Basics</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#Python-imports-and-definitions">Python imports and definitions</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#Bare-Minimum-Requirements-for-a-Flyer">Bare Minimum Requirements for a Flyer</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#Flyer-:-a-starting-template">Flyer : a starting template</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#Diagnostics">Diagnostics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Bare-Minimum-Requirements-for-a-Flyer">Bare Minimum Requirements for a Flyer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Flyer-:-a-starting-template">Flyer : a starting template</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Diagnostics">Diagnostics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#First-working-Flyer---trivial-data">First working Flyer - trivial data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#Flyer-that-“collects”-1-D-array-data">Flyer that “collects” 1-D array data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#Conclusion">Conclusion</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#First-working-Flyer---trivial-data">First working Flyer - trivial data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#Flyer-that-“collects”-1-D-array-data">Flyer that “collects” 1-D array data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#Conclusion">Conclusion</a></li>
 </ul>
 </li>
 </ul>
@@ -448,16 +447,19 @@ or <a class="reference external" href="https://github.com/bluesky/tutorials/blob
 <h1>Flyer Basics<a class="headerlink" href="#Flyer-Basics" title="Permalink to this headline">¶</a></h1>
 <p>We want to understand how to build a <em>Flyer</em> in “Bluesky” to support various types of fly scans and remote data loggers. The data about Flyers is spread about the standard documentation. We need some clarity and a few examples that build complexity incrementally.</p>
 <p>The basic notion of a Flyer is that it directs an <em>external controller</em> (we’ll call it the <em>controller</em> here) to perform some data collection process. Usually, a <em>controller</em> is used to collect data at rates beyond the capabilities of Bluesky plans and the RunEngine. Examples could be waveforms from a storage oscilloscope or a continuous motion scan of a diffractometer.</p>
-<p>This notebook will show the basic requirements for a Flyer and build a simple working example you can use a template for your own work. (Our inspiration to create this <a class="reference external" href="https://github.com/prjemian/ipython_mintvm/issues/3#issuecomment-385058577">basic flyer tutorial</a> was the goal of operating various fly scans at the APS, such as the <a class="reference external" href="https://github.com/APS-USAXS/ipython-usaxs/issues/3">USAXS fly scan</a>, from Bluesky. The examples we found before we started this project quickly became too
-instrument-specific to serve as tutorials.)</p>
-<div class="section" id="Python-imports-and-definitions">
-<h2>Python imports and definitions<a class="headerlink" href="#Python-imports-and-definitions" title="Permalink to this headline">¶</a></h2>
+<p>This notebook will show the basic requirements for a Flyer and build a simple working example you can use a template for your own work. (Our inspiration to create this <a class="reference external" href="https://github.com/prjemian/ipython_mintvm/issues/3#issuecomment-385058577">basic flyer tutorial</a> was the goal of operating various fly scans at the APS, such as the USAXS fly scan, from Bluesky. The examples we found before we started this project quickly became too instrument-specific to serve as tutorials.) ## Python
+imports and definitions</p>
 <p>Here are the full set of packages to imported. The first block are Python standard packages, then come the ophyd, Bluesky, and databroker packages. Just the parts we plan on using here. Since this is also a tutorial, we will not rename imports or use other such shortcuts in the documentation (the online code has some shortcuts).</p>
 <ul class="simple">
 <li><p>Create a logger instance in case we want to investigate internal details as our code runs.</p></li>
 <li><p>Create an instance of the Bluesky RunEngine.</p></li>
-<li><p>Create an instance of the databroker using <code class="docutils literal notranslate"><span class="pre">`databroker.temp()</span></code> &lt;<a class="reference external" href="https://nsls-ii.github.io/databroker/v1/api.html">https://nsls-ii.github.io/databroker/v1/api.html</a>&gt;`__, establishing a temporary, disposable yet fully-functional databroker for just this tutorial session.</p></li>
+<li><p>Create an instance of the databroker using <code class="docutils literal notranslate"><span class="pre">databroker.temp()</span></code>, establishing a temporary, disposable yet fully-functional databroker for just this tutorial session.</p></li>
 <li><p>Subscribe that databroker instance to the RunEngine so it receives the document stream each time we run a plan.</p></li>
+</ul>
+<p>Links</p>
+<ul class="simple">
+<li><p>USAXS fly scan - <a class="reference external" href="https://github.com/APS-USAXS/ipython-usaxs/issues/3">https://github.com/APS-USAXS/ipython-usaxs/issues/3</a></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">databroker.temp()</span></code> - <a class="reference external" href="https://blueskyproject.io/databroker/v1/api.html">https://blueskyproject.io/databroker/v1/api.html</a></p></li>
 </ul>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
@@ -490,17 +492,26 @@ instrument-specific to serve as tutorials.)</p>
 </pre></div></div>
 </div>
 <div class="section" id="Bare-Minimum-Requirements-for-a-Flyer">
-<h3>Bare Minimum Requirements for a Flyer<a class="headerlink" href="#Bare-Minimum-Requirements-for-a-Flyer" title="Permalink to this headline">¶</a></h3>
-<p>In Bluesky, a <a class="reference external" href="http://nsls-ii.github.io/bluesky/async.html?highlight=flyer#flying">Flyer</a> is an <code class="docutils literal notranslate"><span class="pre">`ophyd.Device</span></code> &lt;<a class="reference external" href="http://nsls-ii.github.io/ophyd/device-overview.html">http://nsls-ii.github.io/ophyd/device-overview.html</a>&gt;`__ that meets the <a class="reference external" href="http://nsls-ii.github.io/ophyd/architecture.html#fly-able-interface">Fly-able interface</a>, which has three methods:</p>
+<h2>Bare Minimum Requirements for a Flyer<a class="headerlink" href="#Bare-Minimum-Requirements-for-a-Flyer" title="Permalink to this headline">¶</a></h2>
+<p>In Bluesky, a <em>Flyer</em> is an <code class="docutils literal notranslate"><span class="pre">ophyd.Device</span></code> that meets the <em>Fly-able interface</em>, which has three methods:</p>
 <ol class="arabic simple">
 <li><p>Kickoff - begin accumulating data</p></li>
 <li><p>Complete - Bluesky tells the Flyer that Bluesky is ready to receive data</p></li>
 <li><p>Collect - the device provides the data to Bluesky</p></li>
 </ol>
-<p>The first two methods <a class="reference external" href="http://nsls-ii.github.io/bluesky/hardware.html#kickoff">must return</a> an instance of <code class="docutils literal notranslate"><span class="pre">`ophyd.status.Status</span></code> &lt;<a class="reference external" href="http://nsls-ii.github.io/ophyd/generated/ophyd.status.Status.html">http://nsls-ii.github.io/ophyd/generated/ophyd.status.Status.html</a>&gt;`__ (a.k.a. a <em>status</em> object). For our code, we choose a specialized version of <code class="docutils literal notranslate"><span class="pre">Status()</span></code>, the <code class="docutils literal notranslate"><span class="pre">`DeviceStatus()</span></code> &lt;<a class="reference external" href="http://nsls-ii.github.io/ophyd/generated/ophyd.status.DeviceStatus.html">http://nsls-ii.github.io/ophyd/generated/ophyd.status.DeviceStatus.html</a>&gt;`__ object, based on the <a class="reference external" href="https://github.com/NSLS-II/tutorial-docker/pull/7#discussion_r185054364">explanation provided in
-discussion</a>.</p>
+<p>The first two methods must return an instance of <code class="docutils literal notranslate"><span class="pre">ophyd.status.Status</span></code> (a.k.a. a <em>status</em> object). For our code, we choose a specialized version of <code class="docutils literal notranslate"><span class="pre">Status()</span></code>, the <code class="docutils literal notranslate"><span class="pre">DeviceStatus()</span></code> object, based on the explanation provided in discussion.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">collect()</span></code> method requires a companion <code class="docutils literal notranslate"><span class="pre">describe_collect()</span></code> that informs the RunEngine what kind of data to expect from <code class="docutils literal notranslate"><span class="pre">collect()</span></code>. If no timestamp information is provided from the <em>controller</em>, then do as we show here and use the workstation’s clock to provide a timestamp for the event.</p>
 <p>This example (which does absolutely nothing) meets the bare minimum requirement.</p>
+<p>Links</p>
+<ul class="simple">
+<li><p><em>Flyer</em> - <a class="reference external" href="https://blueskyproject.io/bluesky/async.html?highlight=flyer#flying">https://blueskyproject.io/bluesky/async.html?highlight=flyer#flying</a></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ophyd.Device</span></code> - <a class="reference external" href="https://blueskyproject.io/ophyd/device-overview.html">https://blueskyproject.io/ophyd/device-overview.html</a></p></li>
+<li><p><em>Fly-able interface</em> - <a class="reference external" href="https://blueskyproject.io/ophyd/architecture.html#fly-able-interface">https://blueskyproject.io/ophyd/architecture.html#fly-able-interface</a></p></li>
+<li><p>returns - <a class="reference external" href="https://blueskyproject.io/bluesky/hardware.html#kickoff">https://blueskyproject.io/bluesky/hardware.html#kickoff</a></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ophyd.status.Status</span></code> - <a class="reference external" href="https://blueskyproject.io/ophyd/generated/ophyd.status.Status.html">https://blueskyproject.io/ophyd/generated/ophyd.status.Status.html</a></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DeviceStatus()</span></code> - <a class="reference external" href="https://blueskyproject.io/ophyd/generated/ophyd.status.DeviceStatus.html">https://blueskyproject.io/ophyd/generated/ophyd.status.DeviceStatus.html</a></p></li>
+<li><p>discussion - <a class="reference external" href="https://github.com/NSLS-II/tutorial-docker/pull/7#discussion_r185054364">https://github.com/NSLS-II/tutorial-docker/pull/7#discussion_r185054364</a></p></li>
+</ul>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
@@ -540,7 +551,7 @@ discussion</a>.</p>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 DeviceStatus(device=flyer, done=False, success=False)
-[{&#39;data&#39;: {}, &#39;timestamps&#39;: {}, &#39;time&#39;: 1589745252.0957122}]
+[{&#39;data&#39;: {}, &#39;timestamps&#39;: {}, &#39;time&#39;: 1589804822.3619573}]
 </pre></div></div>
 </div>
 <div class="nboutput docutils container">
@@ -558,10 +569,10 @@ DeviceStatus(device=flyer, done=False, success=False)
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-(&#39;5c7b7fd0-a5f8-46f5-b4dc-c590d3615696&#39;,)
+(&#39;33484cb8-c554-47c8-9b9a-fe882e462cb0&#39;,)
 </pre></div></div>
 </div>
-<p>Only two <code class="docutils literal notranslate"><span class="pre">documents</span></code> were emitted from the <code class="docutils literal notranslate"><span class="pre">RunEngine</span></code>: <code class="docutils literal notranslate"><span class="pre">start</span></code> and <code class="docutils literal notranslate"><span class="pre">stop</span></code> since we generated no data content.</p>
+<p>Only three <code class="docutils literal notranslate"><span class="pre">documents</span></code> were emitted from the <code class="docutils literal notranslate"><span class="pre">RunEngine</span></code>: <code class="docutils literal notranslate"><span class="pre">start</span></code>, <code class="docutils literal notranslate"><span class="pre">descriptor</span></code>, and <code class="docutils literal notranslate"><span class="pre">stop</span></code> since we generated no data content.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
@@ -578,25 +589,25 @@ DeviceStatus(device=flyer, done=False, success=False)
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 [(&#39;start&#39;,
-  {&#39;uid&#39;: &#39;5c7b7fd0-a5f8-46f5-b4dc-c590d3615696&#39;,
-   &#39;time&#39;: 1589745252.0964434,
+  {&#39;uid&#39;: &#39;33484cb8-c554-47c8-9b9a-fe882e462cb0&#39;,
+   &#39;time&#39;: 1589804822.3627954,
    &#39;versions&#39;: {&#39;ophyd&#39;: &#39;1.5.1b1&#39;, &#39;bluesky&#39;: &#39;1.6.1&#39;},
    &#39;scan_id&#39;: 1,
    &#39;plan_type&#39;: &#39;generator&#39;,
    &#39;plan_name&#39;: &#39;fly&#39;}),
  (&#39;descriptor&#39;,
-  {&#39;run_start&#39;: &#39;5c7b7fd0-a5f8-46f5-b4dc-c590d3615696&#39;,
-   &#39;time&#39;: 1589745252.0989926,
+  {&#39;run_start&#39;: &#39;33484cb8-c554-47c8-9b9a-fe882e462cb0&#39;,
+   &#39;time&#39;: 1589804822.3657048,
    &#39;data_keys&#39;: {},
-   &#39;uid&#39;: &#39;6749845b-8a5e-4ad0-b0fd-3e73bdc1a2d7&#39;,
+   &#39;uid&#39;: &#39;7cec2564-467c-4772-b828-4408d26fbbe1&#39;,
    &#39;name&#39;: &#39;flyer&#39;,
    &#39;configuration&#39;: {},
    &#39;hints&#39;: {&#39;flyer&#39;: {&#39;fields&#39;: []}},
    &#39;object_keys&#39;: {&#39;flyer&#39;: []}}),
  (&#39;stop&#39;,
-  {&#39;run_start&#39;: &#39;5c7b7fd0-a5f8-46f5-b4dc-c590d3615696&#39;,
-   &#39;time&#39;: 1589745252.1005726,
-   &#39;uid&#39;: &#39;54cc599a-ad8d-45fc-bcd5-2dd247ab1b84&#39;,
+  {&#39;run_start&#39;: &#39;33484cb8-c554-47c8-9b9a-fe882e462cb0&#39;,
+   &#39;time&#39;: 1589804822.3672872,
+   &#39;uid&#39;: &#39;e9db463c-e114-48c7-b260-52d01fa627fb&#39;,
    &#39;exit_status&#39;: &#39;success&#39;,
    &#39;reason&#39;: &#39;&#39;,
    &#39;num_events&#39;: {&#39;flyer&#39;: 1}})]
@@ -604,7 +615,7 @@ DeviceStatus(device=flyer, done=False, success=False)
 </div>
 </div>
 <div class="section" id="Flyer-:-a-starting-template">
-<h3>Flyer : a starting template<a class="headerlink" href="#Flyer-:-a-starting-template" title="Permalink to this headline">¶</a></h3>
+<h2>Flyer : a starting template<a class="headerlink" href="#Flyer-:-a-starting-template" title="Permalink to this headline">¶</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">BareMinimumFlyer</span></code> is a good start to use a Flyer but we’ll need to add a few more things to make a good template. The first thing to do is to make the status objects known to any method of the class. We’ll prepend both of them with <code class="docutils literal notranslate"><span class="pre">self.</span></code> and describe in the code comments what is happening. In the constructor (<code class="docutils literal notranslate"><span class="pre">__init__()</span></code>), we set both to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the value we expect when not kicked off or <em>flying</em>, respectively. Since we <strong>need</strong> a constructor, we must remember to call the
 constructor of the superclass as well or our <code class="docutils literal notranslate"><span class="pre">ophyd.Device</span></code> will not work correctly.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -613,12 +624,16 @@ constructor of the superclass as well or our <code class="docutils literal notra
     <span class="bp">self</span><span class="o">.</span><span class="n">complete_status</span> <span class="o">=</span> <span class="kc">None</span>
 </pre></div>
 </div>
-<p>Our <em>controller</em> could take some time to signal that it is finished (seconds to minutes, at least). We need a way to detect this completion. We can do that either by polling the PV or by subscribing to a callback on the completion event. We’ll make that choice when we implement the actual activity. Here, intend to wait in a polling loop. Since the polling loop is an activity that does not return until the <em>controller</em> is done, we must do that waiting in a thread (consider an <cite>alternative
-suggestion to use ``epics.ca.CAThread`</cite> &lt;<a class="reference external" href="https://github.com/NSLS-II/tutorial-docker/pull/7#discussion_r184905960">https://github.com/NSLS-II/tutorial-docker/pull/7#discussion_r184905960</a>&gt;`__) separate from that of the RunEngine. (We do not want to block the RunEngine thread so it is free to respond to other activities, such as data from other streams or the user inerface.) So, we run <code class="docutils literal notranslate"><span class="pre">my_activity()</span></code> in a separate thread that is called from <code class="docutils literal notranslate"><span class="pre">kickoff()</span></code>:</p>
+<p>Our <em>controller</em> could take some time to signal that it is finished (seconds to minutes, at least). We need a way to detect this completion. We can do that either by polling the PV or by subscribing to a callback on the completion event. We’ll make that choice when we implement the actual activity. Here, intend to wait in a polling loop. Since the polling loop is an activity that does not return until the <em>controller</em> is done, we must do that waiting in a thread (consider an [alternative
+suggestion to use <code class="docutils literal notranslate"><span class="pre">epics.ca.CAThread</span></code> separate from that of the RunEngine. (We do not want to block the RunEngine thread so it is free to respond to other activities, such as data from other streams or the user inerface.) So, we run <code class="docutils literal notranslate"><span class="pre">my_activity()</span></code> in a separate thread that is called from <code class="docutils literal notranslate"><span class="pre">kickoff()</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">my_activity</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 </pre></div>
 </div>
+<p>Link</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">epics.ca.CAThread</span></code> - <a class="reference external" href="https://github.com/NSLS-II/tutorial-docker/pull/7#discussion_r184905960">https://github.com/NSLS-II/tutorial-docker/pull/7#discussion_r184905960</a></p></li>
+</ul>
 <p>The basic outline of <code class="docutils literal notranslate"><span class="pre">my_activity()</span></code> is:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">my_activity</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
     <span class="c1"># tell the *controller* to do its work</span>
@@ -723,7 +738,7 @@ suggestion to use ``epics.ca.CAThread`</cite> &lt;<a class="reference external" 
 </div>
 </div>
 <div class="section" id="Diagnostics">
-<h3>Diagnostics<a class="headerlink" href="#Diagnostics" title="Permalink to this headline">¶</a></h3>
+<h2>Diagnostics<a class="headerlink" href="#Diagnostics" title="Permalink to this headline">¶</a></h2>
 <p>When building a <code class="docutils literal notranslate"><span class="pre">Flyer</span></code>, it is useful to have some diagnostics in place. Already, we have been using some of these, including printing interim messages via calls to <code class="docutils literal notranslate"><span class="pre">logger.info(...)</span></code>. Another useful diagnostic step is to call each of the methods individually to make sure they are acting as expected.</p>
 <ol class="arabic">
 <li><p>create an instance of the <code class="docutils literal notranslate"><span class="pre">Flyer</span></code></p>
@@ -779,7 +794,7 @@ suggestion to use ``epics.ca.CAThread`</cite> &lt;<a class="reference external" 
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[{&#39;data&#39;: {}, &#39;timestamps&#39;: {}, &#39;time&#39;: 1589745252.1761916}]
+[{&#39;data&#39;: {}, &#39;timestamps&#39;: {}, &#39;time&#39;: 1589804822.4473443}]
 </pre></div></div>
 </div>
 <p>Now, run this fly scan:</p>
@@ -798,7 +813,7 @@ suggestion to use ``epics.ca.CAThread`</cite> &lt;<a class="reference external" 
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-(&#39;6c7e2693-7cb4-4996-ab21-83a2c09a4855&#39;,)
+(&#39;3e04baa3-ec91-49af-8395-2f1001e92fc5&#39;,)
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
@@ -861,7 +876,7 @@ suggestion to use ``epics.ca.CAThread`</cite> &lt;<a class="reference external" 
 </table>
 </div></div>
 </div>
-<p>Still only two <code class="docutils literal notranslate"><span class="pre">documents</span></code> were emitted from the <code class="docutils literal notranslate"><span class="pre">RunEngine</span></code></p>
+<p>Still only three <code class="docutils literal notranslate"><span class="pre">documents</span></code> were emitted from the <code class="docutils literal notranslate"><span class="pre">RunEngine</span></code>: <code class="docutils literal notranslate"><span class="pre">start</span></code>, <code class="docutils literal notranslate"><span class="pre">descriptor</span></code>, and <code class="docutils literal notranslate"><span class="pre">stop</span></code>.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
@@ -878,34 +893,32 @@ suggestion to use ``epics.ca.CAThread`</cite> &lt;<a class="reference external" 
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 [(&#39;start&#39;,
-  {&#39;uid&#39;: &#39;6c7e2693-7cb4-4996-ab21-83a2c09a4855&#39;,
-   &#39;time&#39;: 1589745252.1838648,
+  {&#39;uid&#39;: &#39;3e04baa3-ec91-49af-8395-2f1001e92fc5&#39;,
+   &#39;time&#39;: 1589804822.4551463,
    &#39;versions&#39;: {&#39;ophyd&#39;: &#39;1.5.1b1&#39;, &#39;bluesky&#39;: &#39;1.6.1&#39;},
    &#39;scan_id&#39;: 2,
    &#39;plan_type&#39;: &#39;generator&#39;,
    &#39;plan_name&#39;: &#39;fly&#39;}),
  (&#39;descriptor&#39;,
-  {&#39;run_start&#39;: &#39;6c7e2693-7cb4-4996-ab21-83a2c09a4855&#39;,
-   &#39;time&#39;: 1589745252.1859348,
+  {&#39;run_start&#39;: &#39;3e04baa3-ec91-49af-8395-2f1001e92fc5&#39;,
+   &#39;time&#39;: 1589804822.4573698,
    &#39;data_keys&#39;: {},
-   &#39;uid&#39;: &#39;aebcefe8-0391-4cd4-986d-e819d09fc3d4&#39;,
+   &#39;uid&#39;: &#39;973f75ec-8c96-4f8c-9768-040d7cc66631&#39;,
    &#39;name&#39;: &#39;ifly&#39;,
    &#39;configuration&#39;: {},
    &#39;hints&#39;: {&#39;ifly&#39;: {&#39;fields&#39;: []}},
    &#39;object_keys&#39;: {&#39;ifly&#39;: []}}),
  (&#39;stop&#39;,
-  {&#39;run_start&#39;: &#39;6c7e2693-7cb4-4996-ab21-83a2c09a4855&#39;,
-   &#39;time&#39;: 1589745252.186503,
-   &#39;uid&#39;: &#39;5050d8e2-93a9-4f01-bba0-b40c6aed5341&#39;,
+  {&#39;run_start&#39;: &#39;3e04baa3-ec91-49af-8395-2f1001e92fc5&#39;,
+   &#39;time&#39;: 1589804822.457971,
+   &#39;uid&#39;: &#39;b0a717dc-60f8-4641-869c-77eab80460b7&#39;,
    &#39;exit_status&#39;: &#39;success&#39;,
    &#39;reason&#39;: &#39;&#39;,
    &#39;num_events&#39;: {&#39;ifly&#39;: 1}})]
 </pre></div></div>
 </div>
-</div>
-</div>
 <div class="section" id="First-working-Flyer---trivial-data">
-<h2>First working Flyer - trivial data<a class="headerlink" href="#First-working-Flyer---trivial-data" title="Permalink to this headline">¶</a></h2>
+<h3>First working Flyer - trivial data<a class="headerlink" href="#First-working-Flyer---trivial-data" title="Permalink to this headline">¶</a></h3>
 <p>To collect data, we need to modify both the <code class="docutils literal notranslate"><span class="pre">collect()</span></code> <em>and</em> the <code class="docutils literal notranslate"><span class="pre">describe_collect()</span></code> methods. Bluesky needs to know what kind of data to expect from this Flyer, so that it can generate the correct <code class="docutils literal notranslate"><span class="pre">descriptor</span></code> document.</p>
 <p>For the <em>most</em> trivial case, we’ll return a single number (<code class="docutils literal notranslate"><span class="pre">1.2345</span></code>) as the result of the first working Flyer.</p>
 <p>In the <code class="docutils literal notranslate"><span class="pre">describe_collect()</span></code> method, we create a dictionary that describes the data to be collected:</p>
@@ -1050,7 +1063,7 @@ suggestion to use ``epics.ca.CAThread`</cite> &lt;<a class="reference external" 
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 output from describe_collect() :  {&#39;ifly&#39;: {&#39;x&#39;: {&#39;source&#39;: &#39;fictional&#39;, &#39;dtype&#39;: &#39;number&#39;, &#39;shape&#39;: []}}}
-list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#39;: {&#39;x&#39;: 1.2345}, &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.2696376}}]
+list output from collect() :  [{&#39;time&#39;: 1589804822.5477073, &#39;data&#39;: {&#39;x&#39;: 1.2345}, &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.5477073}}]
 </pre></div></div>
 </div>
 <p>Running this flyer with the RunEngine seems anticlimactic but the lack of exceptions tells us that it ran and we get a UUID at the end.</p>
@@ -1078,7 +1091,7 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-(&#39;8c914616-53a2-4cd5-ab56-f212dfc2857a&#39;,)
+(&#39;2303b6b4-80f9-4718-b091-a902a28eb490&#39;,)
 </pre></div></div>
 </div>
 <p>We next query the last scan in the databroker and show a table of the stream from <code class="docutils literal notranslate"><span class="pre">collect()</span></code>:</p>
@@ -1127,14 +1140,14 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
   <tbody>
     <tr>
       <th>1</th>
-      <td>2020-05-17 19:54:12.279560566</td>
+      <td>2020-05-18 12:27:02.558370352</td>
       <td>1.2345</td>
     </tr>
   </tbody>
 </table>
 </div></div>
 </div>
-<p>Now, there are two more document types emitted: <code class="docutils literal notranslate"><span class="pre">descriptor</span></code> and <code class="docutils literal notranslate"><span class="pre">event</span></code>. Only one <code class="docutils literal notranslate"><span class="pre">event</span></code> since there is only one data point.</p>
+<p>Now, there is one more document type emitted: <code class="docutils literal notranslate"><span class="pre">event</span></code>. Only one <code class="docutils literal notranslate"><span class="pre">event</span></code> since there is only one data point.</p>
 <div class="nbinput docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
 </pre></div>
@@ -1151,33 +1164,33 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 [(&#39;start&#39;,
-  {&#39;uid&#39;: &#39;8c914616-53a2-4cd5-ab56-f212dfc2857a&#39;,
-   &#39;time&#39;: 1589745252.2770047,
+  {&#39;uid&#39;: &#39;2303b6b4-80f9-4718-b091-a902a28eb490&#39;,
+   &#39;time&#39;: 1589804822.555748,
    &#39;versions&#39;: {&#39;ophyd&#39;: &#39;1.5.1b1&#39;, &#39;bluesky&#39;: &#39;1.6.1&#39;},
    &#39;scan_id&#39;: 3,
    &#39;plan_type&#39;: &#39;generator&#39;,
    &#39;plan_name&#39;: &#39;fly&#39;}),
  (&#39;descriptor&#39;,
-  {&#39;run_start&#39;: &#39;8c914616-53a2-4cd5-ab56-f212dfc2857a&#39;,
-   &#39;time&#39;: 1589745252.2790036,
+  {&#39;run_start&#39;: &#39;2303b6b4-80f9-4718-b091-a902a28eb490&#39;,
+   &#39;time&#39;: 1589804822.557841,
    &#39;data_keys&#39;: {&#39;x&#39;: {&#39;source&#39;: &#39;fictional&#39;, &#39;dtype&#39;: &#39;number&#39;, &#39;shape&#39;: []}},
-   &#39;uid&#39;: &#39;05110740-f890-4fdb-95d0-031ee099818f&#39;,
+   &#39;uid&#39;: &#39;23444d53-69e3-47e4-ae94-9a176379fe74&#39;,
    &#39;name&#39;: &#39;ifly&#39;,
    &#39;configuration&#39;: {},
    &#39;hints&#39;: {&#39;ifly&#39;: {&#39;fields&#39;: []}},
    &#39;object_keys&#39;: {&#39;ifly&#39;: [&#39;x&#39;]}}),
  (&#39;event&#39;,
-  {&#39;descriptor&#39;: &#39;05110740-f890-4fdb-95d0-031ee099818f&#39;,
-   &#39;uid&#39;: &#39;5612ad06-9c1a-4335-9133-905561d3b2d4&#39;,
-   &#39;time&#39;: 1589745252.2795606,
+  {&#39;descriptor&#39;: &#39;23444d53-69e3-47e4-ae94-9a176379fe74&#39;,
+   &#39;uid&#39;: &#39;c306433a-67d3-43a8-bb24-2657fb22b31b&#39;,
+   &#39;time&#39;: 1589804822.5583704,
    &#39;seq_num&#39;: 1,
    &#39;data&#39;: {&#39;x&#39;: 1.2345},
-   &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.2795606},
+   &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.5583704},
    &#39;filled&#39;: {}}),
  (&#39;stop&#39;,
-  {&#39;run_start&#39;: &#39;8c914616-53a2-4cd5-ab56-f212dfc2857a&#39;,
-   &#39;time&#39;: 1589745252.2798889,
-   &#39;uid&#39;: &#39;acea7026-9c2e-449b-a610-06f6a4c5ecbd&#39;,
+  {&#39;run_start&#39;: &#39;2303b6b4-80f9-4718-b091-a902a28eb490&#39;,
+   &#39;time&#39;: 1589804822.5587246,
+   &#39;uid&#39;: &#39;595162bd-ada0-4dba-a838-8d65594bc605&#39;,
    &#39;exit_status&#39;: &#39;success&#39;,
    &#39;reason&#39;: &#39;&#39;,
    &#39;num_events&#39;: {&#39;ifly&#39;: 1}})]
@@ -1185,7 +1198,7 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
 </div>
 </div>
 <div class="section" id="Flyer-that-“collects”-1-D-array-data">
-<h2>Flyer that “collects” 1-D array data<a class="headerlink" href="#Flyer-that-“collects”-1-D-array-data" title="Permalink to this headline">¶</a></h2>
+<h3>Flyer that “collects” 1-D array data<a class="headerlink" href="#Flyer-that-“collects”-1-D-array-data" title="Permalink to this headline">¶</a></h3>
 <p>We continue to expand the capabilities of our working example of a Flyer. Now, we wish to “collect” a 1-D array of data. We’ll manufacture that data ourselves to keep the code simple.</p>
 <p>Here, we generate an array of 5 numbers, each representing the elapsed time (in seconds) since the scan started (in <code class="docutils literal notranslate"><span class="pre">kickoff()</span></code>). We record the start time with <code class="docutils literal notranslate"><span class="pre">self.t0</span> <span class="pre">=</span> <span class="pre">time.time()</span></code>. Also, <code class="docutils literal notranslate"><span class="pre">time.time()</span></code> is used to generate the timestamps in the data events. In a real case, we <em>might</em> get timestamps from the <em>controller</em> or we’d have to make it up ourselves, just like this example.</p>
 <div class="nbinput nblast docutils container">
@@ -1327,21 +1340,21 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-[{&#39;time&#39;: 1589745252.3641255,
-  &#39;data&#39;: {&#39;x&#39;: 1589745252.3641255},
-  &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.3641255}},
- {&#39;time&#39;: 1589745252.364128,
-  &#39;data&#39;: {&#39;x&#39;: 1589745252.364128},
-  &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.364128}},
- {&#39;time&#39;: 1589745252.364129,
-  &#39;data&#39;: {&#39;x&#39;: 1589745252.364129},
-  &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.364129}},
- {&#39;time&#39;: 1589745252.36413,
-  &#39;data&#39;: {&#39;x&#39;: 1589745252.36413},
-  &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.36413}},
- {&#39;time&#39;: 1589745252.3641312,
-  &#39;data&#39;: {&#39;x&#39;: 1589745252.3641312},
-  &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.3641312}}]
+[{&#39;time&#39;: 1589804822.6490564,
+  &#39;data&#39;: {&#39;x&#39;: 1589804822.6490564},
+  &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.6490564}},
+ {&#39;time&#39;: 1589804822.649059,
+  &#39;data&#39;: {&#39;x&#39;: 1589804822.649059},
+  &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.649059}},
+ {&#39;time&#39;: 1589804822.6490602,
+  &#39;data&#39;: {&#39;x&#39;: 1589804822.6490602},
+  &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.6490602}},
+ {&#39;time&#39;: 1589804822.649062,
+  &#39;data&#39;: {&#39;x&#39;: 1589804822.649062},
+  &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.649062}},
+ {&#39;time&#39;: 1589804822.6490633,
+  &#39;data&#39;: {&#39;x&#39;: 1589804822.6490633},
+  &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.6490633}}]
 </pre></div></div>
 </div>
 <p>Again, not much information from running this flyer, except that it succeeds and a uuid is returned.</p>
@@ -1369,7 +1382,7 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
 </div>
 <div class="output_area docutils container">
 <div class="highlight"><pre>
-(&#39;0128e396-d186-47d7-b374-e5a758f051eb&#39;,)
+(&#39;9ff0d90e-ea05-485c-8088-6c442b6ad159&#39;,)
 </pre></div></div>
 </div>
 <p>More information is obtained by asking the databroker about the most recent scan. Here’s the data table from our stream of data events. (The stream is named “ifly” as set from <code class="docutils literal notranslate"><span class="pre">self.name</span></code> in the <code class="docutils literal notranslate"><span class="pre">describe_collect()</span></code> method.) We’ll reference that last scan as <code class="docutils literal notranslate"><span class="pre">h</span></code> to reduce the amount of typing.</p>
@@ -1436,28 +1449,28 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
   <tbody>
     <tr>
       <th>1</th>
-      <td>2020-05-17 19:54:12.375572920</td>
-      <td>0.001444</td>
+      <td>2020-05-18 12:27:02.660314322</td>
+      <td>0.001454</td>
     </tr>
     <tr>
       <th>2</th>
-      <td>2020-05-17 19:54:12.375595808</td>
-      <td>0.001467</td>
+      <td>2020-05-18 12:27:02.660332918</td>
+      <td>0.001472</td>
     </tr>
     <tr>
       <th>3</th>
-      <td>2020-05-17 19:54:12.375605822</td>
-      <td>0.001477</td>
+      <td>2020-05-18 12:27:02.660341501</td>
+      <td>0.001481</td>
     </tr>
     <tr>
       <th>4</th>
-      <td>2020-05-17 19:54:12.375615835</td>
-      <td>0.001487</td>
+      <td>2020-05-18 12:27:02.660348892</td>
+      <td>0.001488</td>
     </tr>
     <tr>
       <th>5</th>
-      <td>2020-05-17 19:54:12.375622988</td>
-      <td>0.001494</td>
+      <td>2020-05-18 12:27:02.660356283</td>
+      <td>0.001496</td>
     </tr>
   </tbody>
 </table>
@@ -1480,67 +1493,67 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
 <div class="output_area docutils container">
 <div class="highlight"><pre>
 [(&#39;start&#39;,
-  {&#39;uid&#39;: &#39;0128e396-d186-47d7-b374-e5a758f051eb&#39;,
-   &#39;time&#39;: 1589745252.3730314,
+  {&#39;uid&#39;: &#39;9ff0d90e-ea05-485c-8088-6c442b6ad159&#39;,
+   &#39;time&#39;: 1589804822.6576672,
    &#39;versions&#39;: {&#39;ophyd&#39;: &#39;1.5.1b1&#39;, &#39;bluesky&#39;: &#39;1.6.1&#39;},
    &#39;scan_id&#39;: 4,
    &#39;plan_type&#39;: &#39;generator&#39;,
    &#39;plan_name&#39;: &#39;fly&#39;}),
  (&#39;descriptor&#39;,
-  {&#39;run_start&#39;: &#39;0128e396-d186-47d7-b374-e5a758f051eb&#39;,
-   &#39;time&#39;: 1589745252.375036,
+  {&#39;run_start&#39;: &#39;9ff0d90e-ea05-485c-8088-6c442b6ad159&#39;,
+   &#39;time&#39;: 1589804822.6598275,
    &#39;data_keys&#39;: {&#39;x&#39;: {&#39;source&#39;: &#39;elapsed time, s&#39;,
      &#39;dtype&#39;: &#39;number&#39;,
      &#39;shape&#39;: [1]}},
-   &#39;uid&#39;: &#39;c72c4f7a-d1be-48bd-a562-ac80099c7790&#39;,
+   &#39;uid&#39;: &#39;c1b15fdf-69a1-457a-b31a-374fa14e4fb1&#39;,
    &#39;name&#39;: &#39;ifly&#39;,
    &#39;configuration&#39;: {},
    &#39;hints&#39;: {&#39;ifly&#39;: {&#39;fields&#39;: []}},
    &#39;object_keys&#39;: {&#39;ifly&#39;: [&#39;x&#39;]}}),
  (&#39;event&#39;,
-  {&#39;descriptor&#39;: &#39;c72c4f7a-d1be-48bd-a562-ac80099c7790&#39;,
-   &#39;uid&#39;: &#39;f40161b5-0044-4785-8829-6600c31d434b&#39;,
-   &#39;time&#39;: 1589745252.375573,
+  {&#39;descriptor&#39;: &#39;c1b15fdf-69a1-457a-b31a-374fa14e4fb1&#39;,
+   &#39;uid&#39;: &#39;58945573-9d5f-47ce-9f36-7fcbb5c5d039&#39;,
+   &#39;time&#39;: 1589804822.6603143,
    &#39;seq_num&#39;: 1,
-   &#39;data&#39;: {&#39;x&#39;: 0.0014443397521972656},
-   &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.375573},
+   &#39;data&#39;: {&#39;x&#39;: 0.0014538764953613281},
+   &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.6603143},
    &#39;filled&#39;: {}}),
  (&#39;event&#39;,
-  {&#39;descriptor&#39;: &#39;c72c4f7a-d1be-48bd-a562-ac80099c7790&#39;,
-   &#39;uid&#39;: &#39;cdbe256e-b38f-47b1-9b6a-52c50662708a&#39;,
-   &#39;time&#39;: 1589745252.3755958,
+  {&#39;descriptor&#39;: &#39;c1b15fdf-69a1-457a-b31a-374fa14e4fb1&#39;,
+   &#39;uid&#39;: &#39;1f818c9a-ab9a-416e-99ff-869dd66e5515&#39;,
+   &#39;time&#39;: 1589804822.660333,
    &#39;seq_num&#39;: 2,
-   &#39;data&#39;: {&#39;x&#39;: 0.0014672279357910156},
-   &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.3755958},
+   &#39;data&#39;: {&#39;x&#39;: 0.00147247314453125},
+   &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.660333},
    &#39;filled&#39;: {}}),
  (&#39;event&#39;,
-  {&#39;descriptor&#39;: &#39;c72c4f7a-d1be-48bd-a562-ac80099c7790&#39;,
-   &#39;uid&#39;: &#39;c45880e0-f85a-4261-bb8b-3d649116c70e&#39;,
-   &#39;time&#39;: 1589745252.3756058,
+  {&#39;descriptor&#39;: &#39;c1b15fdf-69a1-457a-b31a-374fa14e4fb1&#39;,
+   &#39;uid&#39;: &#39;75ea197b-c14e-47ea-b342-3faf34dd314e&#39;,
+   &#39;time&#39;: 1589804822.6603415,
    &#39;seq_num&#39;: 3,
-   &#39;data&#39;: {&#39;x&#39;: 0.0014772415161132812},
-   &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.3756058},
+   &#39;data&#39;: {&#39;x&#39;: 0.0014810562133789062},
+   &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.6603415},
    &#39;filled&#39;: {}}),
  (&#39;event&#39;,
-  {&#39;descriptor&#39;: &#39;c72c4f7a-d1be-48bd-a562-ac80099c7790&#39;,
-   &#39;uid&#39;: &#39;4699492b-d80b-46c8-be14-5d93feb5f835&#39;,
-   &#39;time&#39;: 1589745252.3756158,
+  {&#39;descriptor&#39;: &#39;c1b15fdf-69a1-457a-b31a-374fa14e4fb1&#39;,
+   &#39;uid&#39;: &#39;65d6ed12-6893-4c51-9961-3b05032ffa29&#39;,
+   &#39;time&#39;: 1589804822.660349,
    &#39;seq_num&#39;: 4,
-   &#39;data&#39;: {&#39;x&#39;: 0.0014872550964355469},
-   &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.3756158},
+   &#39;data&#39;: {&#39;x&#39;: 0.0014884471893310547},
+   &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.660349},
    &#39;filled&#39;: {}}),
  (&#39;event&#39;,
-  {&#39;descriptor&#39;: &#39;c72c4f7a-d1be-48bd-a562-ac80099c7790&#39;,
-   &#39;uid&#39;: &#39;4afc3aef-37df-4cbc-9464-6aad97f41d60&#39;,
-   &#39;time&#39;: 1589745252.375623,
+  {&#39;descriptor&#39;: &#39;c1b15fdf-69a1-457a-b31a-374fa14e4fb1&#39;,
+   &#39;uid&#39;: &#39;8a3a0bdf-4242-4e3e-98da-b23001f7bd98&#39;,
+   &#39;time&#39;: 1589804822.6603563,
    &#39;seq_num&#39;: 5,
-   &#39;data&#39;: {&#39;x&#39;: 0.0014944076538085938},
-   &#39;timestamps&#39;: {&#39;x&#39;: 1589745252.375623},
+   &#39;data&#39;: {&#39;x&#39;: 0.0014958381652832031},
+   &#39;timestamps&#39;: {&#39;x&#39;: 1589804822.6603563},
    &#39;filled&#39;: {}}),
  (&#39;stop&#39;,
-  {&#39;run_start&#39;: &#39;0128e396-d186-47d7-b374-e5a758f051eb&#39;,
-   &#39;time&#39;: 1589745252.3761492,
-   &#39;uid&#39;: &#39;7fde0b24-541e-416d-af4a-3121203437fc&#39;,
+  {&#39;run_start&#39;: &#39;9ff0d90e-ea05-485c-8088-6c442b6ad159&#39;,
+   &#39;time&#39;: 1589804822.6609423,
+   &#39;uid&#39;: &#39;d6d6d2a0-6c3a-4482-989c-dffd5237744a&#39;,
    &#39;exit_status&#39;: &#39;success&#39;,
    &#39;reason&#39;: &#39;&#39;,
    &#39;num_events&#39;: {&#39;ifly&#39;: 5}})]
@@ -1548,8 +1561,9 @@ list output from collect() :  [{&#39;time&#39;: 1589745252.2696376, &#39;data&#3
 </div>
 </div>
 <div class="section" id="Conclusion">
-<h2>Conclusion<a class="headerlink" href="#Conclusion" title="Permalink to this headline">¶</a></h2>
+<h3>Conclusion<a class="headerlink" href="#Conclusion" title="Permalink to this headline">¶</a></h3>
 <p>Now you have seen the basic steps in creating a <code class="docutils literal notranslate"><span class="pre">Flyer</span></code>. You have also been shown a few diagnostic tools to help you investigate your code development.</p>
+</div>
 </div>
 </div>
 
