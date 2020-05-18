@@ -1,0 +1,807 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Let Us Do the Bookkeeping For You\n",
+    "\n",
+    "In this notebook you will:\n",
+    "\n",
+    "* Run some simulated experiments and then access the metadata about them.\n",
+    "* Use that metadata to generate a summary report.\n",
+    "* Use it filter search results.\n",
+    "* Explore some of Python's string formatting features in detail.\n",
+    "\n",
+    "## Configuration\n",
+    "Below, we will connect to EPICS IOC(s) controlling simulated hardware in lieu of actual motors, detectors. The IOCs should already be running in the background. Run this command to verify that they are running: it should produce output with RUNNING on each line. In the event of a problem, edit this command to replace `status` with `restart all` and run again."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!supervisorctl -c supervisor/supervisord.conf status"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%run scripts/beamline_configuration.py"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Generate a Summary Report\n",
+    "\n",
+    "Acquire some data like so. The details of what we are doing here are not important for what follows. If you want to know more about data acquisition, start with [Hello Bluesky](./Hello%20Bluesky.ipynb)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "RE(count([ph]))\n",
+    "RE(count([ph, edge, slit], 3))\n",
+    "RE(scan([edge], motor_edge, -10, 10, 15))\n",
+    "RE(scan([edge], motor_edge, -1, 3, 5))\n",
+    "RE(scan([ph], motor_ph, -1, 3, 5))\n",
+    "RE(scan([slit], motor_slit, -10, 10, 15))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Here a some code that prints a summary with some of the metadata automatically captured by Bluesky. Note the time filter added to the databroker object (db) - see [Filtering](#Filtering) for more about this feature."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import time\n",
+    "from datetime import datetime\n",
+    "\n",
+    "now = time.time()\n",
+    "an_hour_ago = now - 60 * 60 *24\n",
+    "print(\"HH:MM  plan_name  detectors      motors\")\n",
+    "for h in db(since=an_hour_ago):\n",
+    "    md = h.start\n",
+    "    print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "          f\"{md['plan_name']:11}\"\n",
+    "          f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "          f\"{','.join(md.get('motors', [])):15}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Let's add one more example data, a run that failed because of a user error."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+     "tags": [
+       "raises-exception"
+     ]
+  },
+   "outputs": [],
+   "source": [
+    "# THIS IS EXPECTED TO CREATE AN ERROR.\n",
+    "\n",
+    "RE(scan([motor_ph], ph, -1, 1, 3))  # oops I tried to use a detector as a motor"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "We'll add one more column to extract the 'exit_status' reported by ``RE`` before it errored out."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "for h in db(since=an_hour_ago):\n",
+    "    md = h.start\n",
+    "    print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "          f\"{md['plan_name']:11}\"\n",
+    "          f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "          f\"{','.join(md.get('motors', [])):15}\"\n",
+    "          f\"{h.stop['exit_status']}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Let's make it easier to reuse this code block by formulating it as a function."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']}\")\n",
+    "        \n",
+    "        \n",
+    "summarize_runs(db(since=an_hour_ago))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Getting a little fancy (Too fancy? Maybe....) you can print by default but optionally write to a text file instead."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import functools\n",
+    "\n",
+    "def summarize_runs(headers, write=functools.partial(print, end='')):\n",
+    "    write(\"HH:MM  plan_name  detectors      motors         exit_status\\n\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        write(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']}\\n\")\n",
+    "        \n",
+    "        \n",
+    "summarize_runs(db(since=an_hour_ago))  # prints as before"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "summarize_runs(db(since=an_hour_ago), write=open('summary.txt', 'w').write)  # writes to 'summary.txt'"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# cat is a UNIX command for reading a text file. We could also just go open the file like normal people.\n",
+    "!cat summary.txt"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## If the user tells us more, our report can get richer"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "RE.md['operator'] = 'Dan'"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "This applies to all future runs until deleted:\n",
+    "\n",
+    "```python\n",
+    "del RE.md['operator']\n",
+    "```\n",
+    "\n",
+    "replaced\n",
+    "\n",
+    "```python\n",
+    "RE.md['operator'] = 'Tom'\n",
+    "```\n",
+    "\n",
+    "or superceded\n",
+    "\n",
+    "```python\n",
+    "RE(count([ph]), operator='Maksim')\n",
+    "```\n",
+    "\n",
+    "In that last example, `'Maksim'` takes precedence over whatever is in RE.md, but just for this execution. If next we did\n",
+    "\n",
+    "```python\n",
+    "RE(count([ph]))\n",
+    "```\n",
+    "\n",
+    "the operator would revert back to `'Tom'`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# User reports the run's \"purpose\". (That isn't a special name... you can use any terms you want here...)\n",
+    "RE(count([ph]), purpose='test')\n",
+    "RE(count([ph, edge, slit], 3), purpose='test')\n",
+    "RE(scan([edge], motor_edge, -10, 10, 15), purpose='find edge')\n",
+    "RE(scan([edge], motor_edge, -1, 3, 5), purpose='find edge')\n",
+    "RE.md['operator'] = 'Tom'  # Tom takes over.\n",
+    "RE(scan([ph], motor_ph, -1, 3, 5), purpose='data')\n",
+    "RE(scan([slit], motor_slit, -10, 10, 15), purpose='data')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status    purpose\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']:15}\"\n",
+    "              f\"{md.get('purpose', '?')}\")\n",
+    "        \n",
+    "        \n",
+    "summarize_runs(db(since=an_hour_ago))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Filtering\n",
+    "\n",
+    "<a id='Filtering'></a>We have been filtering based on time. We can filter on user-provided metadata like ``purpose`` or automatically-captured metadata like ``detectors``. And we can apply multiple filters at the same time."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "summarize_runs(db(since=an_hour_ago, purpose='data'))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "summarize_runs(db(since=an_hour_ago, detectors='ph', purpose='test'))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    " There is a rich query language available here; we are just exercising the basics."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## What about getting the data itself?\n",
+    "\n",
+    "Wait for the next notebook!"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## So what's happening inside `print(...)`?\n",
+    "\n",
+    "A couple handy Python concepts you might not have encountered before..."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### \"f-strings\" (new Python 3.6!)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "name = \"Dan\"\n",
+    "age = 32\n",
+    "\n",
+    "print(\"Hello my name is {name} and I am {age}.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Add an `f` before the quote and it becomes a magical \"f-string\"!"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(f\"Hello my name is {name} and I am {age}.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "You can put code inside the `{}`s."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print(f\"Hello my name is {name} and next year I will be {1 + age}.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Dictionary lookup with defaults"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Recall basic dictionary manipulations:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "md = dict(plan_name='count', detectors=['ph', 'edge'], time=now)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "md['detectors']  # Look up the value for the 'detectors' key in the md dictionary."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+     "tags": [
+       "raises-exception"
+     ]
+  },
+   "outputs": [],
+   "source": [
+    "md['purpose']  # The user never specified a 'purpose' here, so this raises a KeyError."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "md.get('purpose', '?')  # Falls back to a default instead of erroring out."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### list -> comma-separated string"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "md.get('detectors', [])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "', '.join(md.get('detectors', []))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "', '.join(md.get('motors', []))  # Remember motors isn't set, so this falls back to the default, an empty list."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### time-munging"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "md['time']  # seconds since 1970, the conventional \"UNIX epoch\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "datetime.fromtimestamp(md['time'])  # year, month, date, hour, minute, second, microseconds"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### putting it all together..."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time'])}  \"\n",
+    "              f\"{md['plan_name']}\"\n",
+    "              f\"{','.join(md.get('detectors', []))}\"\n",
+    "              f\"{','.join(md.get('motors', []))}\"\n",
+    "              f\"{h.stop['exit_status']}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "summarize_runs(db(since=an_hour_ago))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### finishing touch: white space"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Use `:N` to fix width at `N` characters."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "f\"Hello my name is {name:10} is I am {age:5}.\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Format the time."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "f\"{datetime.fromtimestamp(md['time']):%H:%M}\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']:11}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "summarize_runs(db(since=an_hour_ago))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Exercise"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Q1. Add an 'operator' column. Hint: Remember that 'operator' was reported by the user in some of our example data above, but the name has no special significance to Bluesky and is not guaranteed to be reported. To avoid erroring when it is not reported, you will need to use ``md.get(...)`` instead of ``md[...]``."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Type your answer here. We have pasted in the latest version of summarize_runs to start from.\n",
+    "\n",
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']:15}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load solutions/summarize_runs_with_operator.py"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Q2. Print a table with results filtered by operator, just as we filtered results by purpose."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Fill in the blank\n",
+    "# summarize_runs(db(_____))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load solutions/filter_runs_by_operator.py"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Q3. Add seconds to the time columnn."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Type your answer here. We have pasted in the latest version of summarize_runs to start from.\n",
+    "\n",
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']:15}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load solutions/summarize_runs_with_seconds.py"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Q4. The ``md['uid']`` is the guaranteed unique identifier for a run. It's unweildy to print in its entirely. Print just the first 8 characters. (For practical purposes, this is sufficently unique.)\n",
+    "\n",
+    "Hint: String truncation in Python works like this:\n",
+    "\n",
+    "```python\n",
+    "'supercalifragilisticexpialidocious'[:8] == 'supercal'\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Type your answer here. We have pasted in the latest version of summarize_runs to start from.\n",
+    "\n",
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']:15}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load solutions/summarize_runs_with_uid.py"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Q5. In all our examples, the columns are left-justified. The [format specification mini language](https://docs.python.org/3/library/string.html#format-specification-mini-language) documents how to right-justify or center the text. Right-justify the ``exit_status`` column. This is a bit of a contrived example, but the feature is more useful when the column have numerical data."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Type your answer here. We have pasted in the latest version of summarize_runs to start from.\n",
+    "\n",
+    "def summarize_runs(headers):\n",
+    "    print(\"HH:MM  plan_name  detectors      motors         exit_status\")\n",
+    "    for h in headers:\n",
+    "        md = h.start\n",
+    "        print(f\"{datetime.fromtimestamp(md['time']):%H:%M}  \"\n",
+    "              f\"{md['plan_name']:11}\"\n",
+    "              f\"{','.join(md.get('detectors', [])):15}\"\n",
+    "              f\"{','.join(md.get('motors', [])):15}\"\n",
+    "              f\"{h.stop['exit_status']:15}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "%load solutions/summarize_runs_right_justify_exit_status.py"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
