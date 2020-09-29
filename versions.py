@@ -33,7 +33,9 @@ import venv
 from pathlib import Path
 
 
-DOCTR_VERSIONS_ENV_VARS = {}  # set by doctr-versions-menu
+DOCTR_VERSIONS_ENV_VARS = {
+    'DOCTR_VERSIONS_MENU_WRITE_INDEX_HTML': 'false',
+}
 
 DVM_REPO = 'git+https://github.com/goerz/doctr_versions_menu.git'
 
