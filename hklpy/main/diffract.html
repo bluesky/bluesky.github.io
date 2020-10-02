@@ -652,7 +652,8 @@ the wavelength).</p>
 <span class="n">gi</span><span class="o">.</span><span class="n">require_version</span><span class="p">(</span><span class="s1">&#39;Hkl&#39;</span><span class="p">,</span> <span class="s1">&#39;5.0&#39;</span><span class="p">)</span>
 <span class="c1"># MUST come before `import hkl`</span>
 <span class="kn">import</span> <span class="nn">hkl.diffract</span>
-<span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">Component</span><span class="p">,</span> <span class="n">PseudoSingle</span><span class="p">,</span> <span class="n">EpicsMotor</span>
+<span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">Component</span><span class="p">,</span> <span class="n">PseudoSingle</span><span class="p">,</span> <span class="n">EpicsSignal</span><span class="p">,</span> <span class="n">EpicsMotor</span><span class="p">,</span> <span class="n">Signal</span>
+<span class="kn">import</span> <span class="nn">pint</span>
 
 <span class="k">class</span> <span class="nc">KappaK4CV_Energy</span><span class="p">(</span><span class="n">hkl</span><span class="o">.</span><span class="n">diffract</span><span class="o">.</span><span class="n">K4CV</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;K4CV: kappa diffractometer in 4-circle geometry with energy&quot;&quot;&quot;</span>
@@ -675,7 +676,12 @@ the wavelength).</p>
         <span class="sd">&#39;&#39;&#39;</span>
 <span class="sd">        Callback indicating that the energy signal was updated</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">if</span> <span class="n">energy_update_calc</span><span class="o">.</span><span class="n">get</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Yes&quot;</span><span class="p">,</span> <span class="s2">&quot;locked&quot;</span><span class="p">,</span> <span class="s2">&quot;OK&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> not fully connected, </span><span class="si">%s</span><span class="s2">.calc.energy not updated&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_update_calc</span><span class="o">.</span><span class="n">get</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Yes&quot;</span><span class="p">,</span> <span class="s2">&quot;locked&quot;</span><span class="p">,</span> <span class="s2">&quot;OK&quot;</span><span class="p">):</span>
             <span class="c1"># energy_offset has same units as energy</span>
             <span class="n">local_energy</span> <span class="o">=</span> <span class="n">value</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_offset</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
 
@@ -684,17 +690,32 @@ the wavelength).</p>
             <span class="c1"># or define as a constant here</span>
             <span class="c1"># units = &quot;eV&quot;</span>
 
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s1">&#39;</span><span class="si">{0.name}</span><span class="s1"> energy changed: </span><span class="si">{1}</span><span class="s1"> </span><span class="si">{2}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">units</span><span class="p">))</span>
             <span class="n">keV</span> <span class="o">=</span> <span class="n">pint</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">local_energy</span><span class="p">,</span> <span class="n">units</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;keV&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_calc</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <span class="n">keV</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s2">&quot;setting </span><span class="si">%s</span><span class="s2">.calc.energy = </span><span class="si">%f</span><span class="s2"> (keV)&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">keV</span><span class="o">.</span><span class="n">magnitude</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_calc</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <span class="n">keV</span><span class="o">.</span><span class="n">magnitude</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_update_position</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>Create an instance of this diffractometer with:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">k4cve</span> <span class="o">=</span> <span class="n">KappaK4CV_Energy</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;k4cv&#39;</span><span class="p">)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">k4cve</span> <span class="o">=</span> <span class="n">KappaK4CV_Energy</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;k4cve&#39;</span><span class="p">)</span>
 </pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This command will print a log message to the console:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>   W Fri-09:12:16 - k4cve not fully connected, k4cve.calc.energy not updated
+
+which is expected since the update cannot happen until all EPICS
+PVs are connected.  This code, will create the object, wait for
+all PVs to connect, then update the `calc` engine::
+
+    k4cve = KappaK4CV_Energy(&#39;&#39;, name=&#39;k4cve&#39;)
+    k4cve.wait_for_connection()
+    k4cve._energy_changed(k4cve.energy.get())
+</pre></div>
+</div>
 </div>
 <p>To set the energy offset from the command line:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">%</span><span class="n">mov</span> <span class="n">k4cve</span><span class="o">.</span><span class="n">energy_offset</span> <span class="mi">50</span>
