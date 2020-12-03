@@ -70,7 +70,7 @@
             
             
               <div class="version">
-                1.5.4.post41+gfa042aa
+                0.post1+gfff384c
               </div>
             
           
@@ -205,26 +205,29 @@ Docker links to install and configure Docker:</p>
 saved in <code class="file docutils literal"><span class="pre">epics_exports.sh</span></code>):</p>
 <div class="highlight-bash"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 
-systemctl status docker.service &gt; /dev/null
-<span class="k">if</span> ! <span class="o">[</span> <span class="nv">$?</span> -eq <span class="m">0</span> <span class="o">]</span><span class="p">;</span> <span class="k">then</span>
-    <span class="nb">echo</span> <span class="nv">$?</span>
-    systemctl restart docker.service
-<span class="k">fi</span>
+<span class="nv">SCRIPTS_DIR</span><span class="o">=</span><span class="s2">&quot;</span><span class="k">$(</span> <span class="nb">cd</span> <span class="s2">&quot;</span><span class="k">$(</span> dirname <span class="s2">&quot;</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">)</span><span class="s2">&quot;</span> &gt;/dev/null <span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span> <span class="o">&amp;&amp;</span> <span class="nb">pwd</span> <span class="k">)</span><span class="s2">&quot;</span>
+<span class="nb">source</span> <span class="nv">$SCRIPTS_DIR</span>/epics_exports.sh
 
-<span class="nb">source</span> epics_exports.sh
+<span class="nv">MOTOR_DOCKERIMAGE</span><span class="o">=</span><span class="s2">&quot;nsls2/epics-docker:latest&quot;</span>
+<span class="nv">PE_DOCKERIMAGE</span><span class="o">=</span><span class="s2">&quot;nsls2/pyepics-docker:latest&quot;</span>
+<span class="nv">AD_DOCKERIMAGE</span><span class="o">=</span><span class="s2">&quot;prjemian/synapps-6.1-ad-3.7:latest&quot;</span>
 
-<span class="nv">DOCKERIMAGE</span><span class="o">=</span><span class="s2">&quot;klauer/epics-docker&quot;</span>
-<span class="nv">PE_DOCKERIMAGE</span><span class="o">=</span><span class="s2">&quot;klauer/simioc-docker&quot;</span>
-<span class="nv">PE_DOCKERTAG</span><span class="o">=</span><span class="s2">&quot;pyepics-docker&quot;</span>
+docker pull <span class="si">${</span><span class="nv">MOTOR_DOCKERIMAGE</span><span class="si">}</span>
+docker pull <span class="si">${</span><span class="nv">PE_DOCKERIMAGE</span><span class="si">}</span>
+docker pull <span class="si">${</span><span class="nv">AD_DOCKERIMAGE</span><span class="si">}</span>
 
-docker pull <span class="si">${</span><span class="nv">DOCKERIMAGE</span><span class="si">}</span>
-docker pull <span class="si">${</span><span class="nv">PE_DOCKERIMAGE</span><span class="si">}</span>:<span class="si">${</span><span class="nv">PE_DOCKERTAG</span><span class="si">}</span>
-mkdir -p /tmp/data
-<span class="c1"># this is required because the images use a version of AD which</span>
+mkdir -p /tmp/ophyd_AD_test/
+
+<span class="c1"># Create YYYY/MM/DD subdirectories.</span>
+<span class="c1"># This is required because the images use a version of AD which</span>
 <span class="c1"># does not create missing directories.</span>
-python -c <span class="s2">&quot;import ophyd.utils.paths as oup; import datetime; now = datetime.datetime.now(); [oup.make_dir_tree(now.year + j, base_path=&#39;/tmp/data&#39;) for j in [-1, 0, 1]]&quot;</span>
-docker run -d -p <span class="nv">$DOCKER0_IP</span>:7000-9000:5064/tcp -v /tmp/data:/data <span class="si">${</span><span class="nv">DOCKERIMAGE</span><span class="si">}</span>
-docker run -d -p <span class="nv">$DOCKER0_IP</span>:7000-9000:5064/tcp <span class="si">${</span><span class="nv">PE_DOCKERIMAGE</span><span class="si">}</span>:<span class="si">${</span><span class="nv">PE_DOCKERTAG</span><span class="si">}</span>
+python <span class="nv">$SCRIPTS_DIR</span>/create_directories.py /tmp/ophyd_AD_test/data1
+
+docker run --rm -d -v /tmp/ophyd_AD_test:/tmp/ophyd_AD_test/ <span class="si">${</span><span class="nv">MOTOR_DOCKERIMAGE</span><span class="si">}</span>
+docker run --name<span class="o">=</span>area-detector --rm -dit -v /tmp/ophyd_AD_test:/tmp/ophyd_AD_test/ -e <span class="nv">AD_PREFIX</span><span class="o">=</span><span class="s2">&quot;ADSIM:&quot;</span> <span class="si">${</span><span class="nv">AD_DOCKERIMAGE</span><span class="si">}</span> /bin/bash
+sleep <span class="m">1</span>  <span class="c1"># Probably not needed?</span>
+docker <span class="nb">exec</span> area-detector iocSimDetector/simDetector.sh start
+docker run --rm -d <span class="si">${</span><span class="nv">PE_DOCKERIMAGE</span><span class="si">}</span>
 </pre></div>
 </div>
 <p>Running this multiple times will lead to multiple instances of the
