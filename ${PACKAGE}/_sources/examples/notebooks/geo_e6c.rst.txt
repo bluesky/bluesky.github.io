@@ -3,12 +3,12 @@ E6C : 6-circle diffractometer example
 
 The 6-circle diffractometer can be considered as a 4-circle
 diffractometer with two additional rotations that rotate the sample and
-detector separately.
+detector separately about the :math:`\vec z` axis.
 
-.. figure:: resources/6-circle-diffractometer.jpg
-   :alt: Huber 6-circle at APS
+.. figure:: resources/6-circle-schematic.png
+   :alt: Schematic of a 6-circle diffractometer
 
-   Huber 6-circle at APS
+   Schematic of a 6-circle diffractometer
 
 --------------
 
@@ -36,11 +36,6 @@ Setup the *E6C* diffractometer in *hklpy*
 
 In *hkl* *E6C* geometry
 (https://people.debian.org/~picca/hkl/hkl.html#orge5e0490):
-
-.. figure:: resources/4S+2D.png
-   :alt: E6C geometry
-
-   E6C geometry
 
 -  xrays incident on the :math:`\vec{x}` direction (1, 0, 0)
 
@@ -432,9 +427,11 @@ To scan with Bluesky, we need more setup.
     from bluesky import RunEngine
     from bluesky import SupplementalData
     from bluesky.callbacks.best_effort import BestEffortCallback
+    from bluesky.magics import BlueskyMagics
     import bluesky.plans as bp
     import bluesky.plan_stubs as bps
     import databroker
+    from IPython import get_ipython
     import matplotlib.pyplot as plt
     
     plt.ion()
@@ -442,6 +439,8 @@ To scan with Bluesky, we need more setup.
     bec = BestEffortCallback()
     db = databroker.temp().v1
     sd = SupplementalData()
+    
+    get_ipython().register_magics(BlueskyMagics)
     
     RE = RunEngine({})
     RE.md = {}
@@ -461,28 +460,32 @@ To scan with Bluesky, we need more setup.
 (*h00*) scan near (400)
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+In this example, we have no detector. Still, we add the diffractometer
+object in the detector list so that the *hkl* and motor positions will
+appear as columns in the table.
+
 .. code:: ipython3
 
-    RE(bp.scan([], sixc.h, 3.9, 4.1, 5))
+    RE(bp.scan([sixc], sixc.h, 3.9, 4.1, 5))
 
 
 .. parsed-literal::
 
     
     
-    Transient Scan ID: 1     Time: 2020-12-16 22:12:05
-    Persistent Unique Scan ID: '64e3e2ef-a59b-453b-af29-c5dc1c0fa49a'
+    Transient Scan ID: 1     Time: 2020-12-17 15:57:10
+    Persistent Unique Scan ID: 'c425fe19-f854-4327-9cdc-8fe06f8fb812'
     New stream: 'primary'
-    +-----------+------------+------------+
-    |   seq_num |       time |     sixc_h |
-    +-----------+------------+------------+
-    |         1 | 22:12:05.1 |      3.900 |
-    |         2 | 22:12:05.2 |      3.950 |
-    |         3 | 22:12:05.2 |      4.000 |
-    |         4 | 22:12:05.2 |      4.050 |
-    |         5 | 22:12:05.2 |      4.100 |
-    +-----------+------------+------------+
-    generator scan ['64e3e2ef'] (scan num: 1)
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    |   seq_num |       time |     sixc_h |     sixc_k |     sixc_l |    sixc_mu | sixc_omega |   sixc_chi |   sixc_phi | sixc_gamma | sixc_delta |
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    |         1 | 15:57:10.8 |      3.900 |     -0.000 |     -0.000 |      0.000 |   -146.431 |      0.000 |      0.000 |      0.000 |     67.137 |
+    |         2 | 15:57:12.2 |      3.950 |      0.000 |      0.000 |      0.000 |   -145.942 |     -0.000 |      0.000 |      0.000 |     68.115 |
+    |         3 | 15:57:13.6 |      4.000 |      0.000 |      0.000 |      0.000 |   -145.450 |     -0.000 |      0.000 |      0.000 |     69.099 |
+    |         4 | 15:57:15.1 |      4.050 |     -0.000 |     -0.000 |      0.000 |   -144.955 |      0.000 |      0.000 |      0.000 |     70.088 |
+    |         5 | 15:57:16.6 |      4.100 |      0.000 |      0.000 |      0.000 |   -144.458 |      0.000 |      0.000 |      0.000 |     71.083 |
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    generator scan ['c425fe19'] (scan num: 1)
     
     
     
@@ -492,8 +495,12 @@ To scan with Bluesky, we need more setup.
 
 .. parsed-literal::
 
-    ('64e3e2ef-a59b-453b-af29-c5dc1c0fa49a',)
+    ('c425fe19-f854-4327-9cdc-8fe06f8fb812',)
 
+
+
+
+.. image:: geo_e6c_files/geo_e6c_36_2.svg
 
 
 chi scan from (400) to (040)
@@ -502,16 +509,18 @@ chi scan from (400) to (040)
 If we do this with :math:`\omega=-145.451` and :math:`\delta=69.0966`,
 this will be a scan between the two orientation reflections.
 
+Use ``%mov`` (IPython *magic* command) to move both motors at the same
+time.
+
 .. code:: ipython3
 
     print("possible modes:", sixc.calc.engine.modes)
     print("chosen mode:", sixc.calc.engine.mode)
     
     # same as orientation reflections
-    sixc.omega.move(-145.4500)
-    sixc.delta.move(69.0985)
+    %mov sixc.omega -145.4500 sixc.delta 69.0985
     
-    RE(bp.scan([sixc.chi, sixc.h, sixc.k, sixc.l, sixc.chi, sixc.phi], sixc.chi, 0, 90, 10))
+    RE(bp.scan([sixc], sixc.chi, 0, 90, 10))
 
 
 .. parsed-literal::
@@ -520,24 +529,24 @@ this will be a scan between the two orientation reflections.
     chosen mode: constant_phi_vertical
     
     
-    Transient Scan ID: 2     Time: 2020-12-16 22:12:05
-    Persistent Unique Scan ID: 'b839acbe-d9cc-4466-b3eb-bf4990e68738'
+    Transient Scan ID: 2     Time: 2020-12-17 15:57:21
+    Persistent Unique Scan ID: '9a2303fe-abeb-4e21-a2d3-df2b13e49fb2'
     New stream: 'primary'
-    +-----------+------------+------------+------------+------------+------------+------------+
-    |   seq_num |       time |   sixc_chi |   sixc_phi |     sixc_k |     sixc_h |     sixc_l |
-    +-----------+------------+------------+------------+------------+------------+------------+
-    |         1 | 22:12:05.7 |      0.000 |      0.000 |      0.000 |      4.000 |      0.000 |
-    |         2 | 22:12:06.2 |     10.000 |      0.000 |      0.695 |      3.939 |     -0.000 |
-    |         3 | 22:12:06.5 |     20.000 |      0.000 |      1.368 |      3.759 |     -0.000 |
-    |         4 | 22:12:06.9 |     30.000 |      0.000 |      2.000 |      3.464 |     -0.000 |
-    |         5 | 22:12:07.2 |     40.000 |      0.000 |      2.571 |      3.064 |     -0.000 |
-    |         6 | 22:12:07.6 |     50.000 |      0.000 |      3.064 |      2.571 |     -0.000 |
-    |         7 | 22:12:07.9 |     60.000 |      0.000 |      3.464 |      2.000 |     -0.000 |
-    |         8 | 22:12:08.3 |     70.000 |      0.000 |      3.759 |      1.368 |     -0.000 |
-    |         9 | 22:12:08.6 |     80.000 |      0.000 |      3.939 |      0.695 |     -0.000 |
-    |        10 | 22:12:08.9 |     90.000 |      0.000 |      4.000 |      0.000 |      0.000 |
-    +-----------+------------+------------+------------+------------+------------+------------+
-    generator scan ['b839acbe'] (scan num: 2)
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    |   seq_num |       time |   sixc_chi |     sixc_h |     sixc_k |     sixc_l |    sixc_mu | sixc_omega |   sixc_phi | sixc_gamma | sixc_delta |
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    |         1 | 15:57:21.7 |      0.000 |      4.000 |      0.000 |      0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         2 | 15:57:23.2 |     10.000 |      3.939 |      0.695 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         3 | 15:57:24.8 |     20.000 |      3.759 |      1.368 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         4 | 15:57:26.1 |     30.000 |      3.464 |      2.000 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         5 | 15:57:27.5 |     40.000 |      3.064 |      2.571 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         6 | 15:57:28.8 |     50.000 |      2.571 |      3.064 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         7 | 15:57:30.1 |     60.000 |      2.000 |      3.464 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         8 | 15:57:31.5 |     70.000 |      1.368 |      3.759 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |         9 | 15:57:33.6 |     80.000 |      0.695 |      3.939 |     -0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    |        10 | 15:57:34.9 |     90.000 |      0.000 |      4.000 |      0.000 |      0.000 |   -145.450 |      0.000 |      0.000 |     69.099 |
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    generator scan ['9a2303fe'] (scan num: 2)
     
     
     
@@ -547,7 +556,7 @@ this will be a scan between the two orientation reflections.
 
 .. parsed-literal::
 
-    ('b839acbe-d9cc-4466-b3eb-bf4990e68738',)
+    ('9a2303fe-abeb-4e21-a2d3-df2b13e49fb2',)
 
 
 
@@ -560,26 +569,26 @@ this will be a scan between the two orientation reflections.
 
 .. code:: ipython3
 
-    RE(bp.scan([], sixc.k, 3.9, 4.1, 5))
+    RE(bp.scan([sixc], sixc.k, 3.9, 4.1, 5))
 
 
 .. parsed-literal::
 
     
     
-    Transient Scan ID: 3     Time: 2020-12-16 22:12:10
-    Persistent Unique Scan ID: 'c8e794fe-316d-4e8b-8d26-d20efdeb91e1'
+    Transient Scan ID: 3     Time: 2020-12-17 15:57:38
+    Persistent Unique Scan ID: '5fcf5644-d749-4f98-aaf7-3f8bee897cdc'
     New stream: 'primary'
-    +-----------+------------+------------+
-    |   seq_num |       time |     sixc_k |
-    +-----------+------------+------------+
-    |         1 | 22:12:10.3 |      3.900 |
-    |         2 | 22:12:10.3 |      3.950 |
-    |         3 | 22:12:10.3 |      4.000 |
-    |         4 | 22:12:10.3 |      4.050 |
-    |         5 | 22:12:10.4 |      4.100 |
-    +-----------+------------+------------+
-    generator scan ['c8e794fe'] (scan num: 3)
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    |   seq_num |       time |     sixc_k |     sixc_h |     sixc_l |    sixc_mu | sixc_omega |   sixc_chi |   sixc_phi | sixc_gamma | sixc_delta |
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    |         1 | 15:57:39.3 |      3.900 |      4.100 |      0.000 |      0.000 |   -126.651 |     43.568 |      0.000 |      0.000 |    106.695 |
+    |         2 | 15:57:40.7 |      3.950 |      4.100 |     -0.000 |      0.000 |   -126.178 |     43.933 |      0.000 |      0.000 |    107.641 |
+    |         3 | 15:57:42.0 |      4.000 |      4.100 |      0.000 |      0.000 |   -125.697 |     44.293 |      0.000 |      0.000 |    108.605 |
+    |         4 | 15:57:43.4 |      4.050 |      4.100 |     -0.000 |      0.000 |   -125.206 |     44.648 |      0.000 |      0.000 |    109.586 |
+    |         5 | 15:57:45.0 |      4.100 |      4.100 |     -0.000 |      0.000 |   -124.706 |     45.000 |      0.000 |      0.000 |    110.585 |
+    +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
+    generator scan ['5fcf5644'] (scan num: 3)
     
     
     
@@ -589,8 +598,12 @@ this will be a scan between the two orientation reflections.
 
 .. parsed-literal::
 
-    ('c8e794fe-316d-4e8b-8d26-d20efdeb91e1',)
+    ('5fcf5644-d749-4f98-aaf7-3f8bee897cdc',)
 
+
+
+
+.. image:: geo_e6c_files/geo_e6c_40_2.svg
 
 
 (*hk0*) scan near (440)
@@ -598,26 +611,26 @@ this will be a scan between the two orientation reflections.
 
 .. code:: ipython3
 
-    RE(bp.scan([], sixc.h, 3.9, 4.1, sixc.k, 4.1, 3.9, 5))
+    RE(bp.scan([sixc], sixc.h, 3.9, 4.1, sixc.k, 4.1, 3.9, 5))
 
 
 .. parsed-literal::
 
     
     
-    Transient Scan ID: 4     Time: 2020-12-16 22:12:10
-    Persistent Unique Scan ID: '88c90d09-04c1-4b6c-8720-171fdfa111e3'
+    Transient Scan ID: 4     Time: 2020-12-17 15:57:49
+    Persistent Unique Scan ID: 'aa116e92-4999-4996-ba94-f8ee96854c89'
     New stream: 'primary'
     +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
     |   seq_num |       time |     sixc_h |     sixc_k |     sixc_l |    sixc_mu | sixc_omega |   sixc_chi |   sixc_phi | sixc_gamma | sixc_delta |
     +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
-    |         1 | 22:12:10.9 |      3.900 |      4.100 |      0.000 |      0.000 |   -126.651 |     46.432 |      0.000 |      0.000 |    106.695 |
-    |         2 | 22:12:11.8 |      3.950 |      4.050 |     -0.000 |      0.000 |   -126.669 |     45.716 |      0.000 |      0.000 |    106.659 |
-    |         3 | 22:12:12.7 |      4.000 |      4.000 |     -0.000 |      0.000 |   -126.675 |     45.000 |      0.000 |      0.000 |    106.647 |
-    |         4 | 22:12:13.6 |      4.050 |      3.950 |     -0.000 |      0.000 |   -126.669 |     44.284 |      0.000 |      0.000 |    106.659 |
-    |         5 | 22:12:14.6 |      4.100 |      3.900 |      0.000 |      0.000 |   -126.651 |     43.568 |      0.000 |      0.000 |    106.695 |
+    |         1 | 15:57:49.6 |      3.900 |      4.100 |      0.000 |      0.000 |   -126.651 |     46.432 |      0.000 |      0.000 |    106.695 |
+    |         2 | 15:57:50.8 |      3.950 |      4.050 |      0.000 |      0.000 |   -126.669 |     45.716 |      0.000 |      0.000 |    106.659 |
+    |         3 | 15:57:51.9 |      4.000 |      4.000 |      0.000 |      0.000 |   -126.675 |     45.000 |      0.000 |      0.000 |    106.647 |
+    |         4 | 15:57:53.1 |      4.050 |      3.950 |      0.000 |      0.000 |   -126.669 |     44.284 |      0.000 |      0.000 |    106.659 |
+    |         5 | 15:57:54.4 |      4.100 |      3.900 |      0.000 |      0.000 |   -126.651 |     43.568 |      0.000 |      0.000 |    106.695 |
     +-----------+------------+------------+------------+------------+------------+------------+------------+------------+------------+------------+
-    generator scan ['88c90d09'] (scan num: 4)
+    generator scan ['aa116e92'] (scan num: 4)
     
     
     
@@ -627,7 +640,7 @@ this will be a scan between the two orientation reflections.
 
 .. parsed-literal::
 
-    ('88c90d09-04c1-4b6c-8720-171fdfa111e3',)
+    ('aa116e92-4999-4996-ba94-f8ee96854c89',)
 
 
 
