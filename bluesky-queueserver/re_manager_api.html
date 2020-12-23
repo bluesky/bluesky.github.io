@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+g994b858 documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+g2430e00 documentation</title>
   
 
   
@@ -30,7 +30,6 @@
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
         <script src="_static/doctools.js"></script>
-        <script src="_static/language_data.js"></script>
         <script src="_static/clipboard.min.js"></script>
         <script src="_static/copybutton.js"></script>
     
@@ -64,7 +63,7 @@
             
             
               <div class="version">
-                0.post1+g994b858
+                0.post1+g2430e00
               </div>
             
           
@@ -247,6 +246,7 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="#method-plans-allowed"><span class="std std-ref">‘plans_allowed’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-devices-allowed"><span class="std std-ref">‘devices_allowed’</span></a></p></li>
+<li><p><a class="reference internal" href="#method-permissions-reload"><span class="std std-ref">‘permissions_reload’</span></a></p></li>
 </ul>
 <p>History of executed plans:</p>
 <ul class="simple">
@@ -278,6 +278,10 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="#method-re-pause"><span class="std std-ref">‘re_pause’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-re-resume-stop-abort-halt"><span class="std std-ref">‘re_resume’, ‘re_stop’, ‘re_abort’, ‘re_halt’</span></a></p></li>
+</ul>
+<p>Monitor the list of active runs:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#method-re-runs"><span class="std std-ref">‘re_runs’</span></a></p></li>
 </ul>
 <p>Stopping RE Manager (mostly used in testing):
 - <a class="reference internal" href="#method-manager-stop"><span class="std std-ref">‘manager_stop’</span></a>
@@ -358,6 +362,9 @@ The plan needs to be resumed, stopped, halted or aborted.</p></li>
 closed (safe).</p></li>
 <li><p><strong>‘destroying_environment’</strong> - RE Worker environment is in the process of being
 destroyed (emergency).</p></li>
+<li><p><strong>‘re_state’</strong> - state of Run Engine (see Bluesky documentation).</p></li>
+<li><p><strong>‘run_list_uid’</strong> - UID of the list of the active runs. Monitor this UID and
+load the updated list of active runs once the UID is changed.</p></li>
 </ul>
 </dd>
 <dt><strong>queue_stop_pending</strong>: <em>boolean</em></dt><dd><p>indicates if the request to stop the queue after completion of the current plan is pending.</p>
@@ -443,6 +450,40 @@ group.</p></td>
 </dd>
 <dt><strong>devices_allowed</strong>: <em>dict</em></dt><dd><p>the dictionary that contains information on the allowed devices.
 Dictionary keys are device names.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>Immediate: no follow-up requests are required.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="permissions-reload">
+<span id="method-permissions-reload"></span><h4><strong>‘permissions_reload’</strong><a class="headerlink" href="#permissions-reload" title="Permalink to this headline">¶</a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 88%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘permissions_reload’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Reloads the list of allowed plans and devices and user group permission from
+the default location or the location set using command line parameters. Use this
+method to reload permissions if the files were changed on disk.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><p>—</p></td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
 </dd>
 </dl>
 </td>
@@ -1095,6 +1136,56 @@ environment does not exist or ‘manager_state’ status field value is not ‘p
 <td><p>The request only initiates the operation. Wait until the plan is paused by monitoring
 ‘manager_state’ status field (expected value is ‘executing_queue’ if execution is
 resumed or ‘idle’ if execution was stopped).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="re-runs">
+<span id="method-re-runs"></span><h4><strong>‘re_runs’</strong><a class="headerlink" href="#re-runs" title="Permalink to this headline">¶</a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 88%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘re_runs’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Request the list of active runs generated by the currently executed plans.
+The full list of active runs includes the runs that are currently open (‘open’ runs) and
+the runs that were already closed (‘closed’ runs). Simple single-run plans will have
+at most one run in the list. Monitor ‘run_list_uid’ RE Manager status field and
+retrieve the updated list once UID is changed. The UID of the retrieved list is
+included in the returned parameters</p></td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><dl class="simple">
+<dt><strong>option</strong>: <em>‘active’</em>, <em>‘open’</em> or <em>‘closed’</em> (optional)</dt><dd><p>select between full list of ‘active’ (default) runs, the list of ‘open’ or ‘closed’
+runs.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
+</dd>
+<dt><strong>run_list</strong>: <em>list(dict)</em></dt><dd><p>the requested list of runs, list items are dictionaries with keys ‘uid’ (str),
+‘is_open’ (boolean) and ‘exit_status’ (str or None). See Bluesky documentation
+for ‘exit_status’ values.</p>
+</dd>
+<dt><strong>run_list_uid</strong>: str</dt><dd><p>UID of the returned run list, identical to the RE Manager status field with
+the same name.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>The request only initiates the operation of pausing the plan. Wait until the plan is
+paused by polling ‘manager_state’ status field (expected value is ‘paused’).</p></td>
 </tr>
 </tbody>
 </table>
