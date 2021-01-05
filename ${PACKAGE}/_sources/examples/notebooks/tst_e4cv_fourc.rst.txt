@@ -200,7 +200,9 @@ Setup the *E4CV* diffractometer in *hklpy*
 Test *hklpy* with the UB orientation matrix from *SPEC*
 -------------------------------------------------------
 
-Set the UB matrix as provided in the SPEC data file.
+Using the UB matrix as provided in the SPEC data file, compute the
+forward reflection positions and compare with those calculated by
+*libhkl*.
 
 .. code:: ipython3
 
@@ -230,61 +232,68 @@ Set the UB matrix as provided in the SPEC data file.
     (113) : PosCalcE4CV(th=42.33129428600627, chi=115.20291094237979, phi=48.133061440101486, tth=84.66258857201254)
 
 
-Define a custom repoting function to format the output table.
+Define a custom reporting function to format the output table.
 
 .. code:: ipython3
 
     def add_ref_to_table(tbl, r):
         sol = fourc.forward((r.h, r.k, r.l))
         nm = f"{r.h:.0f} {r.k:.0f} {r.l:.0f}"
+        # print(nm, sol)
         for sm in AXIS_NAME_MAP.values():
             row = [f"({nm})", sm]
-            row.append(f"{getattr(sol, sm):.5f}")
-            row.append(f"{r.angles[sm]:.5f}")
+            v_hklpy = getattr(sol, sm)
+            v_spec = r.angles[sm]
+            row.append(f"{v_hklpy:.5f}")
+            row.append(f"{v_spec:.5f}")
+            row.append(f"{v_hklpy-v_spec:.5f}")
             tbl.addRow(row)
 
 For each of the orientation reflections used in the SPEC file, report
 the computed motor positions for each reflection for E4CV and SPEC.
-
-In this case, the two reflections cannot be reached if the same
-diffractometer is used for both. Set the mode for each reflection.
+We’ll only pick positions where :math:`2\theta\ge 0`.
 
 .. code:: ipython3
 
     # Compare these angles with those from SPEC
-    tbl = pyRestTable.Table()
-    tbl.labels = "(hkl) motor E4CV SPEC".split()
-    r1, r2 = spec_d.reflections
-    fourc.calc["tth"].limits = (-2, 180)
     
-    fourc.engine.mode = "constant_phi"
-    fourc.phi.move(0)
-    add_ref_to_table(tbl, r1)
+    tbl = pyRestTable.Table()
+    tbl.labels = "(hkl) motor E4CV SPEC difference".split()
+    r1, r2 = spec_d.reflections
     
     fourc.engine.mode = "bissector"
+    fourc.calc["tth"].limits = (-2, 180)
+    add_ref_to_table(tbl, r1)
+    
+    # print(r2)
     add_ref_to_table(tbl, r2)
     
     print(tbl)
-    
-    # FIXME: (113) `th` values do not match.
 
 
 .. parsed-literal::
 
-    ======= ===== ========= =========
-    (hkl)   motor E4CV      SPEC     
-    ======= ===== ========= =========
-    (0 0 2) tth   47.83041  38.09875 
-    (0 0 2) th    23.99932  19.13350 
-    (0 0 2) chi   90.01350  90.01350 
-    (0 0 2) phi   0.00000   0.00000  
-    (1 1 3) tth   84.66259  65.64400 
-    (1 1 3) th    42.33129  32.82125 
-    (1 1 3) chi   115.20291 115.23625
-    (1 1 3) phi   48.13306  48.13150 
-    ======= ===== ========= =========
+    ======= ===== ========= ========= ==========
+    (hkl)   motor E4CV      SPEC      difference
+    ======= ===== ========= ========= ==========
+    (0 0 2) tth   47.83041  38.09875  9.73166   
+    (0 0 2) th    23.91521  19.13350  4.78171   
+    (0 0 2) chi   89.91481  90.01350  -0.09869  
+    (0 0 2) phi   99.11612  0.00000   99.11612  
+    (1 1 3) tth   84.66259  65.64400  19.01859  
+    (1 1 3) th    42.33129  32.82125  9.51004   
+    (1 1 3) chi   115.20291 115.23625 -0.03334  
+    (1 1 3) phi   48.13306  48.13150  0.00156   
+    ======= ===== ========= ========= ==========
     
 
+
+Note that the angles do not match between *E4CV* and *SPEC*, even if we
+re-arrange the rows as we did above. Can’t just use the UB matrix from
+the one program in the other software.
+
+Need to add the orientation reflections (with wavelength), then compute
+the UB matrix. Follow in the section below.
 
 Setup the UB orientation matrix using *hklpy*
 ---------------------------------------------
@@ -355,7 +364,7 @@ Report the results, as before, and compare with table above.
     ==================== =========================================================================
     term                 value                                                                    
     ==================== =========================================================================
-    energy, keV          1.0003370452024831                                                       
+    energy, keV          10.00337045202483                                                        
     wavelength, angstrom 1.239424258                                                              
     position             DiffractometerPseudoPos(h=-0.0, k=0.0, l=0.0)                            
     sample name          LNO_LAO                                                                  
@@ -382,7 +391,7 @@ Report the results, as before, and compare with table above.
     # Compare these angles with those from SPEC
     # fourc.calc["phi"].limits = (-1, 100)
     tbl = pyRestTable.Table()
-    tbl.labels = "(hkl) motor E4CV SPEC".split()
+    tbl.labels = "(hkl) motor E4CV SPEC difference".split()
     r1, r2 = spec_d.reflections
     fourc.calc["tth"].limits = (-2, 180)
     
@@ -398,17 +407,17 @@ Report the results, as before, and compare with table above.
 
 .. parsed-literal::
 
-    ======= ===== ========= =========
-    (hkl)   motor E4CV      SPEC     
-    ======= ===== ========= =========
-    (0 0 2) tth   38.08407  38.09875 
-    (0 0 2) th    19.12616  19.13350 
-    (0 0 2) chi   90.01350  90.01350 
-    (0 0 2) phi   0.00000   0.00000  
-    (1 1 3) tth   65.63700  65.64400 
-    (1 1 3) th    32.81850  32.82125 
-    (1 1 3) chi   115.20291 115.23625
-    (1 1 3) phi   48.13305  48.13150 
-    ======= ===== ========= =========
+    ======= ===== ========= ========= ==========
+    (hkl)   motor E4CV      SPEC      difference
+    ======= ===== ========= ========= ==========
+    (0 0 2) tth   38.08407  38.09875  -0.01468  
+    (0 0 2) th    19.12616  19.13350  -0.00734  
+    (0 0 2) chi   90.01350  90.01350  -0.00000  
+    (0 0 2) phi   0.00000   0.00000   0.00000   
+    (1 1 3) tth   65.63700  65.64400  -0.00700  
+    (1 1 3) th    32.81850  32.82125  -0.00275  
+    (1 1 3) chi   115.20291 115.23625 -0.03334  
+    (1 1 3) phi   48.13305  48.13150  0.00155   
+    ======= ===== ========= ========= ==========
     
 
