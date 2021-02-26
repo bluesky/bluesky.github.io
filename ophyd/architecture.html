@@ -74,7 +74,7 @@
             
             
               <div class="version">
-                1.6.0.post4+g278a7b8
+                1.6.0.post8+g8f9eca9
               </div>
             
           
@@ -463,6 +463,73 @@ what can reasonably done in via EPICS/Python and tend to be called ‘fly scans�
 </tr>
 </tbody>
 </table>
+<p>The expected sequencing of the commands is</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">kickoff</span></code> and wait</li>
+<li><code class="docutils literal"><span class="pre">complete</span></code> and wait</li>
+<li><code class="docutils literal"><span class="pre">collect</span></code></li>
+</ul>
+<p>Optionally, devices my implement “partial collection” so that they can
+be incrementally collected during acquisition.  While this may not be
+technically possible in every situation, it can be used to get partial
+results and allow the fly scan to look more like a step scan from the
+point of view of the data consumers.</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">kickoff</span></code> and wait</li>
+<li>0 or more calls to <code class="docutils literal"><span class="pre">collect</span></code></li>
+<li><code class="docutils literal"><span class="pre">complete</span></code> and wait</li>
+<li><code class="docutils literal"><span class="pre">collect</span></code></li>
+</ul>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">bluesky.preprocessors</span> <span class="k">as</span> <span class="nn">bpp</span>
+<span class="kn">import</span> <span class="nn">bluesky.plan_stubs</span> <span class="k">as</span> <span class="nn">bps</span>
+<span class="kn">from</span> <span class="nn">bluesky</span> <span class="kn">import</span> <span class="n">RunEngine</span>
+<span class="kn">from</span> <span class="nn">bluesky.callbacks.best_effort</span> <span class="kn">import</span> <span class="n">BestEffortCallback</span>
+<span class="kn">from</span> <span class="nn">ophyd.sim</span> <span class="kn">import</span> <span class="n">SynAxis</span><span class="p">,</span> <span class="n">SynGauss</span><span class="p">,</span> <span class="n">MockFlyer</span>
+
+
+<span class="n">motor</span> <span class="o">=</span> <span class="n">SynAxis</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;motor&quot;</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;motors&quot;</span><span class="p">},</span> <span class="n">value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+<span class="n">det</span> <span class="o">=</span> <span class="n">SynGauss</span><span class="p">(</span><span class="s2">&quot;det&quot;</span><span class="p">,</span> <span class="n">motor</span><span class="p">,</span> <span class="s2">&quot;motor&quot;</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">Imax</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;detectors&quot;</span><span class="p">})</span>
+<span class="n">flyer1</span> <span class="o">=</span> <span class="n">MockFlyer</span><span class="p">(</span><span class="s2">&quot;primary&quot;</span><span class="p">,</span> <span class="n">det</span><span class="p">,</span> <span class="n">motor</span><span class="p">,</span> <span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+
+<span class="n">motor</span><span class="o">.</span><span class="n">delay</span> <span class="o">=</span> <span class="o">.</span><span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">single_collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">md</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">_md</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_md</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">md</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="nd">@bpp</span><span class="o">.</span><span class="n">run_decorator</span><span class="p">(</span><span class="n">md</span><span class="o">=</span><span class="n">_md</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">single_collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">):</span>
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">kickoff</span><span class="p">(</span><span class="n">flyer</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">flyer</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">single_collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">multi_collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">md</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">_md</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_md</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">md</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="nd">@bpp</span><span class="o">.</span><span class="n">run_decorator</span><span class="p">(</span><span class="n">md</span><span class="o">=</span><span class="n">_md</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">multi_collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">):</span>
+
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">kickoff</span><span class="p">(</span><span class="n">flyer</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">st</span> <span class="o">=</span> <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">flyer</span><span class="p">)</span>
+        <span class="k">while</span> <span class="n">st</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">st</span><span class="o">.</span><span class="n">done</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">multi_collect</span><span class="p">(</span><span class="n">flyer</span><span class="p">))</span>
+
+
+<span class="n">RE</span> <span class="o">=</span> <span class="n">RunEngine</span><span class="p">()</span>
+<span class="n">bec</span> <span class="o">=</span> <span class="n">BestEffortCallback</span><span class="p">()</span>
+
+<span class="c1"># RE(multi_collect(flyer1), bec)</span>
+<span class="c1"># RE(single_collect(flyer1), bec)</span>
+</pre></div>
+</div>
 </div>
 </div>
 <div class="section" id="asynchronous-status">
