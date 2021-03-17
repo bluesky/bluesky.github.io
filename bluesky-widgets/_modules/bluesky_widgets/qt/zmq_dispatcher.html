@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>bluesky_widgets.qt.zmq_dispatcher &mdash; bluesky-widgets 0.0.8.post9+gc2edf3c documentation</title>
+  <title>bluesky_widgets.qt.zmq_dispatcher &mdash; bluesky-widgets 0.0.8.post11+ga776cbd documentation</title>
   
 
   
@@ -64,7 +64,7 @@
             
             
               <div class="version">
-                0.0.8.post9+gc2edf3c
+                0.0.8.post11+ga776cbd
               </div>
             
           
@@ -240,22 +240,24 @@
 
     <span class="k">def</span> <span class="nf">_receive_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">our_prefix</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prefix</span>  <span class="c1"># local var to save an attribute lookup</span>
-        <span class="c1"># TODO Pull on the socket more than once here, until it blocks, to</span>
-        <span class="c1"># ensure we do not get more and more behind over time.</span>
-        <span class="n">message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
-        <span class="n">prefix</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-        <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
-        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">our_prefix</span><span class="p">)</span> <span class="ow">or</span> <span class="n">prefix</span> <span class="o">==</span> <span class="n">our_prefix</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_waiting_for_start</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_waiting_for_start</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="c1"># We subscribed midstream and are seeing documents for</span>
-                    <span class="c1"># which we do not have the full run. Wait for a &#39;start&#39;</span>
-                    <span class="c1"># doc.</span>
-                    <span class="k">return</span>
-            <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deserializer</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span>
+        <span class="c1"># TODO Think about back pressure.</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">message</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">prefix</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+            <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">our_prefix</span><span class="p">)</span> <span class="ow">or</span> <span class="n">prefix</span> <span class="o">==</span> <span class="n">our_prefix</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_waiting_for_start</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_waiting_for_start</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># We subscribed midstream and are seeing documents for</span>
+                        <span class="c1"># which we do not have the full run. Wait for a &#39;start&#39;</span>
+                        <span class="c1"># doc.</span>
+                        <span class="k">return</span>
+                <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deserializer</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+            <span class="k">yield</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span>
 
     <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">closed</span><span class="p">:</span>
@@ -274,7 +276,7 @@
         <span class="n">worker</span><span class="o">.</span><span class="n">finished</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
             <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timer</span><span class="o">.</span><span class="n">singleShot</span><span class="p">(</span><span class="n">LOADING_LATENCY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_work_loop</span><span class="p">)</span>
         <span class="p">)</span>
-        <span class="n">worker</span><span class="o">.</span><span class="n">returned</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_process_result</span><span class="p">)</span>
+        <span class="n">worker</span><span class="o">.</span><span class="n">yielded</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_process_result</span><span class="p">)</span>
         <span class="n">worker</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_process_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
