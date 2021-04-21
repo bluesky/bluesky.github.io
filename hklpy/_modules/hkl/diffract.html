@@ -1,0 +1,926 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>hkl.diffract &mdash; hklpy 0+untagged.1.g12de810.dirty documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/graphviz.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> hklpy
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0+untagged.1.g12de810.dirty
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Core Functionality</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../overview.html">Overview</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Ready-to-Use Devices</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../ready_to_use.html">Ready-to-Use Devices</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples/index.html">Examples</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Developer Notes</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../release_notes.html">Release History</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">hklpy</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>hkl.diffract</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for hkl.diffract</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">diffract</span>
+<span class="sd">--------</span>
+
+<span class="sd">Common Support for diffractometers</span>
+
+<span class="sd">.. autosummary::</span>
+
+<span class="sd">    ~Constraint</span>
+<span class="sd">    ~Diffractometer</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">Component</span> <span class="k">as</span> <span class="n">Cpt</span>
+<span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">PositionerBase</span>
+<span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">PseudoPositioner</span>
+<span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">Signal</span>
+<span class="kn">from</span> <span class="nn">ophyd.pseudopos</span> <span class="kn">import</span> <span class="n">pseudo_position_argument</span>
+<span class="kn">from</span> <span class="nn">ophyd.pseudopos</span> <span class="kn">import</span> <span class="n">real_position_argument</span>
+<span class="kn">from</span> <span class="nn">ophyd.signal</span> <span class="kn">import</span> <span class="n">AttributeSignal</span><span class="p">,</span> <span class="n">ArrayAttributeSignal</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">pint</span>
+<span class="kn">import</span> <span class="nn">pyRestTable</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">calc</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="n">Constraint</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;Constraint&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;low_limit&quot;</span><span class="p">,</span> <span class="s2">&quot;high_limit&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="s2">&quot;fit&quot;</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="Diffractometer"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer">[docs]</a><span class="k">class</span> <span class="nc">Diffractometer</span><span class="p">(</span><span class="n">PseudoPositioner</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Diffractometer pseudopositioner</span>
+
+<span class="sd">    .. autosummary::</span>
+
+<span class="sd">        ~calc</span>
+<span class="sd">        ~engine</span>
+<span class="sd">        ~forward</span>
+<span class="sd">        ~inverse</span>
+<span class="sd">        ~forward_solutions_table</span>
+<span class="sd">        ~apply_constraints</span>
+<span class="sd">        ~reset_constraints</span>
+<span class="sd">        ~show_constraints</span>
+<span class="sd">        ~undo_last_constraints</span>
+<span class="sd">        ~pa</span>
+<span class="sd">        ~wh</span>
+<span class="sd">        ~_energy_changed</span>
+<span class="sd">        ~_update_calc_energy</span>
+
+
+<span class="sd">    This has a corresponding calculation engine from **hklpy** that does</span>
+<span class="sd">    forward and inverse calculations.</span>
+
+<span class="sd">    If instantiating a specific diffractometer class such as `E4C`, `E6C`,</span>
+<span class="sd">    neither the `calc_inst` or the `calc_kw` parameters are required.</span>
+
+<span class="sd">    However, there is the option to either pass in a calculation</span>
+<span class="sd">    instance (with `calc_inst`) or keywords for the default calculation</span>
+<span class="sd">    class (using `calc_kw`) to instantiate a new one.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    prefix : str</span>
+<span class="sd">        PV prefix for all components</span>
+<span class="sd">    calc_kw : dict, optional</span>
+<span class="sd">        Initializer arguments for the calc class</span>
+<span class="sd">    decision_fcn : callable, optional</span>
+<span class="sd">        The decision function to use when multiple solutions exist for a given</span>
+<span class="sd">        forward calculation. Defaults to arbitrarily picking the first</span>
+<span class="sd">        solution.</span>
+<span class="sd">    read_attrs : list, optional</span>
+<span class="sd">        Read attributes default to all pseudo and real positioners</span>
+<span class="sd">    configuration_attrs : list, optional</span>
+<span class="sd">        Defaults to the UB matrix and energy</span>
+<span class="sd">    parent : Device, optional</span>
+<span class="sd">        Parent device</span>
+<span class="sd">    name : str, optional</span>
+<span class="sd">        Device name</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    calc_class : sub-class of CalcRecip</span>
+<span class="sd">        Reciprocal calculation class used with this diffractometer. If ``None``</span>
+<span class="sd">        (as used in `hkl.diffract.Diffractometer`), `calc_inst` must be</span>
+<span class="sd">        specified upon initialization.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    :class:`~hkl.geometries.E4CH`</span>
+<span class="sd">    :class:`~hkl.geometries.E4CV`</span>
+<span class="sd">    :class:`~hkl.geometries.E6C`</span>
+<span class="sd">    :class:`~hkl.geometries.K4CV`</span>
+<span class="sd">    :class:`~hkl.geometries.K6C`</span>
+<span class="sd">    :class:`~hkl.geometries.Med2p3`</span>
+<span class="sd">    :class:`~hkl.geometries.Petra3_p09_eh2`</span>
+<span class="sd">    :class:`~hkl.geometries.SoleilMars`</span>
+<span class="sd">    :class:`~hkl.geometries.SoleilSiriusKappa`</span>
+<span class="sd">    :class:`~hkl.geometries.SoleilSiriusTurret`</span>
+<span class="sd">    :class:`~hkl.geometries.SoleilSixs`</span>
+<span class="sd">    :class:`~hkl.geometries.SoleilSixsMed1p2`</span>
+<span class="sd">    :class:`~hkl.geometries.SoleilSixsMed2p2`</span>
+<span class="sd">    :class:`~hkl.geometries.TwoC`</span>
+<span class="sd">    :class:`~hkl.geometries.Zaxis`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">calc_class</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># see: Documentation has examples to use an EPICS PV for energy.</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span><span class="n">Signal</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Energy (in keV)&quot;</span><span class="p">)</span>
+    <span class="n">energy_units</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span><span class="n">Signal</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="s2">&quot;keV&quot;</span><span class="p">)</span>
+    <span class="n">energy_offset</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span><span class="n">Signal</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">energy_update_calc_flag</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span><span class="n">Signal</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">geometry_name</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="c1"># fmt: off</span>
+        <span class="n">AttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.geometry_name&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Diffractometer Geometry name&quot;</span><span class="p">,</span>
+        <span class="n">write_access</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="c1"># fmt: on</span>
+    <span class="p">)</span>
+    <span class="n">class_name</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="c1"># fmt: off</span>
+        <span class="n">AttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;__class__.__name__&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Diffractometer class name&quot;</span><span class="p">,</span>
+        <span class="n">write_access</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="c1"># fmt: on</span>
+    <span class="p">)</span>
+
+    <span class="n">sample_name</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span><span class="n">AttributeSignal</span><span class="p">,</span> <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample_name&quot;</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Sample name&quot;</span><span class="p">)</span>
+    <span class="n">lattice</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="c1"># fmt: off</span>
+        <span class="n">ArrayAttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.lattice&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Sample lattice&quot;</span><span class="p">,</span>
+        <span class="c1"># fmt: on</span>
+    <span class="p">)</span>
+    <span class="n">lattice_reciprocal</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="c1"># fmt: off</span>
+        <span class="n">AttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.reciprocal&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Reciprocal lattice&quot;</span><span class="p">,</span>
+        <span class="c1"># fmt: on</span>
+    <span class="p">)</span>
+
+    <span class="n">U</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span><span class="n">AttributeSignal</span><span class="p">,</span> <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.U&quot;</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;U matrix&quot;</span><span class="p">)</span>
+    <span class="n">UB</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span><span class="n">AttributeSignal</span><span class="p">,</span> <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.UB&quot;</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;UB matrix&quot;</span><span class="p">)</span>
+    <span class="c1"># fmt: off</span>
+    <span class="n">reflections</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="n">ArrayAttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.reflections&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Reflections&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">reflections_details</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="n">AttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.reflections_details&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;Details of reflections&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">ux</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="n">AttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.ux.value&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;ux portion of the U matrix&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">uy</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="n">AttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.uy.value&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;uy portion of the U matrix&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">uz</span> <span class="o">=</span> <span class="n">Cpt</span><span class="p">(</span>
+        <span class="n">AttributeSignal</span><span class="p">,</span>
+        <span class="n">attr</span><span class="o">=</span><span class="s2">&quot;calc.sample.uz.value&quot;</span><span class="p">,</span>
+        <span class="n">doc</span><span class="o">=</span><span class="s2">&quot;uz portion of the U matrix&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># fmt: on</span>
+
+<div class="viewcode-block" id="Diffractometer.__init__"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prefix</span><span class="p">,</span>
+        <span class="n">calc_kw</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">decision_fcn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">calc_inst</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">configuration_attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">read_attrs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">calc_inst</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">calc_inst</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc_class</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Calculation instance must be derived  from the class </span><span class="si">{self.calc_class}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_calc</span> <span class="o">=</span> <span class="n">calc_inst</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">calc_kw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">calc_kw</span> <span class="o">=</span> <span class="p">{}</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_calc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc_class</span><span class="p">(</span><span class="n">lock_engine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">calc_kw</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">engine_locked</span><span class="p">:</span>
+            <span class="c1"># Reason for this is that the engine determines the pseudomotor</span>
+            <span class="c1"># names, so if the engine is switched from underneath, the</span>
+            <span class="c1"># pseudomotor will no longer function properly</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Calculation engine must be locked  (CalcDiff.lock_engine set)&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">configuration_attrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">configuration_attrs</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">                UB energy reflections_details geometry_name class_name</span>
+<span class="s2">            &quot;&quot;&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">decision_fcn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># the default decision function is to just grab solution #1:</span>
+            <span class="n">decision_fcn</span> <span class="o">=</span> <span class="n">calc</span><span class="o">.</span><span class="n">default_decision_function</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_decision_fcn</span> <span class="o">=</span> <span class="n">decision_fcn</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="c1"># fmt: off</span>
+            <span class="n">prefix</span><span class="p">,</span>
+            <span class="n">read_attrs</span><span class="o">=</span><span class="n">read_attrs</span><span class="p">,</span>
+            <span class="n">configuration_attrs</span><span class="o">=</span><span class="n">configuration_attrs</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="c1"># fmt: on</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_constraints_stack</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">if</span> <span class="n">read_attrs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># if unspecified, set the read attrs to the pseudo/real motor</span>
+            <span class="c1"># positions once known</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">read_attrs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">PseudoPosition</span><span class="o">.</span><span class="n">_fields</span><span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">RealPosition</span><span class="o">.</span><span class="n">_fields</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_energy_changed</span><span class="p">,</span> <span class="n">event_type</span><span class="o">=</span><span class="n">Signal</span><span class="o">.</span><span class="n">SUB_VALUE</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_offset</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_energy_offset_changed</span><span class="p">,</span> <span class="n">event_type</span><span class="o">=</span><span class="n">Signal</span><span class="o">.</span><span class="n">SUB_VALUE</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy_units</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_energy_units_changed</span><span class="p">,</span> <span class="n">event_type</span><span class="o">=</span><span class="n">Signal</span><span class="o">.</span><span class="n">SUB_VALUE</span><span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_calc_energy_update_permitted</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;return boolean `True` if permitted&quot;&quot;&quot;</span>
+        <span class="n">acceptable_values</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Yes&quot;</span><span class="p">,</span> <span class="s2">&quot;locked&quot;</span><span class="p">,</span> <span class="s2">&quot;OK&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">&quot;On&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_update_calc_flag</span><span class="o">.</span><span class="n">get</span><span class="p">()</span> <span class="ow">in</span> <span class="n">acceptable_values</span>
+
+<div class="viewcode-block" id="Diffractometer._energy_changed"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer._energy_changed">[docs]</a>    <span class="k">def</span> <span class="nf">_energy_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Callback indicating that the energy signal was updated</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">            The `energy` signal is subscribed to this method</span>
+<span class="sd">            in the :meth:`Diffractometer.__init__()` method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="c1"># fmt: off</span>
+                <span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> not fully connected, </span><span class="si">%s</span><span class="s2">.calc.energy not updated&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="c1"># fmt: on</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calc_energy_update_permitted</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_calc_energy</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Diffractometer._energy_offset_changed"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer._energy_offset_changed">[docs]</a>    <span class="k">def</span> <span class="nf">_energy_offset_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Callback indicating that the energy offset signal was updated.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">            The ``energy_offset`` signal is subscribed to this method</span>
+<span class="sd">            in the :meth:`Diffractometer.__init__()` method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="c1"># fmt: off</span>
+                <span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> not fully connected, &#39;</span><span class="si">%s</span><span class="s2">.calc.energy_offset&#39; not updated&quot;</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="c1"># fmt: on</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># TODO: is there a loop back through _update_calc_energy?</span>
+        <span class="n">units</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_units</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">pint</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">energy</span><span class="p">,</span> <span class="s2">&quot;keV&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">units</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;units = </span><span class="si">{</span><span class="n">units</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">magnitude</span> <span class="o">-</span> <span class="n">value</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Diffractometer._energy_units_changed"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer._energy_units_changed">[docs]</a>    <span class="k">def</span> <span class="nf">_energy_units_changed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Callback indicating that the energy units signal was updated.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">            The ``energy_units`` signal is subscribed to this method</span>
+<span class="sd">            in the :meth:`Diffractometer.__init__()` method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="c1"># fmt: off</span>
+                <span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> not fully connected, &#39;</span><span class="si">%s</span><span class="s2">.calc.energy_units&#39; not updated&quot;</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="c1"># fmt: on</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># TODO: is there a loop back through _update_calc_energy?</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="n">pint</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">energy</span><span class="p">,</span> <span class="s2">&quot;keV&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">energy</span><span class="o">.</span><span class="n">magnitude</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_offset</span><span class="o">.</span><span class="n">get</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="Diffractometer._update_calc_energy"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer._update_calc_energy">[docs]</a>    <span class="k">def</span> <span class="nf">_update_calc_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        writes ``self.calc.energy`` from ``value`` or ``self.energy``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="c1"># fmt: off</span>
+                <span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> not fully connected, </span><span class="si">%s</span><span class="s2">.calc.energy not updated&quot;</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="c1"># fmt: on</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># use either supplied value or get from signal</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="o">.</span><span class="n">get</span><span class="p">())</span>
+
+        <span class="c1"># energy_offset has same units as energy</span>
+        <span class="n">value</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_offset</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+
+        <span class="c1"># comment these lines to skip unit conversion</span>
+        <span class="n">units</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_units</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">units</span> <span class="o">!=</span> <span class="s2">&quot;keV&quot;</span><span class="p">:</span>
+            <span class="n">keV</span> <span class="o">=</span> <span class="n">pint</span><span class="o">.</span><span class="n">Quantity</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">units</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;keV&quot;</span><span class="p">)</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">keV</span><span class="o">.</span><span class="n">magnitude</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;setting </span><span class="si">%s</span><span class="s2">.calc.energy = </span><span class="si">%f</span><span class="s2"> (keV)&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">energy</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_position</span><span class="p">()</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">calc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;The calculation instance&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calc</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">engine</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;The calculation engine associated with the diffractometer&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">engine</span>
+
+    <span class="c1"># TODO so these calculations change the internal state of the hkl</span>
+    <span class="c1"># calculation class, which is probably not a good thing</span>
+    <span class="c1"># -- it becomes a problem when someone uses these functions</span>
+    <span class="c1"># outside of move()</span>
+
+<div class="viewcode-block" id="Diffractometer.forward"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.forward">[docs]</a>    <span class="nd">@pseudo_position_argument</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pseudo</span><span class="p">):</span>
+        <span class="n">solutions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">forward_iter</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="n">pseudo</span><span class="p">,</span> <span class="n">max_iters</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;pseudo to real: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">solutions</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decision_fcn</span><span class="p">(</span><span class="n">pseudo</span><span class="p">,</span> <span class="n">solutions</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Diffractometer.inverse"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.inverse">[docs]</a>    <span class="nd">@real_position_argument</span>
+    <span class="k">def</span> <span class="nf">inverse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">real</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">physical_positions</span> <span class="o">=</span> <span class="n">real</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">PseudoPosition</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">pseudo_positions</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Diffractometer.check_value"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.check_value">[docs]</a>    <span class="k">def</span> <span class="nf">check_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Raise exception if pos is not within limits.</span>
+
+<span class="sd">        In a scan, a subset of the pseudo axes may be directed,</span>
+<span class="sd">        which are given in a dict from a set message from the</span>
+<span class="sd">        bluesky RunEngine.</span>
+
+<span class="sd">        It is not permitted to scan both pseudo and real positioners.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="c1"># Redefine and fill in any missing values.</span>
+
+            <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">target</span> <span class="ow">in</span> <span class="n">pos</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="p">):</span>
+                    <span class="n">p</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">real_positioners</span><span class="p">:</span>
+                        <span class="n">p</span><span class="o">.</span><span class="n">check_value</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2"> not in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="n">pos</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">attr_name</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">position</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pseudo_positioners</span><span class="p">]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">check_value</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Diffractometer.apply_constraints"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.apply_constraints">[docs]</a>    <span class="k">def</span> <span class="nf">apply_constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">constraints</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Constrain the diffractometer&#39;s motions.</span>
+
+<span class="sd">        This action will first the current constraints onto</span>
+<span class="sd">        a stack, enabling both *undo* and *reset* features.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_push_current_constraints</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_constraints</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Diffractometer.reset_constraints"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.reset_constraints">[docs]</a>    <span class="k">def</span> <span class="nf">reset_constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set constraints back to initial settings.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_constraints_stack</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_constraints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_constraints_stack</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_constraints_stack</span> <span class="o">=</span> <span class="p">[]</span></div>
+
+<div class="viewcode-block" id="Diffractometer.show_constraints"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.show_constraints">[docs]</a>    <span class="k">def</span> <span class="nf">show_constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fmt</span><span class="o">=</span><span class="s2">&quot;simple&quot;</span><span class="p">,</span> <span class="n">printing</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Print the current constraints in a table.&quot;&quot;&quot;</span>
+        <span class="n">tbl</span> <span class="o">=</span> <span class="n">pyRestTable</span><span class="o">.</span><span class="n">Table</span><span class="p">()</span>
+        <span class="n">tbl</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="s2">&quot;axis low_limit high_limit value fit&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">real_positioners</span><span class="o">.</span><span class="n">_fields</span><span class="p">:</span>
+            <span class="c1"># fmt: off</span>
+            <span class="n">tbl</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="n">m</span><span class="p">,</span>
+                    <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">fit</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="c1"># fmt: on</span>
+
+        <span class="k">if</span> <span class="n">printing</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">tbl</span><span class="o">.</span><span class="n">reST</span><span class="p">(</span><span class="n">fmt</span><span class="o">=</span><span class="n">fmt</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">tbl</span></div>
+
+<div class="viewcode-block" id="Diffractometer.undo_last_constraints"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.undo_last_constraints">[docs]</a>    <span class="k">def</span> <span class="nf">undo_last_constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Remove the current constraints additions, restore previous.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_constraints_stack</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_constraints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_constraints_stack</span><span class="o">.</span><span class="n">pop</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="Diffractometer._push_current_constraints"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer._push_current_constraints">[docs]</a>    <span class="k">def</span> <span class="nf">_push_current_constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;push current constraints onto the stack&quot;&quot;&quot;</span>
+        <span class="n">constraints</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">m</span><span class="p">:</span> <span class="n">Constraint</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">fit</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">real_positioners</span><span class="o">.</span><span class="n">_fields</span>
+            <span class="c1"># TODO: any other positioner constraints</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_constraints_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Diffractometer._set_constraints"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer._set_constraints">[docs]</a>    <span class="k">def</span> <span class="nf">_set_constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">constraints</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;set diffractometer&#39;s constraints&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">limits</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">constraint</span><span class="o">.</span><span class="n">low_limit</span><span class="p">,</span>
+                <span class="n">constraint</span><span class="o">.</span><span class="n">high_limit</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">value</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span><span class="o">.</span><span class="n">fit</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">fit</span></div>
+
+<div class="viewcode-block" id="Diffractometer.forward_solutions_table"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.forward_solutions_table">[docs]</a>    <span class="k">def</span> <span class="nf">forward_solutions_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reflections</span><span class="p">,</span> <span class="n">full</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">digits</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return table of computed solutions for each supplied (hkl) reflection.</span>
+
+<span class="sd">        The solutions are calculated using the current UB matrix &amp; constraints.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        reflections : list of (h, k, l) reflections</span>
+<span class="sd">            Each reflection is a tuple of 3 numbers,</span>
+<span class="sd">            (h, k, l) of the reflection.</span>
+<span class="sd">        full : bool</span>
+<span class="sd">            If ``True``, show all solutions.  If ``False``,</span>
+<span class="sd">            only show the default solution.</span>
+<span class="sd">        digits : int</span>
+<span class="sd">            Number of digits to roundoff each position</span>
+<span class="sd">            value.  Default is 5.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_table</span> <span class="o">=</span> <span class="n">pyRestTable</span><span class="o">.</span><span class="n">Table</span><span class="p">()</span>
+        <span class="n">motors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">real_positioners</span><span class="o">.</span><span class="n">_fields</span>
+        <span class="n">_table</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="s2">&quot;(hkl) solution&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">motors</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">reflection</span> <span class="ow">in</span> <span class="n">reflections</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">solutions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="n">reflection</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="n">solutions</span> <span class="o">=</span> <span class="n">exc</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">solutions</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+                <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">reflection</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">]</span>
+                <span class="n">row</span> <span class="o">+=</span> <span class="p">[</span><span class="s2">&quot;&quot;</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">motors</span><span class="p">]</span>
+                <span class="n">_table</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">solutions</span><span class="p">):</span>
+                    <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">reflection</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span>
+                    <span class="n">row</span> <span class="o">+=</span> <span class="p">[</span><span class="nb">round</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">m</span><span class="p">),</span> <span class="n">digits</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">motors</span><span class="p">]</span>
+                    <span class="n">_table</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">full</span><span class="p">:</span>
+                        <span class="k">break</span>  <span class="c1"># only show the first (default) solution</span>
+        <span class="k">return</span> <span class="n">_table</span></div>
+
+<div class="viewcode-block" id="Diffractometer.pa"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.pa">[docs]</a>    <span class="k">def</span> <span class="nf">pa</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">all_samples</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">printing</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Report (all) the diffractometer settings.</span>
+
+<span class="sd">        EXAMPLE::</span>
+
+<span class="sd">            In [1]: from hkl.geometries import SimulatedK4CV</span>
+
+<span class="sd">            In [2]: k4cv = SimulatedK4CV(&#39;&#39;, name=&#39;k4cv&#39;)</span>
+
+<span class="sd">            In [3]: k4cv.pa()  # FIXME lines are too long to include in source code</span>
+<span class="sd">            ===================== ====================================================================</span>
+<span class="sd">            term                  value</span>
+<span class="sd">            ===================== ====================================================================</span>
+<span class="sd">            diffractometer        k4cv</span>
+<span class="sd">            geometry              K4CV</span>
+<span class="sd">            class                 SimulatedK4CV</span>
+<span class="sd">            energy (keV)          8.05092</span>
+<span class="sd">            wavelength (angstrom) 1.54000</span>
+<span class="sd">            calc engine           hkl</span>
+<span class="sd">            mode                  bissector</span>
+<span class="sd">            positions             ====== =======</span>
+<span class="sd">                                name   value</span>
+<span class="sd">                                ====== =======</span>
+<span class="sd">                                komega 0.00000</span>
+<span class="sd">                                kappa  0.00000</span>
+<span class="sd">                                kphi   0.00000</span>
+<span class="sd">                                tth    0.00000</span>
+<span class="sd">                                ====== =======</span>
+<span class="sd">            sample: main          ================ ===================================================</span>
+<span class="sd">                                term             value</span>
+<span class="sd">                                ================ ===================================================</span>
+<span class="sd">                                unit cell edges  a=1.54, b=1.54, c=1.54</span>
+<span class="sd">                                unit cell angles alpha=90.0, beta=90.0, gamma=90.0</span>
+<span class="sd">                                [U]              [[1. 0. 0.]</span>
+<span class="sd">                                                    [0. 1. 0.]</span>
+<span class="sd">                                                    [0. 0. 1.]]</span>
+<span class="sd">                                [UB]             [[ 4.07999046e+00 -2.49827363e-16 -2.49827363e-16]</span>
+<span class="sd">                                                    [ 0.00000000e+00  4.07999046e+00 -2.49827363e-16]</span>
+<span class="sd">                                                    [ 0.00000000e+00  0.00000000e+00  4.07999046e+00]]</span>
+<span class="sd">                                ================ ===================================================</span>
+<span class="sd">            ===================== ====================================================================</span>
+
+<span class="sd">            Out[3]: &lt;pyRestTable.rest_table.Table at 0x7f5c16503e20&gt;</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="nf">addTable</span><span class="p">(</span><span class="n">tbl</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">tbl</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+        <span class="k">def</span> <span class="nf">Package</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">return</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+
+        <span class="n">table</span> <span class="o">=</span> <span class="n">pyRestTable</span><span class="o">.</span><span class="n">Table</span><span class="p">()</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="s2">&quot;term value&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;diffractometer&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">_geometry</span><span class="o">.</span><span class="n">name_get</span><span class="p">()))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;class&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;energy (keV)&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">energy</span><span class="si">:</span><span class="s2">.5f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;wavelength (angstrom)&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">wavelength</span><span class="si">:</span><span class="s2">.5f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;calc engine&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;mode&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">mode</span><span class="p">))</span>
+
+        <span class="n">pt</span> <span class="o">=</span> <span class="n">pyRestTable</span><span class="o">.</span><span class="n">Table</span><span class="p">()</span>
+        <span class="n">pt</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="s2">&quot;name value&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">_axis_name_to_original</span><span class="p">:</span>
+            <span class="n">pt</span><span class="o">.</span><span class="n">addLabel</span><span class="p">(</span><span class="s2">&quot;original name&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">real_positioners</span><span class="p">:</span>
+            <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">attr_name</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">item</span><span class="o">.</span><span class="n">position</span><span class="si">:</span><span class="s2">.5f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+            <span class="n">k</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">_axis_name_to_original</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">attr_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">row</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+            <span class="n">pt</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;positions&quot;</span><span class="p">,</span> <span class="n">addTable</span><span class="p">(</span><span class="n">pt</span><span class="p">)))</span>
+
+        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">show_constraints</span><span class="p">(</span><span class="n">printing</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;constraints&quot;</span><span class="p">,</span> <span class="n">addTable</span><span class="p">(</span><span class="n">t</span><span class="p">)))</span>
+
+        <span class="k">if</span> <span class="n">all_samples</span><span class="p">:</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">_samples</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">_sample</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">pyRestTable</span><span class="o">.</span><span class="n">Table</span><span class="p">()</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="s2">&quot;term value&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+            <span class="n">nm</span> <span class="o">=</span> <span class="n">sample</span><span class="o">.</span><span class="n">name</span>
+            <span class="k">if</span> <span class="n">all_samples</span> <span class="ow">and</span> <span class="n">sample</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">sample</span><span class="p">:</span>
+                <span class="n">nm</span> <span class="o">+=</span> <span class="s2">&quot; (*)&quot;</span>
+
+            <span class="c1"># fmt: off</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s2">&quot;unit cell edges&quot;</span><span class="p">,</span>
+                    <span class="n">Package</span><span class="p">(</span>
+                        <span class="o">**</span><span class="p">{</span>
+                            <span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">sample</span><span class="o">.</span><span class="n">lattice</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+                            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="s2">&quot;a b c&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+                        <span class="p">}</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="s2">&quot;unit cell angles&quot;</span><span class="p">,</span>
+                    <span class="n">Package</span><span class="p">(</span>
+                        <span class="o">**</span><span class="p">{</span>
+                            <span class="n">k</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">sample</span><span class="o">.</span><span class="n">lattice</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+                            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="s2">&quot;alpha beta gamma&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+                        <span class="p">}</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="c1"># fmt: on</span>
+
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">ref</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">sample</span><span class="o">.</span><span class="n">_sample</span><span class="o">.</span><span class="n">reflections_get</span><span class="p">()):</span>
+                <span class="n">h</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">hkl_get</span><span class="p">()</span>
+                <span class="n">pos_arr</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">geometry_get</span><span class="p">()</span><span class="o">.</span><span class="n">axis_values_get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">_units</span><span class="p">)</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="sa">f</span><span class="s2">&quot;ref </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2"> (hkl)&quot;</span><span class="p">,</span> <span class="n">Package</span><span class="p">(</span><span class="o">**</span><span class="nb">dict</span><span class="p">(</span><span class="n">h</span><span class="o">=</span><span class="n">h</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="o">=</span><span class="n">l</span><span class="p">))))</span>
+                <span class="c1"># fmt: off</span>
+                <span class="n">t</span><span class="o">.</span><span class="n">addRow</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;ref </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2"> positioners&quot;</span><span class="p">,</span>
+                        <span class="n">Package</span><span class="p">(</span>
+                            <span class="o">**</span><span class="p">{</span>
+                                <span class="n">k</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s2">.5f</span><span class="si">}</span><span class="s2">&quot;</span>
+                                <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">physical_axis_names</span><span class="p">,</span> <span class="n">pos_arr</span>
+                                <span class="p">)</span>
+                            <span class="p">}</span>
+                        <span class="p">),</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+                <span class="c1"># fmt: on</span>
+
+            <span class="n">t</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;[U]&quot;</span><span class="p">,</span> <span class="n">sample</span><span class="o">.</span><span class="n">U</span><span class="p">))</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;[UB]&quot;</span><span class="p">,</span> <span class="n">sample</span><span class="o">.</span><span class="n">UB</span><span class="p">))</span>
+
+            <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="sa">f</span><span class="s2">&quot;sample: </span><span class="si">{</span><span class="n">nm</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">addTable</span><span class="p">(</span><span class="n">t</span><span class="p">)))</span>
+
+        <span class="k">if</span> <span class="n">printing</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">table</span></div>
+
+<div class="viewcode-block" id="Diffractometer.wh"><a class="viewcode-back" href="../../diffract.html#hkl.diffract.Diffractometer.wh">[docs]</a>    <span class="k">def</span> <span class="nf">wh</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">printing</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Report (brief) where is the diffractometer.</span>
+
+<span class="sd">        EXAMPLE::</span>
+
+<span class="sd">            In [1]: from hkl.geometries import SimulatedK4CV</span>
+
+<span class="sd">            In [2]: k4cv = SimulatedK4CV(&#39;&#39;, name=&#39;k4cv&#39;)</span>
+
+<span class="sd">            In [3]: k4cv.wh()</span>
+<span class="sd">            ===================== ========= =========</span>
+<span class="sd">            term                  value     axis_type</span>
+<span class="sd">            ===================== ========= =========</span>
+<span class="sd">            diffractometer        k4cv</span>
+<span class="sd">            sample name           main</span>
+<span class="sd">            energy (keV)          8.05092</span>
+<span class="sd">            wavelength (angstrom) 1.54000</span>
+<span class="sd">            calc engine           hkl</span>
+<span class="sd">            mode                  bissector</span>
+<span class="sd">            h                     0.0       pseudo</span>
+<span class="sd">            k                     0.0       pseudo</span>
+<span class="sd">            l                     0.0       pseudo</span>
+<span class="sd">            komega                0         real</span>
+<span class="sd">            kappa                 0         real</span>
+<span class="sd">            kphi                  0         real</span>
+<span class="sd">            tth                   0         real</span>
+<span class="sd">            ===================== ========= =========</span>
+
+<span class="sd">            Out[3]: &lt;pyRestTable.rest_table.Table at 0x7f55c4775cd0&gt;</span>
+
+<span class="sd">        compare with similar function in SPEC::</span>
+
+<span class="sd">            1117.KAPPA&gt; wh</span>
+<span class="sd">            H K L =  0  0  1.7345</span>
+<span class="sd">            Alpha = 20  Beta = 20  Azimuth = 90</span>
+<span class="sd">            Omega = 32.952  Lambda = 1.54</span>
+<span class="sd">            Two Theta       Theta         Chi         Phi     K_Theta       Kappa       K_Phi</span>
+<span class="sd">            40.000000   20.000000   90.000000   57.048500   77.044988  134.755995  114.093455</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">pyRestTable</span><span class="o">.</span><span class="n">Table</span><span class="p">()</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="s2">&quot;term value axis_type&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;diffractometer&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;sample name&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;energy (keV)&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">energy</span><span class="si">:</span><span class="s2">.5f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;wavelength (angstrom)&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">wavelength</span><span class="si">:</span><span class="s2">.5f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;calc engine&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+        <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="s2">&quot;mode&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+
+        <span class="n">pseudo_axes</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span><span class="o">.</span><span class="n">attr_name</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pseudo</span><span class="p">]</span>
+        <span class="n">real_axes</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span><span class="o">.</span><span class="n">attr_name</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_real</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sig_attrs</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="vm">__class__</span><span class="p">,</span> <span class="n">PositionerBase</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">real_axes</span><span class="p">:</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="s2">&quot;real&quot;</span>
+            <span class="k">elif</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">pseudo_axes</span><span class="p">:</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="s2">&quot;pseudo&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="s2">&quot;additional&quot;</span>
+            <span class="n">table</span><span class="o">.</span><span class="n">addRow</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">label</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">printing</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">table</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2014-2021, Brookhaven National Laboratory.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
