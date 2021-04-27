@@ -55,13 +55,17 @@ Define *this* diffractometer
 
 Create a Python class that specifies the names of the real-space
 positioners. We call it ``KappaFourCircle`` here but that choice is
-arbitrary. Pick any valid Python name not already in use.
+arbitrary. Pick any valid Python name not already in use. The convention
+is to start Python class names with a capital letter and use CamelCase
+to mark word starts.
 
 The argument to the ``KappaFourCircle`` class tells which *hklpy* base
-class will be used. This sets the geometry. See the `hklpy
-diffractometers
-documentation <https://blueskyproject.io/hklpy/master/diffract.html#hkl.diffract.Diffractometer.calc_class>`__
-for a list of other choices.
+class will be used. This sets the geometry. (The class we show here
+could be replaced entirely with ``hkl.geometries.SimulatedK4CV`` but we
+choose to show here the complete steps to produce that class.) The
+`hklpy
+documentation <https://blueskyproject.io/hklpy/master/geometries.html>`__
+provides a complete list of diffractometer geometries.
 
 In *hklpy*, the reciprocal-space axes are known as ``pseudo``
 positioners while the real-space axes are known as ``real`` positioners.
@@ -69,57 +73,73 @@ For the real positioners, it is possible to use different names than the
 canonical names used internally by the *hkl* library. That is not
 covered here.
 
-note: The keyword argument ``kind="hinted"`` is an indication that this
-signal may be plotted and appear in the live table.
+Note: The keyword argument ``kind="hinted"`` is an indication that this
+signal may be plotted.
 
-This demo uses simulated motors. To use EPICS motors, import that
-structure from *ophyd*:
+This ``KappaFourCircle()`` class example uses simulated motors. See the
+drop-down for an example how to use EPICS motors.
+
+.. raw:: html
+
+   <details>
+
+.. raw:: html
+
+   <summary>
+
+KappaFourCircle() class using EPICS motors
+
+.. raw:: html
+
+   </summary>
 
 .. code:: python
 
-   from ophyd import EpicsMotor
 
-Then, in the class, replace the real positioners with (substituting with
-the correct EPICS PV for each motor):
+   from hkl.geometries import K4CV
+   from ophyd import EpicsMotor, PseudoSingle
+   from ophyd import Component as Cpt
 
-.. code:: python
+   class KappaFourCircle(K4CV):
+       """
+       Our kappa 4-circle.  Vertical scattering orientation.
+       """
+       # the reciprocal axes are called "pseudo" in hklpy
+       h = Cpt(PseudoSingle, '', kind="hinted")
+       k = Cpt(PseudoSingle, '', kind="hinted")
+       l = Cpt(PseudoSingle, '', kind="hinted")
 
-   komega = Cpt(EpicsMotor, "pv_prefix:m41", kind="hinted")
-   kappa = Cpt(EpicsMotor, "pv_prefix:m22", kind="hinted")
-   kphi = Cpt(EpicsMotor, "pv_prefix:m35", kind="hinted")
-   tth = Cpt(EpicsMotor, "pv_prefix:m7", kind="hinted")
+       # the motor axes are called "real" in hklpy
+       komega = Cpt(EpicsMotor, "pv_prefix:m41", kind="hinted")
+       kappa = Cpt(EpicsMotor, "pv_prefix:m22", kind="hinted")
+       kphi = Cpt(EpicsMotor, "pv_prefix:m35", kind="hinted")
+       tth = Cpt(EpicsMotor, "pv_prefix:m7", kind="hinted")
 
-and, **most important**, remove the ``def __init__()`` method. It is
-only needed to define an initial position for the simulators. Otherwise,
-this will move these EPICS motors to zero.
+.. raw:: html
+
+   </details>
 
 .. code:: ipython3
 
-    from hkl.geometries import K4CV
-    from ophyd import PseudoSingle, SoftPositioner
+    from hkl.geometries import K4CV, SimMixin
+    from ophyd import SoftPositioner
     from ophyd import Component as Cpt
     
-    class KappaFourCircle(K4CV):
+    class KappaFourCircle(SimMixin, K4CV):
         """
-        Our kappa 4-circle.  Eulerian, vertical scattering orientation.
+        Our kappa 4-circle.  Vertical scattering orientation.
         """
-        # the reciprocal axes are called: pseudo in hklpy
-        h = Cpt(PseudoSingle, '', kind="hinted")
-        k = Cpt(PseudoSingle, '', kind="hinted")
-        l = Cpt(PseudoSingle, '', kind="hinted")
+        # the reciprocal axes are defined by SimMixin
     
-        # the motor axes are called: real in hklpy
+        # Each motor will be moved to position 0 by SimMixin
         komega = Cpt(SoftPositioner, kind="hinted")
         kappa = Cpt(SoftPositioner, kind="hinted")
         kphi = Cpt(SoftPositioner, kind="hinted")
         tth = Cpt(SoftPositioner, kind="hinted")
-    
-        def __init__(self, *args, **kwargs):
-            """Define an initial position for simulators."""
-            super().__init__(*args, **kwargs)
-    
-            for p in self.real_positioners:
-                p._set_position(0)  # give each a starting position
+
+Create the Python diffractometer object (``sixc``) using the
+``SixCircle()`` class. By convention, the ``name`` keyword is the same
+as the object name.
 
 .. code:: ipython3
 
@@ -159,12 +179,13 @@ Define the crystal’s orientation on the diffractometer using the
 2-reflection method described by `Busing & Levy, Acta Cryst 22 (1967)
 457 <https://www.psi.ch/sites/default/files/import/sinq/zebra/PracticalsEN/1967-Busing-Levy-3-4-circle-Acta22.pdf>`__.
 
-Choose the same wavelength X-rays for both reflections
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Set the same X-ray wavelength for both reflections, by setting the diffractometer energy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: ipython3
 
-    k4cv.calc.wavelength = 1.54  # Angstrom (8.0509 keV)
+    from hkl.calc import A_KEV
+    k4cv.energy.put(A_KEV / 1.54)  # (8.0509 keV)
 
 Find the first reflection and identify its Miller indices: (*hkl*)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -221,47 +242,63 @@ Report what we have setup
 
 .. code:: ipython3
 
-    import pyRestTable
-    
-    tbl = pyRestTable.Table()
-    tbl.labels = "term value".split()
-    tbl.addRow(("energy, keV", k4cv.calc.energy))
-    tbl.addRow(("wavelength, angstrom", k4cv.calc.wavelength))
-    tbl.addRow(("position", k4cv.position))
-    tbl.addRow(("sample name", k4cv.sample_name.get()))
-    tbl.addRow(("[U]", k4cv.U.get()))
-    tbl.addRow(("[UB]", k4cv.UB.get()))
-    tbl.addRow(("lattice", k4cv.lattice.get()))
-    print(tbl)
-    
-    print(f"sample\t{k4cv.calc.sample}")
+    k4cv.pa()
 
 
 .. parsed-literal::
 
-    ==================== ===================================================
-    term                 value                                              
-    ==================== ===================================================
-    energy, keV          8.050922077922078                                  
-    wavelength, angstrom 1.54                                               
-    position             KappaFourCirclePseudoPos(h=0.0, k=-0.0, l=0.0)     
-    sample name          silicon                                            
-    [U]                  [[ 1.74532925e-05 -6.22695871e-06 -1.00000000e+00] 
-                          [ 0.00000000e+00 -1.00000000e+00  6.22695872e-06] 
-                          [-1.00000000e+00 -1.08680932e-10 -1.74532925e-05]]
-    [UB]                 [[ 2.01919115e-05 -7.20403894e-06 -1.15691131e+00] 
-                          [ 0.00000000e+00 -1.15691131e+00  7.20403894e-06] 
-                          [-1.15691131e+00 -1.25734128e-10 -2.01919115e-05]]
-    lattice              [ 5.431  5.431  5.431 90.    90.    90.   ]        
-    ==================== ===================================================
+    ===================== =================================================================================
+    term                  value                                                                            
+    ===================== =================================================================================
+    diffractometer        k4cv                                                                             
+    geometry              K4CV                                                                             
+    class                 KappaFourCircle                                                                  
+    energy (keV)          8.05092                                                                          
+    wavelength (angstrom) 1.54000                                                                          
+    calc engine           hkl                                                                              
+    mode                  bissector                                                                        
+    positions             ====== =======                                                                   
+                          name   value                                                                     
+                          ====== =======                                                                   
+                          komega 0.00000                                                                   
+                          kappa  0.00000                                                                   
+                          kphi   0.00000                                                                   
+                          tth    0.00000                                                                   
+                          ====== =======                                                                   
+    constraints           ====== ========= ========== ===== ====                                           
+                          axis   low_limit high_limit value fit                                            
+                          ====== ========= ========== ===== ====                                           
+                          komega -180.0    180.0      0.0   True                                           
+                          kappa  -180.0    180.0      0.0   True                                           
+                          kphi   -180.0    180.0      0.0   True                                           
+                          tth    -180.0    180.0      0.0   True                                           
+                          ====== ========= ========== ===== ====                                           
+    sample: silicon       ================= ===============================================================
+                          term              value                                                          
+                          ================= ===============================================================
+                          unit cell edges   a=5.431, b=5.431, c=5.431                                      
+                          unit cell angles  alpha=90.0, beta=90.0, gamma=90.0                              
+                          ref 1 (hkl)       h=4.0, k=0.0, l=0.0                                            
+                          ref 1 positioners komega=55.45070, kappa=0.00000, kphi=-90.00000, tth=-69.09660  
+                          ref 2 (hkl)       h=0.0, k=4.0, l=0.0                                            
+                          ref 2 positioners komega=-1.59500, kappa=134.75680, kphi=123.35540, tth=-69.09660
+                          [U]               [[ 1.74532925e-05 -6.22695871e-06 -1.00000000e+00]             
+                                             [ 0.00000000e+00 -1.00000000e+00  6.22695872e-06]             
+                                             [-1.00000000e+00 -1.08680932e-10 -1.74532925e-05]]            
+                          [UB]              [[ 2.01919115e-05 -7.20403894e-06 -1.15691131e+00]             
+                                             [ 0.00000000e+00 -1.15691131e+00  7.20403894e-06]             
+                                             [-1.15691131e+00 -1.25734128e-10 -2.01919115e-05]]            
+                          ================= ===============================================================
+    ===================== =================================================================================
     
-    sample	HklSample(name='silicon', lattice=LatticeTuple(a=5.431, b=5.431, c=5.431, alpha=90.0, beta=90.0, gamma=90.0), ux=Parameter(name='None (internally: ux)', limits=(min=-180.0, max=180.0), value=-160.36469500932463, fit=True, inverted=False, units='Degree'), uy=Parameter(name='None (internally: uy)', limits=(min=-180.0, max=180.0), value=-89.99893826046727, fit=True, inverted=False, units='Degree'), uz=Parameter(name='None (internally: uz)', limits=(min=-180.0, max=180.0), value=19.635304987561902, fit=True, inverted=False, units='Degree'), U=array([[ 1.74532925e-05, -6.22695871e-06, -1.00000000e+00],
-           [ 0.00000000e+00, -1.00000000e+00,  6.22695872e-06],
-           [-1.00000000e+00, -1.08680932e-10, -1.74532925e-05]]), UB=array([[ 2.01919115e-05, -7.20403894e-06, -1.15691131e+00],
-           [ 0.00000000e+00, -1.15691131e+00,  7.20403894e-06],
-           [-1.15691131e+00, -1.25734128e-10, -2.01919115e-05]]), reflections=[(h=4.0, k=0.0, l=0.0), (h=0.0, k=4.0, l=0.0)], reflection_measured_angles=array([[0.        , 1.57081338],
-           [1.57081338, 0.        ]]), reflection_theoretical_angles=array([[0.        , 1.57079633],
-           [1.57079633, 0.        ]]))
+
+
+
+
+.. parsed-literal::
+
+    <pyRestTable.rest_table.Table at 0x7fef7c325760>
+
 
 
 Check the orientation matrix
@@ -271,6 +308,150 @@ Perform checks with *forward* (hkl to angle) and *inverse* (angle to
 hkl) computations to verify the diffractometer will move to the same
 positions where the reflections were identified.
 
+Constrain one of the motors to a limited range
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-  keep ``kphi`` less than or equal to zero (allowing for small
+   roundoff)
+
+First, we apply constraints directly to the ``calc``-level support.
+
+.. code:: ipython3
+
+    k4cv.calc["kphi"].limits = (-180, 0.001)
+    k4cv.show_constraints()
+
+
+.. parsed-literal::
+
+    ====== ========= ========== ===== ====
+    axis   low_limit high_limit value fit 
+    ====== ========= ========== ===== ====
+    komega -180.0    180.0      0.0   True
+    kappa  -180.0    180.0      0.0   True
+    kphi   -180.0    0.001      0.0   True
+    tth    -180.0    180.0      0.0   True
+    ====== ========= ========== ===== ====
+    
+
+
+
+
+.. parsed-literal::
+
+    <pyRestTable.rest_table.Table at 0x7fef7c325370>
+
+
+
+Next, we show how to use additional methods of ``Diffractometer()`` that
+support *undo* and *reset* features for applied constraints. The support
+is based on a *stack* (a Python list). A set of constraints is added
+(``apply_constraints()``) or removed (``undo_last_constraints()``) from
+the stack. Or, the stack can be cleared (``reset_constraints()``).
+
++-----------------------------------+-----------------------------------+
+| method                            | what happens                      |
++===================================+===================================+
+| ``apply_constraints()``           | Add a set of constraints and use  |
+|                                   | them                              |
++-----------------------------------+-----------------------------------+
+| ``undo_last_constraints()``       | Remove the most-recent set of     |
+|                                   | constraints and restore the       |
+|                                   | previous one from the stack.      |
++-----------------------------------+-----------------------------------+
+| ``reset_constraints()``           | Set constraints back to initial   |
+|                                   | settings.                         |
++-----------------------------------+-----------------------------------+
+| ``show_constraints()``            | Print the current constraints in  |
+|                                   | a table.                          |
++-----------------------------------+-----------------------------------+
+
+A set of constraints is a Python dictionary that uses the real
+positioner names (the motors) as the keys. Only those constraints with
+changes need be added to the dictionary but it is permissable to
+describe all the real positioners. Each value in the dictionary is a
+```hkl.diffract.Constraint`` <https://blueskyproject.io/hklpy/diffract.html#hkl.diffract.Constraint>`__,
+where the values are specified in this order:
+``low_limit, high_limit, value, fit``.
+
++-----------------------------------+-----------------------------------+
+| ``fit``                           | constraint                        |
++===================================+===================================+
+| ``True``                          | Only accept solutions with        |
+|                                   | positions between ``low_limit``   |
+|                                   | and ``high_limit``.               |
++-----------------------------------+-----------------------------------+
+| ``False``                         | Do not allow this positioner to   |
+|                                   | be adjusted and fix its position  |
+|                                   | to ``value``.                     |
++-----------------------------------+-----------------------------------+
+
+Apply new constraints using the
+```applyConstraints()`` <https://blueskyproject.io/hklpy/diffract.html#hkl.diffract.Diffractometer.apply_constraints>`__
+method. These *add* to the existing constraints, as shown in the table.
+
+.. code:: ipython3
+
+    from hkl.diffract import Constraint
+    k4cv.apply_constraints(
+        {
+            "komega": Constraint(-0.001, 180, 0, True),
+            "kappa": Constraint(-90, 90, 0, True),
+        }
+    )
+    k4cv.show_constraints()
+
+
+.. parsed-literal::
+
+    ====== ========= ========== ===== ====
+    axis   low_limit high_limit value fit 
+    ====== ========= ========== ===== ====
+    komega -0.001    180.0      0.0   True
+    kappa  -90.0     90.0       0.0   True
+    kphi   -180.0    0.001      0.0   True
+    tth    -180.0    180.0      0.0   True
+    ====== ========= ========== ===== ====
+    
+
+
+
+
+.. parsed-literal::
+
+    <pyRestTable.rest_table.Table at 0x7fefdc08bfa0>
+
+
+
+Then remove (undo) those new additions.
+
+.. code:: ipython3
+
+    k4cv.undo_last_constraints()
+    k4cv.show_constraints()
+
+
+.. parsed-literal::
+
+    ====== ========= ========== ===== ====
+    axis   low_limit high_limit value fit 
+    ====== ========= ========== ===== ====
+    komega -180.0    180.0      0.0   True
+    kappa  -180.0    180.0      0.0   True
+    kphi   -180.0    0.001      0.0   True
+    tth    -180.0    180.0      0.0   True
+    ====== ========= ========== ===== ====
+    
+
+
+
+
+.. parsed-literal::
+
+    <pyRestTable.rest_table.Table at 0x7fef7d386940>
+
+
+
 Use ``bissector`` mode
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -278,7 +459,7 @@ where ``tth`` = 2\*\ ``omega``
 
 .. code:: ipython3
 
-    k4cv.calc.engine.mode = "bissector"
+    k4cv.engine.mode = "bissector"
 
 (400) reflection test
 ~~~~~~~~~~~~~~~~~~~~~
@@ -312,7 +493,6 @@ Now, proceed with the inverse calculation.
 
     sol = k4cv.inverse((55.4507, 0, -90, -69.0966))
     print(f"(4 0 0) ? {sol.h:.2f} {sol.k:.2f} {sol.l:.2f}")
-
 
 
 .. parsed-literal::
@@ -393,7 +573,7 @@ Check the forward calculation: (040)
 
 .. parsed-literal::
 
-    (040) : tth=-69.0985 komega=-1.5939 kappa=134.7551 kphi=-57.3291
+    (040) : tth=-69.0985 komega=-1.5939 kappa=134.7551 kphi=-57.0459
 
 
 Scan in reciprocal space using Bluesky
@@ -454,19 +634,19 @@ appear as columns in the table.
 
     
     
-    Transient Scan ID: 1     Time: 2021-01-06 11:06:20
-    Persistent Unique Scan ID: '9ac1fd76-f809-49ca-a3f9-ff69cf93083d'
+    Transient Scan ID: 1     Time: 2021-04-22 16:23:48
+    Persistent Unique Scan ID: 'a948fb1c-c676-4db0-86bd-77bbe147f372'
     New stream: 'primary'
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
     |   seq_num |       time |     k4cv_h |     k4cv_k |     k4cv_l | k4cv_komega | k4cv_kappa |  k4cv_kphi |   k4cv_tth |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    |         1 | 11:06:20.8 |      3.900 |     -0.000 |     -0.000 |      56.431 |     -0.000 |    -90.001 |    -67.137 |
-    |         2 | 11:06:21.8 |      3.950 |      0.000 |      0.000 |      55.942 |      0.000 |    -90.001 |    -68.115 |
-    |         3 | 11:06:22.8 |      4.000 |      0.000 |     -0.000 |      55.451 |      0.000 |    -90.001 |    -69.099 |
-    |         4 | 11:06:23.9 |      4.050 |      0.000 |      0.000 |      54.956 |      0.000 |    -90.001 |    -70.088 |
-    |         5 | 11:06:24.9 |      4.100 |      0.000 |      0.000 |      54.458 |      0.000 |    -90.001 |    -71.083 |
+    |         1 | 16:23:48.5 |      3.900 |     -0.000 |     -0.000 |      56.431 |     -0.000 |    -90.001 |    -67.137 |
+    |         2 | 16:23:49.2 |      3.950 |      0.000 |     -0.000 |      55.942 |      0.000 |    -90.001 |    -68.115 |
+    |         3 | 16:23:49.7 |      4.000 |      0.000 |     -0.000 |      55.451 |      0.000 |    -90.001 |    -69.099 |
+    |         4 | 16:23:50.3 |      4.050 |      0.000 |      0.000 |      54.956 |      0.000 |    -90.001 |    -70.088 |
+    |         5 | 16:23:50.9 |      4.100 |     -0.000 |     -0.000 |      54.458 |     -0.000 |    -90.001 |    -71.083 |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    generator scan ['9ac1fd76'] (scan num: 1)
+    generator scan ['a948fb1c'] (scan num: 1)
     
     
     
@@ -476,12 +656,12 @@ appear as columns in the table.
 
 .. parsed-literal::
 
-    ('9ac1fd76-f809-49ca-a3f9-ff69cf93083d',)
+    ('a948fb1c-c676-4db0-86bd-77bbe147f372',)
 
 
 
 
-.. image:: geo_k4cv_files/geo_k4cv_36_2.svg
+.. image:: geo_k4cv_files/geo_k4cv_44_2.png
 
 
 (*hk0*) scan from (400) to (040)
@@ -493,7 +673,11 @@ Scan between the two orientation reflections. Need to keep
 .. code:: ipython3
 
     k4cv.calc.engine.mode = "constant_phi"
-    k4cv.calc["kphi"].limits = (0, 180)
+    k4cv.apply_constraints(
+        {
+            "kphi": Constraint(0, 180, 0, True),
+        }
+    )
     
     RE(bp.scan([k4cv], k4cv.h, 4, 0, k4cv.k, 0, 4, 10))
 
@@ -502,24 +686,24 @@ Scan between the two orientation reflections. Need to keep
 
     
     
-    Transient Scan ID: 2     Time: 2021-01-06 11:06:28
-    Persistent Unique Scan ID: '086eccab-fc13-48a9-9261-672468410139'
+    Transient Scan ID: 2     Time: 2021-04-22 16:23:52
+    Persistent Unique Scan ID: '92afc035-c130-4f29-a7e7-d23f789a9e0a'
     New stream: 'primary'
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
     |   seq_num |       time |     k4cv_h |     k4cv_k |     k4cv_l | k4cv_komega | k4cv_kappa |  k4cv_kphi |   k4cv_tth |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    |         1 | 11:06:29.1 |      4.000 |      0.000 |      0.000 |    -124.550 |     -0.000 |     90.000 |    -69.099 |
-    |         2 | 11:06:29.8 |      3.556 |      0.444 |      0.000 |    -117.539 |     -9.305 |     92.995 |    -61.065 |
-    |         3 | 11:06:30.5 |      3.111 |      0.889 |      0.000 |    -110.558 |    -20.863 |     96.749 |    -54.612 |
-    |         4 | 11:06:31.1 |      2.667 |      1.333 |     -0.000 |    -103.581 |    -34.906 |    101.425 |    -50.011 |
-    |         5 | 11:06:31.8 |      2.222 |      1.778 |      0.000 |     -96.678 |    -51.202 |    107.118 |    -47.592 |
-    |         6 | 11:06:32.5 |      1.778 |      2.222 |      0.000 |     -90.012 |    -68.872 |    113.784 |    -47.592 |
-    |         7 | 11:06:33.1 |      1.333 |      2.667 |     -0.000 |     -83.768 |    -86.675 |    121.238 |    -50.011 |
-    |         8 | 11:06:33.6 |      0.889 |      3.111 |      0.000 |     -78.039 |   -103.647 |    129.267 |    -54.612 |
-    |         9 | 11:06:34.2 |      0.444 |      3.556 |     -0.000 |     -72.737 |   -119.520 |    137.795 |    -61.065 |
-    |        10 | 11:06:34.9 |     -0.000 |      4.000 |      0.000 |     -67.504 |   -134.756 |    147.045 |    -69.099 |
+    |         1 | 16:23:52.5 |      4.000 |      0.000 |      0.000 |    -124.550 |      0.000 |     90.000 |    -69.099 |
+    |         2 | 16:23:52.8 |      3.556 |      0.444 |      0.000 |    -117.539 |     -9.305 |     92.995 |    -61.065 |
+    |         3 | 16:23:53.2 |      3.111 |      0.889 |      0.000 |    -110.558 |    -20.863 |     96.749 |    -54.612 |
+    |         4 | 16:23:53.6 |      2.667 |      1.333 |     -0.000 |    -103.581 |    -34.906 |    101.425 |    -50.011 |
+    |         5 | 16:23:54.0 |      2.222 |      1.778 |      0.000 |     -96.678 |    -51.202 |    107.118 |    -47.592 |
+    |         6 | 16:23:54.4 |      1.778 |      2.222 |      0.000 |     -90.012 |    -68.872 |    113.784 |    -47.592 |
+    |         7 | 16:23:54.7 |      1.333 |      2.667 |     -0.000 |     -83.768 |    -86.675 |    121.238 |    -50.011 |
+    |         8 | 16:23:55.1 |      0.889 |      3.111 |      0.000 |     -78.039 |   -103.647 |    129.267 |    -54.612 |
+    |         9 | 16:23:55.4 |      0.444 |      3.556 |     -0.000 |     -72.737 |   -119.520 |    137.795 |    -61.065 |
+    |        10 | 16:23:55.8 |     -0.000 |      4.000 |      0.000 |     -67.504 |   -134.756 |    147.045 |    -69.099 |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    generator scan ['086eccab'] (scan num: 2)
+    generator scan ['92afc035'] (scan num: 2)
     
     
     
@@ -529,12 +713,12 @@ Scan between the two orientation reflections. Need to keep
 
 .. parsed-literal::
 
-    ('086eccab-fc13-48a9-9261-672468410139',)
+    ('92afc035-c130-4f29-a7e7-d23f789a9e0a',)
 
 
 
 
-.. image:: geo_k4cv_files/geo_k4cv_38_2.svg
+.. image:: geo_k4cv_files/geo_k4cv_46_2.png
 
 
 (*0k0*) scan near (040)
@@ -549,19 +733,19 @@ Scan between the two orientation reflections. Need to keep
 
     
     
-    Transient Scan ID: 3     Time: 2021-01-06 11:06:37
-    Persistent Unique Scan ID: '50c4a49e-e3bf-4e8e-95ed-644b7949db36'
+    Transient Scan ID: 3     Time: 2021-04-22 16:23:56
+    Persistent Unique Scan ID: 'fbfa7e22-b134-4faf-8a8d-499530a3cc0a'
     New stream: 'primary'
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
     |   seq_num |       time |     k4cv_k |     k4cv_h |     k4cv_l | k4cv_komega | k4cv_kappa |  k4cv_kphi |   k4cv_tth |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    |         1 | 11:06:37.7 |      3.900 |     -0.000 |      0.000 |     -66.523 |   -134.756 |    147.045 |    -67.137 |
-    |         2 | 11:06:38.7 |      3.950 |     -0.000 |     -0.000 |     -67.012 |   -134.756 |    147.045 |    -68.115 |
-    |         3 | 11:06:39.6 |      4.000 |     -0.000 |      0.000 |     -67.504 |   -134.756 |    147.045 |    -69.099 |
-    |         4 | 11:06:40.5 |      4.050 |     -0.000 |      0.000 |     -67.998 |   -134.756 |    147.045 |    -70.088 |
-    |         5 | 11:06:42.0 |      4.100 |     -0.000 |      0.000 |     -68.496 |   -134.756 |    147.045 |    -71.083 |
+    |         1 | 16:23:57.1 |      3.900 |     -0.000 |      0.000 |     -66.523 |   -134.756 |    147.045 |    -67.137 |
+    |         2 | 16:23:57.6 |      3.950 |     -0.000 |     -0.000 |     -67.012 |   -134.756 |    147.045 |    -68.115 |
+    |         3 | 16:23:58.2 |      4.000 |     -0.000 |      0.000 |     -67.504 |   -134.756 |    147.045 |    -69.099 |
+    |         4 | 16:23:58.7 |      4.050 |     -0.000 |      0.000 |     -67.998 |   -134.756 |    147.045 |    -70.088 |
+    |         5 | 16:23:59.3 |      4.100 |     -0.000 |      0.000 |     -68.496 |   -134.756 |    147.045 |    -71.083 |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    generator scan ['50c4a49e'] (scan num: 3)
+    generator scan ['fbfa7e22'] (scan num: 3)
     
     
     
@@ -571,12 +755,12 @@ Scan between the two orientation reflections. Need to keep
 
 .. parsed-literal::
 
-    ('50c4a49e-e3bf-4e8e-95ed-644b7949db36',)
+    ('fbfa7e22-b134-4faf-8a8d-499530a3cc0a',)
 
 
 
 
-.. image:: geo_k4cv_files/geo_k4cv_40_2.svg
+.. image:: geo_k4cv_files/geo_k4cv_48_2.png
 
 
 (*hk0*) scan near (440)
@@ -591,19 +775,19 @@ Scan between the two orientation reflections. Need to keep
 
     
     
-    Transient Scan ID: 4     Time: 2021-01-06 11:06:45
-    Persistent Unique Scan ID: '72aed1f3-8249-4843-b02a-e47608bb8836'
+    Transient Scan ID: 4     Time: 2021-04-22 16:24:00
+    Persistent Unique Scan ID: 'fe553159-fb87-4574-835b-aec3e7a26099'
     New stream: 'primary'
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
     |   seq_num |       time |     k4cv_h |     k4cv_k |     k4cv_l | k4cv_komega | k4cv_kappa |  k4cv_kphi |   k4cv_tth |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    |         1 | 11:06:45.7 |      3.900 |      4.100 |      0.000 |    -122.253 |    -61.940 |    111.095 |   -106.695 |
-    |         2 | 11:06:46.4 |      3.950 |      4.050 |      0.000 |    -122.615 |    -60.940 |    110.715 |   -106.659 |
-    |         3 | 11:06:47.1 |      4.000 |      4.000 |      0.000 |    -122.985 |    -59.941 |    110.339 |   -106.647 |
-    |         4 | 11:06:47.7 |      4.050 |      3.950 |     -0.000 |    -123.366 |    -58.946 |    109.965 |   -106.659 |
-    |         5 | 11:06:48.4 |      4.100 |      3.900 |     -0.000 |    -123.755 |    -57.952 |    109.593 |   -106.695 |
+    |         1 | 16:24:00.9 |      3.900 |      4.100 |     -0.000 |    -122.253 |    -61.940 |    111.095 |   -106.695 |
+    |         2 | 16:24:01.3 |      3.950 |      4.050 |      0.000 |    -122.615 |    -60.940 |    110.715 |   -106.659 |
+    |         3 | 16:24:01.7 |      4.000 |      4.000 |      0.000 |    -122.985 |    -59.941 |    110.339 |   -106.647 |
+    |         4 | 16:24:02.1 |      4.050 |      3.950 |     -0.000 |    -123.366 |    -58.946 |    109.965 |   -106.659 |
+    |         5 | 16:24:02.5 |      4.100 |      3.900 |     -0.000 |    -123.755 |    -57.952 |    109.593 |   -106.695 |
     +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
-    generator scan ['72aed1f3'] (scan num: 4)
+    generator scan ['fe553159'] (scan num: 4)
     
     
     
@@ -613,10 +797,64 @@ Scan between the two orientation reflections. Need to keep
 
 .. parsed-literal::
 
-    ('72aed1f3-8249-4843-b02a-e47608bb8836',)
+    ('fe553159-fb87-4574-835b-aec3e7a26099',)
 
 
 
 
-.. image:: geo_k4cv_files/geo_k4cv_42_2.svg
+.. image:: geo_k4cv_files/geo_k4cv_50_2.png
+
+
+Move to the (*440*) reflection.
+
+.. code:: ipython3
+
+    k4cv.move((4,4,0))
+    print(f"{k4cv.position = }")
+
+
+.. parsed-literal::
+
+    k4cv.position = KappaFourCirclePseudoPos(h=3.999999997480347, k=3.9999999991513424, l=1.980731121395143e-09)
+
+
+Repeat the same scan about the (*440*) but use *relative* positions.
+
+.. code:: ipython3
+
+    RE(bp.rel_scan([k4cv], k4cv.h, -0.1, 0.1, k4cv.k, -0.1, 0.1, 5))
+
+
+.. parsed-literal::
+
+    
+    
+    Transient Scan ID: 5     Time: 2021-04-22 16:24:03
+    Persistent Unique Scan ID: '8585e1ef-c3cb-4192-8977-d8633ebdc1f0'
+    New stream: 'primary'
+    +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
+    |   seq_num |       time |     k4cv_h |     k4cv_k |     k4cv_l | k4cv_komega | k4cv_kappa |  k4cv_kphi |   k4cv_tth |
+    +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
+    |         1 | 16:24:03.8 |      3.900 |      3.900 |      0.000 |    -121.103 |    -59.941 |    110.339 |   -102.883 |
+    |         2 | 16:24:04.1 |      3.950 |      3.950 |      0.000 |    -122.034 |    -59.941 |    110.339 |   -104.745 |
+    |         3 | 16:24:04.5 |      4.000 |      4.000 |     -0.000 |    -122.985 |    -59.941 |    110.339 |   -106.647 |
+    |         4 | 16:24:04.9 |      4.050 |      4.050 |      0.000 |    -123.958 |    -59.941 |    110.339 |   -108.593 |
+    |         5 | 16:24:05.3 |      4.100 |      4.100 |      0.000 |    -124.955 |    -59.941 |    110.339 |   -110.585 |
+    +-----------+------------+------------+------------+------------+-------------+------------+------------+------------+
+    generator rel_scan ['8585e1ef'] (scan num: 5)
+    
+    
+    
+
+
+
+
+.. parsed-literal::
+
+    ('8585e1ef-c3cb-4192-8977-d8633ebdc1f0',)
+
+
+
+
+.. image:: geo_k4cv_files/geo_k4cv_54_2.png
 
