@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Access Control &mdash; tiled 0.1.0a10.post41+g377a83d documentation</title>
+  <title>Access Control &mdash; tiled 0.1.0a10.post42+g2fbb401 documentation</title>
   
 
   
@@ -43,7 +43,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="FAQ" href="faq.html" />
-    <link rel="prev" title="Controlling Speed, Memory Usage, and Disk Usage" href="../how-to/scaling.html" /> 
+    <link rel="prev" title="Security" href="security.html" /> 
 </head>
 
 <body class="wy-body-for-nav">
@@ -67,7 +67,7 @@
             
             
               <div class="version">
-                0.1.0a10.post41+g377a83d
+                0.1.0a10.post42+g2fbb401
               </div>
             
           
@@ -108,6 +108,7 @@
 </ul>
 <p class="caption"><span class="caption-text">Explanations</span></p>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="faq.html">FAQ</a></li>
 <li class="toctree-l1"><a class="reference internal" href="lineage.html">How Tiled Fits into the Ecosystem</a></li>
@@ -188,15 +189,69 @@
             
   <div class="section" id="access-control">
 <h1>Access Control<a class="headerlink" href="#access-control" title="Permalink to this headline">¶</a></h1>
-<p>Tiled supports basic access control. The primary use case in mind is
-controlling users’ access to data based on a particular field in a database
-indicating the “proposal” or “data session” to which a given dataset belongs,
-and resolving that via some external user managmenet system.</p>
-<p>The server current supports authentication using OAuth2 with JWT, where
-the underlying user management and authentication system is pluggable in
-exactly the same fashion as JupyterHub. To start, as a proof of concept, two
-“Authenticator” plugins are implemented. See
-https://github.com/bluesky/tiled/issues/3 for discussion and plans.</p>
+<p>Tiled offers control of which users can see which entries.
+This is done using an “Access Policy” object, which implements
+a given policy for a given Catalog. It can do this in one of two ways</p>
+<ol class="simple">
+<li><p>Brute checking the entries one at a time</p></li>
+<li><p>Using a query to narrow down search results to those that
+the authenticated user is allowed to access.</p></li>
+</ol>
+<p>(1) is easier to implement and suitable for small- to medium-sized Catalogs
+in memory or backed by a modestly-sized directory. (2) is necessary for large
+Catalogs backed by databases or other external services.</p>
+<p>This is an example of (1):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">See example_configs/toy_authentication.yml for</span>
+<span class="sd">server configuration that runs this example.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">numpy</span>
+
+<span class="kn">from</span> <span class="nn">tiled.utils</span> <span class="kn">import</span> <span class="n">SpecialUsers</span>
+<span class="kn">from</span> <span class="nn">tiled.readers.array</span> <span class="kn">import</span> <span class="n">ArrayAdapter</span>
+<span class="kn">from</span> <span class="nn">tiled.catalogs.in_memory</span> <span class="kn">import</span> <span class="n">Catalog</span><span class="p">,</span> <span class="n">SimpleAccessPolicy</span>
+
+
+<span class="c1"># Specify which entries each user is allowed to use.</span>
+<span class="c1"># SpecialUsers.public is a sentinel that means anyone can access.</span>
+<span class="n">access_policy</span> <span class="o">=</span> <span class="n">SimpleAccessPolicy</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="n">SpecialUsers</span><span class="o">.</span><span class="n">public</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;alice&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;bob&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;cara&quot;</span><span class="p">:</span> <span class="n">SimpleAccessPolicy</span><span class="o">.</span><span class="n">ALL</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+<span class="c1"># Make a Catalog with a couple arrays in it.</span>
+<span class="n">catalog</span> <span class="o">=</span> <span class="n">Catalog</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;A&quot;</span><span class="p">:</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="mi">10</span> <span class="o">*</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">))),</span>
+        <span class="s2">&quot;B&quot;</span><span class="p">:</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="mi">20</span> <span class="o">*</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">))),</span>
+        <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="mi">30</span> <span class="o">*</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">))),</span>
+        <span class="s2">&quot;D&quot;</span><span class="p">:</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="mi">30</span> <span class="o">*</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">))),</span>
+    <span class="p">},</span>
+    <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Here is an example configuration serving that catalog with a
+“toy” authenticator that defines some users.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
+    authenticator: tiled.authenticators:DictionaryAuthenticator
+    args:
+        users_to_passwords:
+            alice: ${ALICE_PASSWORD}
+            bob: ${BOB_PASSWORD}
+            cara: ${CARA_PASSWORD}
+catalogs:
+    - path: /
+      catalog: tiled.examples.toy_authentication:catalog
+</pre></div>
+</div>
+<p>If the configuration above is saved at <code class="docutils literal notranslate"><span class="pre">config.yml</span></code>, it can be served with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALICE_PASSWORD</span><span class="o">=</span><span class="n">secret</span> <span class="n">BOB_PASSWORD</span><span class="o">=</span><span class="n">secret2</span> <span class="n">CARA_PASSWORD</span><span class="o">=</span><span class="n">secret3</span> <span class="n">tiled</span> <span class="n">serve</span> <span class="n">config</span> <span class="n">config</span><span class="o">.</span><span class="n">yml</span>
+</pre></div>
+</div>
 </div>
 
 
@@ -206,7 +261,7 @@ https://github.com/bluesky/tiled/issues/3 for discussion and plans.</p>
           <footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
         <a href="faq.html" class="btn btn-neutral float-right" title="FAQ" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-        <a href="../how-to/scaling.html" class="btn btn-neutral float-left" title="Controlling Speed, Memory Usage, and Disk Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="security.html" class="btn btn-neutral float-left" title="Security" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
 
   <hr/>
