@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Security &mdash; tiled 0.1.0a10.post50+gd8f739a documentation</title>
+  <title>Security &mdash; tiled 0.1.0a10.post52+g68dad42 documentation</title>
   
 
   
@@ -67,7 +67,7 @@
             
             
               <div class="version">
-                0.1.0a10.post50+gd8f739a
+                0.1.0a10.post52+g68dad42
               </div>
             
           
@@ -201,6 +201,8 @@
             
   <div class="section" id="security">
 <h1>Security<a class="headerlink" href="#security" title="Permalink to this headline">¶</a></h1>
+<p>Tiled employs modern web security standards to enforce access control with
+minimum inconvenience to the user.</p>
 <p>There are four use cases for the Tiled server.</p>
 <ol class="simple">
 <li><p>Secure single-user server, analogous to how people use <code class="docutils literal notranslate"><span class="pre">jupyter</span> <span class="pre">notebook</span></code></p></li>
@@ -226,7 +228,7 @@ For those familiar with Jupyter, this is very similar to how
 <p>where the token after <code class="docutils literal notranslate"><span class="pre">api_key=</span></code> will be different each time you start the
 server. Once you have visited this URL with your web browser or the Tiled Python
 client, a cookie will be set in your client and you won’t need to use the token
-again.</p>
+again. It is valid indefinitely.</p>
 <p>For horizontally-scaled deployments where you need multiple instances of the
 server to share the same secret, you can set it via an environment variable like
 so.</p>
@@ -264,20 +266,65 @@ the following:</p>
 </div>
 <div class="section" id="private-multi-user-data-service">
 <h2>Private multi-user data service<a class="headerlink" href="#private-multi-user-data-service" title="Permalink to this headline">¶</a></h2>
-<p>In this mode, users <em>must</em> log in to access anything other than the root <code class="docutils literal notranslate"><span class="pre">/</span></code>
-and documentation <code class="docutils literal notranslate"><span class="pre">/docs</span></code> routes.</p>
-<p>Tiled is designed to integrate with external user-management system via a plugglabe
+<p>In this mode, users <em>must</em> log in to access anything other than the root <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/</span></code>
+and documentation <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">/docs</span></code> routes.</p>
+<p>Tiled is designed to integrate with external user-management systems via a pluggable
 Authenticator interface. For those familiar with JupyterHub, these are very
-similar to JupyterHub Authenticators.</p>
-<p>There are currently three authenticators included with Tiled, two of which are
-toy examples for development and testing. More are planned, integrating with
-services like GitHub, Globus, and Orchid.</p>
-<p>This mode can only be use with configuration files, as in</p>
+similar to JupyterHub Authenticators. Authenticators fall into two groups:</p>
+<ul class="simple">
+<li><p>Authenticators that accept user credentials directly at the <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/token</span></code>
+endpoint, following the OAuth2 and OpenAPI standards as shown below, and
+validate the credentials using some underlying authentication mechanism, such
+as PAM.</p></li>
+<li><p>Authenticators that use OAuth2 code flow to validate user credentials
+without directly handling them. (No such Authenticators have been written yet
+for Tiled, but track to do so has been laid, closely following the pattern
+established by JupyterHub.)</p></li>
+</ul>
+<p>This mode requires configuration files to be used, as in</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">tiled</span> <span class="n">serve</span> <span class="n">config</span> <span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">config_file</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The shorthands <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">serve</span> <span class="pre">pyobject</span> <span class="pre">...</span></code> and <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">serve</span> <span class="pre">directory</span> <span class="pre">...</span></code>
+<p>in order to specify the Authenticator and, when applicable, any parameters.
+The shorthands <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">serve</span> <span class="pre">pyobject</span> <span class="pre">...</span></code> and <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">serve</span> <span class="pre">directory</span> <span class="pre">...</span></code>
 do not currently support this mode.</p>
+<p>Users can authenticate by POST form-encoded credentials to the <code class="docutils literal notranslate"><span class="pre">/token</span></code>
+endpoint, as in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --form --body :8000/token username=alice password=foo
+{
+    &quot;access_token&quot;: &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6MTYyMTY0NTk2NH0.Oz65lrf6gYjIgGa4Pf6E8XwjOcRihP4QCR8a8GQN0M4&quot;,
+    &quot;token_type&quot;: &quot;bearer&quot;
+}
+</pre></div>
+</div>
+<p>The body includes a JWT access token with a short (15 minute) lifetime. Refresh
+tokens are planned but not yet implemented.</p>
+<p>The JWTs are signed using a secret key that is generated at server startup.
+Set the secret manually to ensure that tokens remain valid after a server
+restart, or across horizontally-scaled deployments of multiple servers.</p>
+<p>A good way to generate a secure secret is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">c</span> <span class="s2">&quot;import secrets; print(secrets.token_hex(32))&quot;</span>
+</pre></div>
+</div>
+<p>Apply it by setting the <code class="docutils literal notranslate"><span class="pre">TILED_SERVER_SECRET_KEYS</span></code> environment variable, as in:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">TILED_SERVER_SECRET_KEYS</span><span class="o">=</span><span class="n">secret</span> <span class="n">tiled</span> <span class="n">serve</span> <span class="o">...</span>
+</pre></div>
+</div>
+<p>To rotate keys with a smooth transition, set <code class="docutils literal notranslate"><span class="pre">TILED_SERVER_SECRET_KEYS</span></code> to
+<code class="docutils literal notranslate"><span class="pre">;</span></code>-separated values, as in</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">TILED_SERVER_SECRET_KEYS</span><span class="o">=</span><span class="n">secret1</span><span class="p">;</span><span class="n">secret2</span>
+</pre></div>
+</div>
+<p>The first secret value is always used to <em>encode</em> new tokens, but all values are
+tried to <em>decode</em> existing tokens until one works or all fail.</p>
+<p>The Python client provides a convenience function for generating a token.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tiled.client</span> <span class="kn">import</span> <span class="n">generate_token</span><span class="p">,</span> <span class="n">from_uri</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">token</span> <span class="o">=</span> <span class="n">generate_token</span><span class="p">(</span><span class="s2">&quot;http://localhost:8000&quot;</span><span class="p">)</span>
+<span class="go">Username:</span>
+<span class="go">Password:</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">catalog</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="s2">&quot;http://localhost:8000&quot;</span><span class="p">,</span> <span class="n">token</span><span class="o">=</span><span class="n">token</span><span class="p">)</span>
+</pre></div>
+</div>
 <div class="section" id="authenticate-with-local-linux-unix-users">
 <h3>Authenticate with local Linux/UNIX users<a class="headerlink" href="#authenticate-with-local-linux-unix-users" title="Permalink to this headline">¶</a></h3>
 <p>This requires an additional dependency.</p>
@@ -307,7 +354,7 @@ do not currently support this mode.</p>
 <h3>Toy examples<a class="headerlink" href="#toy-examples" title="Permalink to this headline">¶</a></h3>
 <p>The <code class="docutils literal notranslate"><span class="pre">DictionaryAuthenticator</span></code> authenticates using usernames and passwords
 specified directly in the configuration. The passwords may be extracted from
-environment varibles, as shown. This is not a robust user management system and
+environment variables, as shown. This is not a robust user management system and
 should only for used for development and demos.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># dictionary_config.yml</span>
 <span class="nt">authentication</span><span class="p">:</span>
@@ -343,8 +390,8 @@ should only for used for development and demos.</p>
 </div>
 <div class="section" id="multi-user-data-service-with-some-public-and-some-private-content">
 <h2>Multi-user data service with some public and some private content<a class="headerlink" href="#multi-user-data-service-with-some-public-and-some-private-content" title="Permalink to this headline">¶</a></h2>
-<p>When an Authenticator is used in conjection with <a class="reference internal" href="access-control.html"><span class="doc">Access Control</span></a>,
-certain entries be designated as “public”, visible to any user. By default,
+<p>When an Authenticator is used in conjunction with <a class="reference internal" href="access-control.html"><span class="doc">Access Control</span></a>,
+certain entries may be designated as “public”, visible to any user. By default,
 visitors still need to be authenticated (as any user) to see these entries.
 To make such entries visible to <em>anonymous</em>, unauthenticated users as well,
 include the configuration:</p>
