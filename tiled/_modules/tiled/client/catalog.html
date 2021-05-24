@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.catalog &mdash; tiled 0.1.0a11.post6+gdb43da4 documentation</title>
+  <title>tiled.client.catalog &mdash; tiled 0.1.0a11.post7+gcf88610 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a11.post6+gdb43da4
+                0.1.0a11.post7+gcf88610
               </div>
             
           
@@ -197,6 +197,7 @@
 <span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">urllib.parse</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">import</span> <span class="nn">entrypoints</span>
@@ -207,6 +208,7 @@
 <span class="kn">from</span> <span class="nn">..queries</span> <span class="kn">import</span> <span class="n">KeyLookup</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">DictView</span><span class="p">,</span>
+    <span class="n">ListView</span><span class="p">,</span>
     <span class="n">OneShotCachedMap</span><span class="p">,</span>
     <span class="n">Sentinel</span><span class="p">,</span>
 <span class="p">)</span>
@@ -415,6 +417,16 @@
         <span class="c1"># getting the wrong impression that editing this would update anything</span>
         <span class="c1"># persistent.</span>
         <span class="k">return</span> <span class="n">DictView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">path</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;Sequence of entry names from the root Catalog to this entry&quot;</span>
+        <span class="k">return</span> <span class="n">ListView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">uri</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;Direct link to this entry&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/metadata/</span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">sorting</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -903,22 +915,31 @@
     <span class="k">if</span> <span class="n">token</span><span class="p">:</span>
         <span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">&quot;</span>
     <span class="n">url</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
-    <span class="n">params</span> <span class="o">=</span> <span class="n">url</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;&amp;&quot;</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
-        <span class="k">if</span> <span class="sa">b</span><span class="s2">&quot;=&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">:</span>
-            <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="sa">b</span><span class="s2">&quot;api_key&quot;</span><span class="p">:</span>
-                <span class="n">headers</span><span class="p">[</span><span class="s2">&quot;X-TILED-API-KEY&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
-    <span class="n">base_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">url</span><span class="o">.</span><span class="n">scheme</span><span class="si">}</span><span class="s2">://</span><span class="si">{</span><span class="n">url</span><span class="o">.</span><span class="n">host</span><span class="si">}</span><span class="s2">&quot;</span>
-    <span class="k">if</span> <span class="n">url</span><span class="o">.</span><span class="n">port</span><span class="p">:</span>
-        <span class="n">base_url</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;:</span><span class="si">{</span><span class="n">url</span><span class="o">.</span><span class="n">port</span><span class="si">}</span><span class="s2">&quot;</span>
-    <span class="n">base_url</span> <span class="o">+=</span> <span class="n">url</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+    <span class="n">parsed_query</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">decode</span><span class="p">())</span>
+    <span class="n">api_key_list</span> <span class="o">=</span> <span class="n">parsed_query</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;api_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">api_key_list</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">api_key_list</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot handle two api_key query parameters&quot;</span><span class="p">)</span>
+        <span class="p">(</span><span class="n">api_key</span><span class="p">,)</span> <span class="o">=</span> <span class="n">api_key_list</span>
+        <span class="n">headers</span><span class="p">[</span><span class="s2">&quot;X-TILED-API-KEY&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">api_key</span>
+    <span class="n">query</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlencode</span><span class="p">(</span><span class="n">parsed_query</span><span class="p">,</span> <span class="n">doseq</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="p">[</span><span class="n">segment</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">url</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">segment</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">path</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">path</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;metadata&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;When the URI has a path, the path expected to begin with &#39;/metadata/&#39;&quot;</span>
+            <span class="p">)</span>
+        <span class="n">path</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># [&quot;metadata&quot;, &quot;stuff&quot;, &quot;things&quot;] -&gt; [&quot;stuff&quot;, &quot;things&quot;]</span>
+    <span class="n">base_url</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlunsplit</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">scheme</span><span class="p">,</span> <span class="n">url</span><span class="o">.</span><span class="n">netloc</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">url</span><span class="o">.</span><span class="n">fragment</span><span class="p">)</span>
+    <span class="p">)</span>
     <span class="n">client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="n">base_url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">from_client</span><span class="p">(</span>
         <span class="n">client</span><span class="p">,</span>
+        <span class="n">structure_clients</span><span class="o">=</span><span class="n">structure_clients</span><span class="p">,</span>
+        <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
         <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
         <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
-        <span class="n">structure_clients</span><span class="o">=</span><span class="n">structure_clients</span><span class="p">,</span>
         <span class="n">special_clients</span><span class="o">=</span><span class="n">special_clients</span><span class="p">,</span>
     <span class="p">)</span></div>
 
@@ -1014,6 +1035,7 @@
     <span class="n">client</span><span class="p">,</span>
     <span class="n">structure_clients</span><span class="o">=</span><span class="s2">&quot;numpy&quot;</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
+    <span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">special_clients</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -1044,6 +1066,7 @@
     <span class="c1"># Interpret structure_clients=&quot;numpy&quot; and structure_clients=&quot;dask&quot; shortcuts.</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structure_clients</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">structure_clients</span> <span class="o">=</span> <span class="n">Catalog</span><span class="o">.</span><span class="n">DEFAULT_STRUCTURE_CLIENT_DISPATCH</span><span class="p">[</span><span class="n">structure_clients</span><span class="p">]</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">path</span> <span class="ow">or</span> <span class="p">[]</span>
     <span class="c1"># Do entrypoint discovery if it hasn&#39;t yet been done.</span>
     <span class="k">if</span> <span class="n">Catalog</span><span class="o">.</span><span class="n">DEFAULT_SPECIAL_CLIENT_DISPATCH</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">Catalog</span><span class="o">.</span><span class="n">discover_special_clients</span><span class="p">()</span>
@@ -1051,20 +1074,20 @@
         <span class="n">special_clients</span> <span class="ow">or</span> <span class="p">{},</span>
         <span class="n">Catalog</span><span class="o">.</span><span class="n">DEFAULT_SPECIAL_CLIENT_DISPATCH</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">content</span> <span class="o">=</span> <span class="n">get_json_with_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">offline</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="s2">&quot;/metadata/&quot;</span><span class="p">)</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="n">get_json_with_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">offline</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;/metadata/</span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
     <span class="n">metadata</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">Catalog</span><span class="p">(</span>
         <span class="n">client</span><span class="p">,</span>
         <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
-        <span class="n">path</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
         <span class="n">structure_clients</span><span class="o">=</span><span class="n">structure_clients</span><span class="p">,</span>
         <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
         <span class="n">special_clients</span><span class="o">=</span><span class="n">special_clients</span><span class="p">,</span>
         <span class="n">root_client_type</span><span class="o">=</span><span class="n">Catalog</span><span class="p">,</span>
     <span class="p">)</span><span class="o">.</span><span class="n">client_for_item</span><span class="p">(</span>
-        <span class="n">item</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="p">[],</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">sorting</span><span class="o">=</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;sorting&quot;</span><span class="p">)</span>
+        <span class="n">item</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">sorting</span><span class="o">=</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;sorting&quot;</span><span class="p">)</span>
     <span class="p">)</span></div>
 
 
