@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Authentication &mdash; tiled 0.1.0a11.post27+g2024c75 documentation</title>
+  <title>Authentication &mdash; tiled 0.1.0a11.post28+g63cbea9 documentation</title>
   
 
   
@@ -67,7 +67,7 @@
             
             
               <div class="version">
-                0.1.0a11.post27+g2024c75
+                0.1.0a11.post28+g63cbea9
               </div>
             
           
@@ -125,7 +125,6 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Authentication</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#configure-session-lifetime-parameters">Configure session lifetime parameters</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#set-and-rotate-the-signing-key">Set and Rotate the Signing Key</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#client-authentication-walk-through">Client Authentication Walk-through</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="commandline.html">Command-line tool</a></li>
@@ -206,7 +205,6 @@ This page addresses technical details relevant to:</p>
 <ul class="simple">
 <li><p>Customizing the various lifetimes (timeouts) in the system</p></li>
 <li><p>Horizontally scaling deployments</p></li>
-<li><p>Writing new clients</p></li>
 </ul>
 <div class="section" id="configure-session-lifetime-parameters">
 <h2>Configure session lifetime parameters<a class="headerlink" href="#configure-session-lifetime-parameters" title="Permalink to this headline">¶</a></h2>
@@ -217,9 +215,10 @@ This page addresses technical details relevant to:</p>
 <li><p>Maximum session age — Even <em>active</em> sessions are timed out after this
 limit, and the user is required to resubmit credentials. By default,
 this is unset and active session are never shut down.</p></li>
-<li><p>Access token max age — This is a largely internal detail that has
-negligible impact on the user. It should be short because an
-access token cannot be revoked.</p></li>
+<li><p>Access token max age — This controls how often fresh access token have to be
+re-issued. The process is transparent to the user and just affects performance.
+An <em>access</em> token cannot be revoked, so its lifetime should be short. The
+default is 15 minutes.</p></li>
 </ul>
 <p>These are tuned, respectively, by the following configuration parameters,
 given in units of seconds. The default values are shown.</p>
@@ -282,157 +281,6 @@ ways to generate a secure secret…</p>
 </div>
 <p>The first secret value is always used to <em>encode</em> new tokens, but all values are
 tried to <em>decode</em> existing tokens until one works or all fail.</p>
-</div>
-<div class="section" id="client-authentication-walk-through">
-<h2>Client Authentication Walk-through<a class="headerlink" href="#client-authentication-walk-through" title="Permalink to this headline">¶</a></h2>
-<p>Let’s walk through the authentication flow by example. Start a server like so:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ TILED_ACCESS_TOKEN_MAX_AGE=20 \
-&gt; ALICE_PASSWORD=secret1 \
-&gt; BOB_PASSWORD=secret2 \
-&gt; CARA_PASSWORD=secret3 \
-&gt; tiled serve config example_configs/toy_authentication.yml 
-</pre></div>
-</div>
-<p>We are configuring the timeout for access tokens to be unrealistically short (20
-seconds) for demonstration purposes.</p>
-<p>Here it is again in one line, for convenient copy/paste:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">TILED_ACCESS_TOKEN_MAX_AGE</span><span class="o">=</span><span class="mi">20</span> <span class="n">ALICE_PASSWORD</span><span class="o">=</span><span class="n">secret1</span> <span class="n">BOB_PASSWORD</span><span class="o">=</span><span class="n">secret2</span> <span class="n">CARA_PASSWORD</span><span class="o">=</span><span class="n">secret3</span> <span class="n">tiled</span> <span class="n">serve</span> <span class="n">config</span> <span class="n">example_configs</span><span class="o">/</span><span class="n">toy_authentication</span><span class="o">.</span><span class="n">yml</span> 
-</pre></div>
-</div>
-<p>To make requests, we’ll use <a class="reference external" href="https://httpie.io/">httpie</a>
-and then extract the portions of interest with
-<a class="reference external" href="https://stedolan.github.io/jq/">jq</a>. You could do the same with old-fashioned
-<code class="docutils literal notranslate"><span class="pre">curl</span></code> and copy/paste; these are just conveniences.</p>
-<p>This server is configured to be private, so unauthenticated users cannot see the
-<code class="docutils literal notranslate"><span class="pre">/metadata/</span></code> route, for example.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --session=./session.json GET :8000/metadata/  # not allowed!
-HTTP/1.1 401 Unauthorized
-content-length: 30
-content-type: application/json
-date: Tue, 25 May 2021 16:48:29 GMT
-server: uvicorn
-server-timing: app;dur=2.7
-
-{
-    &quot;detail&quot;: &quot;Not authenticated&quot;
-}
-</pre></div>
-</div>
-<p>Users can authenticate by POST-ing form-encoded credentials to the <code class="docutils literal notranslate"><span class="pre">/token</span></code>
-endpoint, as in:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --session=./session.json --form POST http://127.0.0.1:8000/token username=alice password=secret1 &gt; tokens.json
-
-$ jq . tokens.json
-{
-  &quot;access_token&quot;: &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6MTYyMTk2MTMzNCwidHlwZSI6ImFjY2VzcyJ9.ihZRpS-dPZrMinoWMW7Ox_9mUUTN-KS05Lzcg5pFWOM&quot;,
-  &quot;expires_in&quot;: 20,  # configured artificially short (20 seconds) for this demo
-  &quot;refresh_token&quot;: &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsInR5cGUiOiJyZWZyZXNoIiwiaWF0IjoxNjIxOTc1NzE0LjUzNDEwOCwic2lkIjozNjgwMzkyMTUwMjY4NDY3ODY5NTk0ODk0MDcwNjE1MTA4NzczNiwic2N0IjoxNjIxOTc1NzE0LjUzNDEwOH0.4BzBUYGhL7fEoK8mBYP67ypB7aPTSEmmkFRiOSfzS58&quot;,
-  &quot;refresh_token_expires_in&quot;: 604800,
-  &quot;token_type&quot;: &quot;bearer&quot;
-}
-</pre></div>
-</div>
-<p>The response body includes an access token with a short lifetime (default 15
-minutes) and a refresh token with a long lifetime (default one week).</p>
-<p>Now that we have an <code class="docutils literal notranslate"><span class="pre">access_token</span></code> for the user <code class="docutils literal notranslate"><span class="pre">alice</span></code>, we can see the entries
-that <code class="docutils literal notranslate"><span class="pre">alice</span></code> is allowed to see. (This only works for 20 seconds after we run the
-command above. If you are slow on the draw, you may need to run the previous command again,
-or else increase <code class="docutils literal notranslate"><span class="pre">TILED_ACCESS_TOKEN_MAX_AGE</span></code>.)</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --session=./session.json GET :8000/metadata/ Authorization:&quot;Bearer $(jq -r .access_token tokens.json)&quot;
-HTTP/1.1 200 OK
-content-length: 214
-content-type: application/json
-date: Tue, 25 May 2021 16:48:47 GMT
-etag: f86de76282c7b77dd1efc28d4fe8b6fe
-server: uvicorn
-server-timing: app;dur=3.3
-
-{
-    &quot;data&quot;: {
-        &quot;attributes&quot;: {
-            &quot;client_type_hint&quot;: null,
-            &quot;count&quot;: 2,
-            &quot;metadata&quot;: {},
-            &quot;sorting&quot;: null
-        },
-        &quot;id&quot;: &quot;&quot;,
-        &quot;links&quot;: {
-            &quot;self&quot;: &quot;http://localhost:8000/metadata/&quot;
-        },
-        &quot;meta&quot;: null,
-        &quot;type&quot;: &quot;catalog&quot;
-    },
-    &quot;error&quot;: null,
-    &quot;links&quot;: null,
-    &quot;meta&quot;: null
-}
-</pre></div>
-</div>
-<p>If we wait for <code class="docutils literal notranslate"><span class="pre">TILED_ACCESS_TOKEN_MAX_AGE</span></code> to pass, we find that we are locked out again.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --session=./session.json GET :8000/metadata/ Authorization:&quot;Bearer $(jq -r .access_token tokens.json)&quot;
-HTTP/1.1 401 Unauthorized
-content-length: 38
-content-type: application/json
-date: Tue, 25 May 2021 16:49:02 GMT
-server: uvicorn
-server-timing: app;dur=2.6
-
-{
-    &quot;detail&quot;: &quot;Access token has expired.&quot;
-}
-</pre></div>
-</div>
-<p>But we can use a refresh token to request a new access token.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --session=./session.json POST http://127.0.0.1:8000/token/refresh refresh_token=$(jq -r .refresh_token tokens.json) x-tiled-csrf-token:$(jq -r .cookies.tiled_csrf_token.value session.json) &gt; new_tokens.json
-
-$ jq . new_tokens.json
-{
-  &quot;access_token&quot;: &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6MTYyMTk2MTM4MywidHlwZSI6ImFjY2VzcyJ9.AfwuR7sVqOEwkOpveTyKYCBaqETO2fEnWm8f-KFxuVA&quot;,
-  &quot;expires_in&quot;: 20,
-  &quot;refresh_token&quot;: &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsInR5cGUiOiJyZWZyZXNoIiwiaWF0IjoxNjIxOTc1NzYzLjU4MzQxNCwic2lkIjozNjgwMzkyMTUwMjY4NDY3ODY5NTk0ODk0MDcwNjE1MTA4NzczNiwic2N0IjoxNjIxOTc1NzE0LjUzNDEwOH0.bCfROz_j2DkkbTNgpDgYAOdOJTk1itDSPcxT17Xhl9U&quot;,
-  &quot;refresh_token_expires_in&quot;: 604800,
-  &quot;token_type&quot;: &quot;bearer&quot;
-}
-</pre></div>
-</div>
-<p>We have a new <code class="docutils literal notranslate"><span class="pre">access_token</span></code> and also a new <code class="docutils literal notranslate"><span class="pre">refresh_token</span></code>. This is the
-“sliding session”. As long as we remain active, refreshing the token, our
-session will stay alive and we will not need to resubmit our credentials.
-There is an optional, configurable maximum age after which even
-<em>active</em> sessions will be timed out.</p>
-<p>(The <code class="docutils literal notranslate"><span class="pre">csrf</span></code>-related parameters above are implementing a standard protection
-against cross-site forgery,
-<a class="reference external" href="https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie">Double Submit Cookie</a>.)</p>
-<p>With our fresh <code class="docutils literal notranslate"><span class="pre">access_token</span></code>, we can access the data again:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --session=./session.json GET :8000/metadata/ Authorization:&quot;Bearer $(jq -r .access_token new_tokens.json)&quot;HTTP/1.1 200 OK
-content-length: 214
-content-type: application/json
-date: Tue, 25 May 2021 16:49:36 GMT
-etag: f86de76282c7b77dd1efc28d4fe8b6fe
-server: uvicorn
-server-timing: app;dur=3.3
-
-{
-    &quot;data&quot;: {
-        &quot;attributes&quot;: {
-            &quot;client_type_hint&quot;: null,
-            &quot;count&quot;: 2,
-            &quot;metadata&quot;: {},
-            &quot;sorting&quot;: null
-        },
-        &quot;id&quot;: &quot;&quot;,
-        &quot;links&quot;: {
-            &quot;self&quot;: &quot;http://localhost:8000/metadata/&quot;
-        },
-        &quot;meta&quot;: null,
-        &quot;type&quot;: &quot;catalog&quot;
-    },
-    &quot;error&quot;: null,
-    &quot;links&quot;: null,
-    &quot;meta&quot;: null
-}
-</pre></div>
-</div>
 </div>
 </div>
 
