@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.server.app &mdash; tiled 0.1.0a11.post7+gcf88610 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a11.post15+g66587f4 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a11.post7+gcf88610
+                0.1.0a11.post15+g66587f4
               </div>
             
           
@@ -194,14 +194,28 @@
 <span class="kn">import</span> <span class="nn">secrets</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">urllib.parse</span>
 
-<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">Request</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Request</span>
 <span class="kn">from</span> <span class="nn">fastapi.middleware.cors</span> <span class="kn">import</span> <span class="n">CORSMiddleware</span>
 
-<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">authentication_router</span><span class="p">,</span> <span class="n">get_authenticator</span>
+<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
+    <span class="n">API_KEY_HEADER_NAME</span><span class="p">,</span>
+    <span class="n">API_KEY_QUERY_PARAMETER</span><span class="p">,</span>
+    <span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span>
+    <span class="n">authentication_router</span><span class="p">,</span>
+    <span class="n">get_authenticator</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">get_root_catalog</span><span class="p">,</span> <span class="n">PatchedStreamingResponse</span>
 <span class="kn">from</span> <span class="nn">.router</span> <span class="kn">import</span> <span class="n">declare_search_router</span><span class="p">,</span> <span class="n">router</span>
 <span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
+
+
+<span class="n">SAFE_METHODS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;HEAD&quot;</span><span class="p">,</span> <span class="s2">&quot;OPTIONS&quot;</span><span class="p">,</span> <span class="s2">&quot;TRACE&quot;</span><span class="p">}</span>
+<span class="n">SENSITIVE_COOKIES</span> <span class="o">=</span> <span class="p">{</span><span class="n">API_KEY_COOKIE_NAME</span><span class="p">}</span>
+<span class="n">CSRF_HEADER_NAME</span> <span class="o">=</span> <span class="s2">&quot;x-csrf&quot;</span>
+<span class="n">CSRF_QUERY_PARAMETER</span> <span class="o">=</span> <span class="s2">&quot;csrf&quot;</span>
 
 
 <div class="viewcode-block" id="get_app"><a class="viewcode-back" href="../../../reference/generated/tiled.server.app.get_app.html#tiled.server.app.get_app">[docs]</a><span class="k">def</span> <span class="nf">get_app</span><span class="p">(</span><span class="n">include_routers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -243,36 +257,73 @@
         <span class="k">return</span> <span class="n">response</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">set_api_key_cookie</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
-        <span class="c1"># If the API key is provided via a header or query, set it as a cookie.</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">double_submit_cookie_csrf_protection</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+        <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
+        <span class="n">csrf_cookie</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">CSRF_COOKIE_NAME</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">SAFE_METHODS</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="p">)</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span>
+            <span class="n">SENSITIVE_COOKIES</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">csrf_cookie</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                    <span class="n">status_code</span><span class="o">=</span><span class="mi">403</span><span class="p">,</span> <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Expected tiled_csrf_token cookie&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># Get the token from the Header or (if not there) the query parameter.</span>
+            <span class="n">csrf_token</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">CSRF_HEADER_NAME</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">csrf_token</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">parsed_query</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">query</span><span class="p">)</span>
+                <span class="n">csrf_token</span> <span class="o">=</span> <span class="n">parsed_query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">CSRF_QUERY_PARAMETER</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">csrf_token</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                    <span class="n">status_code</span><span class="o">=</span><span class="mi">403</span><span class="p">,</span>
+                    <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Expected csrf_token query parameter or x-tiled-csrf-token header&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="c1"># Securely compare the token with the cookie.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">secrets</span><span class="o">.</span><span class="n">compare_digest</span><span class="p">(</span><span class="n">csrf_token</span><span class="p">,</span> <span class="n">csrf_cookie</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                    <span class="n">status_code</span><span class="o">=</span><span class="mi">403</span><span class="p">,</span> <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Double-submit CSRF tokens do not match&quot;</span>
+                <span class="p">)</span>
+
         <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">response</span><span class="o">.</span><span class="vm">__class__</span> <span class="o">=</span> <span class="n">PatchedStreamingResponse</span>  <span class="c1"># tolerate memoryview</span>
-        <span class="k">if</span> <span class="p">(</span><span class="s2">&quot;X-TILED-API-KEY&quot;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">csrf_cookie</span><span class="p">:</span>
             <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;TILED_API_KEY&quot;</span><span class="p">,</span>
-                <span class="n">value</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;X-TILED-API-KEY&quot;</span><span class="p">],</span>
-                <span class="n">domain</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span>
+                <span class="n">key</span><span class="o">=</span><span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">secrets</span><span class="o">.</span><span class="n">token_urlsafe</span><span class="p">(</span><span class="mi">32</span><span class="p">),</span>
+                <span class="n">httponly</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">samesite</span><span class="o">=</span><span class="s2">&quot;lax&quot;</span><span class="p">,</span>
             <span class="p">)</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">set_api_key_cookie</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+        <span class="s2">&quot;If the API key is provided via a header or query, set it as a cookie.&quot;</span>
+        <span class="c1"># TODO Can we avoid the overhead of doing this in middleware?</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="vm">__class__</span> <span class="o">=</span> <span class="n">PatchedStreamingResponse</span>  <span class="c1"># tolerate memoryview</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">API_KEY_HEADER_NAME</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">):</span>
             <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;TILED_CSRF_TOKEN&quot;</span><span class="p">,</span>
-                <span class="n">value</span><span class="o">=</span><span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">32</span><span class="p">),</span>
-                <span class="n">domain</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span>
+                <span class="n">key</span><span class="o">=</span><span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="n">API_KEY_HEADER_NAME</span><span class="p">],</span>
+                <span class="n">httponly</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">samesite</span><span class="o">=</span><span class="s2">&quot;lax&quot;</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">elif</span> <span class="p">(</span><span class="s2">&quot;api_key&quot;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">):</span>
-            <span class="n">params</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;&amp;&quot;</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
-                <span class="k">if</span> <span class="s2">&quot;=&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">:</span>
-                    <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;api_key&quot;</span><span class="p">:</span>
-                        <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span>
-                            <span class="n">key</span><span class="o">=</span><span class="s2">&quot;TILED_API_KEY&quot;</span><span class="p">,</span>
-                            <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
-                            <span class="n">domain</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span>
-                        <span class="p">)</span>
+            <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="n">API_KEY_QUERY_PARAMETER</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&lt;</span> <span class="mi">400</span>
+        <span class="p">):</span>
+            <span class="c1"># Pick off the api_key query parameter and set the value in a cookie.</span>
+            <span class="n">parsed_query</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">query</span><span class="p">)</span>
+            <span class="n">api_key_list</span> <span class="o">=</span> <span class="n">parsed_query</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">API_KEY_QUERY_PARAMETER</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">api_key_list</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                    <span class="n">status_code</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span> <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Cannot handle two api_key query parameters&quot;</span>
+                <span class="p">)</span>
+            <span class="p">(</span><span class="n">api_key</span><span class="p">,)</span> <span class="o">=</span> <span class="n">api_key_list</span>
             <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="s2">&quot;TILED_CSRF_TOKEN&quot;</span><span class="p">,</span>
-                <span class="n">value</span><span class="o">=</span><span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">32</span><span class="p">),</span>
-                <span class="n">domain</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">hostname</span><span class="p">,</span>
+                <span class="n">key</span><span class="o">=</span><span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+                <span class="n">httponly</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">samesite</span><span class="o">=</span><span class="s2">&quot;lax&quot;</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">response</span>
 
@@ -288,7 +339,11 @@
 
 
 <div class="viewcode-block" id="serve_catalog"><a class="viewcode-back" href="../../../reference/generated/tiled.server.app.serve_catalog.html#tiled.server.app.serve_catalog">[docs]</a><span class="k">def</span> <span class="nf">serve_catalog</span><span class="p">(</span>
-    <span class="n">catalog</span><span class="p">,</span> <span class="n">authenticator</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">allow_anonymous_access</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">secret_keys</span><span class="o">=</span><span class="kc">None</span>
+    <span class="n">catalog</span><span class="p">,</span>
+    <span class="n">authenticator</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">allow_anonymous_access</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">single_user_api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">secret_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Serve a Catalog</span>
@@ -299,6 +354,9 @@
 <span class="sd">    authenticator : Authenticator, optional</span>
 <span class="sd">    allow_anonymous_access : bool, optional</span>
 <span class="sd">        Default is False.</span>
+<span class="sd">    single_user_api_key: str, optional</span>
+<span class="sd">        Mutually exclusive with authenticator.</span>
+<span class="sd">        If None, a secure random secret is generated.</span>
 <span class="sd">    secret_keys : List[str], optional</span>
 <span class="sd">        This list may contain one or more keys.</span>
 <span class="sd">        The first key is used for *encoding*. All keys are tried for *decoding*</span>
@@ -321,6 +379,8 @@
             <span class="n">settings</span><span class="o">.</span><span class="n">allow_anonymous_access</span> <span class="o">=</span> <span class="n">allow_anonymous_access</span>
         <span class="k">if</span> <span class="n">secret_keys</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">settings</span><span class="o">.</span><span class="n">secret_keys</span> <span class="o">=</span> <span class="n">secret_keys</span>
+        <span class="k">if</span> <span class="n">single_user_api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">settings</span><span class="o">.</span><span class="n">single_user_api_key</span> <span class="o">=</span> <span class="n">single_user_api_key</span>
         <span class="k">return</span> <span class="n">settings</span>
 
     <span class="c1"># The Catalog and Authenticator have the opporunity to add custom routes to</span>
