@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.server.app &mdash; tiled 0.1.0a11.post31+ge8c30cc documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a11.post33+gc94c7af documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a11.post31+ge8c30cc
+                0.1.0a11.post33+gc94c7af
               </div>
             
           
@@ -196,9 +196,11 @@
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Request</span>
 <span class="kn">from</span> <span class="nn">fastapi.middleware.cors</span> <span class="kn">import</span> <span class="n">CORSMiddleware</span>
+<span class="kn">from</span> <span class="nn">starlette.responses</span> <span class="kn">import</span> <span class="n">RedirectResponse</span>
 
 <span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
@@ -210,6 +212,12 @@
 <span class="kn">from</span> <span class="nn">.router</span> <span class="kn">import</span> <span class="n">declare_search_router</span><span class="p">,</span> <span class="n">router</span>
 <span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
 
+<span class="c1"># To hide third-party warning</span>
+<span class="c1"># .../jose/backends/cryptography_backend.py:18: CryptographyDeprecationWarning:</span>
+<span class="c1">#     int_from_bytes is deprecated, use int.from_bytes instead</span>
+<span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+    <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+    <span class="kn">from</span> <span class="nn">jose</span> <span class="kn">import</span> <span class="n">ExpiredSignatureError</span>
 
 <span class="n">SAFE_METHODS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;HEAD&quot;</span><span class="p">,</span> <span class="s2">&quot;OPTIONS&quot;</span><span class="p">,</span> <span class="s2">&quot;TRACE&quot;</span><span class="p">}</span>
 <span class="n">SENSITIVE_COOKIES</span> <span class="o">=</span> <span class="p">{</span><span class="n">API_KEY_COOKIE_NAME</span><span class="p">}</span>
@@ -300,14 +308,20 @@
         <span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">cookies_to_set</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">response</span><span class="o">.</span><span class="vm">__class__</span> <span class="o">=</span> <span class="n">PatchedStreamingResponse</span>  <span class="c1"># tolerate memoryview</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">cookies_to_set</span><span class="p">:</span>
-            <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span>
-                <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
-                <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
-                <span class="n">httponly</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">samesite</span><span class="o">=</span><span class="s2">&quot;lax&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">params</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">cookies_to_set</span><span class="p">:</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;httponly&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;samesite&quot;</span><span class="p">,</span> <span class="s2">&quot;lax&quot;</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">response</span>
+
+    <span class="nd">@app</span><span class="o">.</span><span class="n">exception_handler</span><span class="p">(</span><span class="n">ExpiredSignatureError</span><span class="p">)</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">redirect_to_refresh_token</span><span class="p">(</span>
+        <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+        <span class="n">exc</span><span class="p">:</span> <span class="n">ExpiredSignatureError</span><span class="p">,</span>
+        <span class="c1"># redirects: int = Query(0),  # TO DO: Count redirects to detect loops?</span>
+    <span class="p">):</span>
+        <span class="nb">next</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">quote_plus</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">RedirectResponse</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;/token/refresh?next=</span><span class="si">{</span><span class="nb">next</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
         <span class="n">CORSMiddleware</span><span class="p">,</span>
