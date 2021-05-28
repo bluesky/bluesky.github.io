@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.array &mdash; tiled 0.1.0a12.post9+g5ec86b1 documentation</title>
+  <title>tiled.client.array &mdash; tiled 0.1.0a12.post11+g99a3997 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a12.post9+g5ec86b1
+                0.1.0a12.post11+g99a3997
               </div>
             
           
@@ -94,10 +94,11 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/navigation.html">Navigate a Catalog</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/slicing.html">Load Slices of Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/caching.html">Keep a Local Copy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Deliberate Export</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
 </ul>
 <p class="caption"><span class="caption-text">How To Guides</span></p>
@@ -193,7 +194,8 @@
            <div itemprop="articleBody">
             
   <h1>Source code for tiled.client.array</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">itertools</span>
+<span></span><span class="kn">import</span> <span class="nn">builtins</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
 
 <span class="kn">import</span> <span class="nn">dask</span>
 <span class="kn">import</span> <span class="nn">dask.array</span>
@@ -201,6 +203,7 @@
 <span class="kn">from</span> <span class="nn">..structures.array</span> <span class="kn">import</span> <span class="n">ArrayStructure</span>
 <span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="n">deserialization_registry</span>
 <span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">BaseArrayClient</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">export_util</span>
 
 
 <div class="viewcode-block" id="DaskArrayClient"><a class="viewcode-back" href="../../../reference/generated/tiled.client.array.DaskArrayClient.html#tiled.client.array.DaskArrayClient">[docs]</a><span class="k">class</span> <span class="nc">DaskArrayClient</span><span class="p">(</span><span class="n">BaseArrayClient</span><span class="p">):</span>
@@ -318,7 +321,71 @@
 
     <span class="k">def</span> <span class="nf">touch</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">touch</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+
+<div class="viewcode-block" id="DaskArrayClient.export"><a class="viewcode-back" href="../../../reference/generated/tiled.client.array.DaskArrayClient.export.html#tiled.client.array.DaskArrayClient.export">[docs]</a>    <span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filepath</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Download data in some format and write to a file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        file: str or buffer</span>
+<span class="sd">            Filepath or writeable buffer.</span>
+<span class="sd">        format : str, optional</span>
+<span class="sd">            If format is None and `file` is a filepath, the format is inferred</span>
+<span class="sd">            from the name, like &#39;table.csv&#39; implies format=&quot;text/csv&quot;. The format</span>
+<span class="sd">            may be given as a file extension (&quot;csv&quot;) or a media type (&quot;text/csv&quot;).</span>
+<span class="sd">        slice : List[slice]</span>
+<span class="sd">            List of slice objects. A convenient way to generate these is shown</span>
+<span class="sd">            in the examples.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        Export all.</span>
+
+<span class="sd">        &gt;&gt;&gt; a.export(&quot;numbers.csv&quot;)</span>
+
+<span class="sd">        Export an N-dimensional slice.</span>
+
+<span class="sd">        &gt;&gt;&gt; import numpy</span>
+<span class="sd">        &gt;&gt;&gt; a.export(&quot;numbers.csv&quot;, slice=numpy.s_[:10, 50:100])</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="nb">slice</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">slices</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="nb">slice</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">builtins</span><span class="o">.</span><span class="n">slice</span><span class="p">):</span>
+                    <span class="c1"># slice(10, 50) -&gt; &quot;10:50&quot;</span>
+                    <span class="c1"># slice(None, 50) -&gt; &quot;:50&quot;</span>
+                    <span class="c1"># slice(10, None) -&gt; &quot;10:&quot;</span>
+                    <span class="c1"># slice(None, None) -&gt; &quot;:&quot;</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">dim</span><span class="o">.</span><span class="n">step</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="n">dim</span><span class="o">.</span><span class="n">step</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="s2">&quot;Slices with a &#39;step&#39; other than 1 are not supported.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">slices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">dim</span><span class="o">.</span><span class="n">start</span><span class="p">)</span> <span class="k">if</span> <span class="n">dim</span><span class="o">.</span><span class="n">start</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                            <span class="o">+</span> <span class="s2">&quot;:&quot;</span>
+                            <span class="o">+</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">dim</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span> <span class="k">if</span> <span class="n">dim</span><span class="o">.</span><span class="n">stop</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">slices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">dim</span><span class="p">)))</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;slice&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">slices</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">export_util</span><span class="p">(</span>
+            <span class="n">filepath</span><span class="p">,</span>
+            <span class="nb">format</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_get_content_with_cache</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">],</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">formats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;List formats that the server can export this data as.&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_json_with_cache</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)[</span><span class="s2">&quot;formats&quot;</span><span class="p">][</span><span class="s2">&quot;array&quot;</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="ArrayClient"><a class="viewcode-back" href="../../../reference/generated/tiled.client.array.ArrayClient.html#tiled.client.array.ArrayClient">[docs]</a><span class="k">class</span> <span class="nc">ArrayClient</span><span class="p">(</span><span class="n">DaskArrayClient</span><span class="p">):</span>

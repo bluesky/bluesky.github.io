@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.dataframe &mdash; tiled 0.1.0a12.post9+g5ec86b1 documentation</title>
+  <title>tiled.client.dataframe &mdash; tiled 0.1.0a12.post11+g99a3997 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a12.post9+g5ec86b1
+                0.1.0a12.post11+g99a3997
               </div>
             
           
@@ -94,10 +94,11 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/navigation.html">Navigate a Catalog</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/slicing.html">Load Slices of Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/caching.html">Keep a Local Copy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Deliberate Export</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
 </ul>
 <p class="caption"><span class="caption-text">How To Guides</span></p>
@@ -204,6 +205,7 @@
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="n">deserialization_registry</span>
 <span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">BaseStructureClient</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">export_util</span>
 
 
 <div class="viewcode-block" id="DaskDataFrameClient"><a class="viewcode-back" href="../../../reference/generated/tiled.client.dataframe.DaskDataFrameClient.html#tiled.client.dataframe.DaskDataFrameClient">[docs]</a><span class="k">class</span> <span class="nc">DaskDataFrameClient</span><span class="p">(</span><span class="n">BaseStructureClient</span><span class="p">):</span>
@@ -382,10 +384,41 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">columns</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">columns</span></div>
+        <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">columns</span>
 
     <span class="c1"># __len__ is intentionally not implemented. For DataFrames it means &quot;number</span>
     <span class="c1"># of rows&quot; which is expensive to compute.</span>
+
+<div class="viewcode-block" id="DaskDataFrameClient.export"><a class="viewcode-back" href="../../../reference/generated/tiled.client.dataframe.DaskDataFrameClient.export.html#tiled.client.dataframe.DaskDataFrameClient.export">[docs]</a>    <span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filepath</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Download data in some format and write to a file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        file: str or buffer</span>
+<span class="sd">            Filepath or writeable buffer.</span>
+<span class="sd">        format : str, optional</span>
+<span class="sd">            If format is None and `file` is a filepath, the format is inferred</span>
+<span class="sd">            from the name, like &#39;table.csv&#39; implies format=&quot;text/csv&quot;. The format</span>
+<span class="sd">            may be given as a file extension (&quot;csv&quot;) or a media type (&quot;text/csv&quot;).</span>
+<span class="sd">        columns: List[str], optional</span>
+<span class="sd">            Select a subset of the columns.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">columns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;column&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">columns</span>
+        <span class="k">return</span> <span class="n">export_util</span><span class="p">(</span>
+            <span class="n">filepath</span><span class="p">,</span>
+            <span class="nb">format</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_get_content_with_cache</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">],</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">formats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;List formats that the server can export this data as.&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_json_with_cache</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)[</span><span class="s2">&quot;formats&quot;</span><span class="p">][</span><span class="s2">&quot;dataframe&quot;</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="DataFrameClient"><a class="viewcode-back" href="../../../reference/generated/tiled.client.dataframe.DataFrameClient.html#tiled.client.dataframe.DataFrameClient">[docs]</a><span class="k">class</span> <span class="nc">DataFrameClient</span><span class="p">(</span><span class="n">DaskDataFrameClient</span><span class="p">):</span>
