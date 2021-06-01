@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.server.app &mdash; tiled 0.1.0a14.post2+g49c1b96 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a14.post4+g627c470 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a14.post2+g49c1b96
+                0.1.0a14.post4+g627c470
               </div>
             
           
@@ -194,16 +194,15 @@
            <div itemprop="articleBody">
             
   <h1>Source code for tiled.server.app</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span>
+<span></span><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
 <span class="kn">import</span> <span class="nn">secrets</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span>
 <span class="kn">from</span> <span class="nn">fastapi.middleware.cors</span> <span class="kn">import</span> <span class="n">CORSMiddleware</span>
-<span class="kn">from</span> <span class="nn">starlette.responses</span> <span class="kn">import</span> <span class="n">RedirectResponse</span>
+<span class="kn">from</span> <span class="nn">fastapi.openapi.utils</span> <span class="kn">import</span> <span class="n">get_openapi</span>
 
 <span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ACCESS_TOKEN_COOKIE_NAME</span><span class="p">,</span>
@@ -217,12 +216,6 @@
 <span class="kn">from</span> <span class="nn">.router</span> <span class="kn">import</span> <span class="n">declare_search_router</span><span class="p">,</span> <span class="n">router</span>
 <span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
 
-<span class="c1"># To hide third-party warning</span>
-<span class="c1"># .../jose/backends/cryptography_backend.py:18: CryptographyDeprecationWarning:</span>
-<span class="c1">#     int_from_bytes is deprecated, use int.from_bytes instead</span>
-<span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
-    <span class="kn">from</span> <span class="nn">jose</span> <span class="kn">import</span> <span class="n">ExpiredSignatureError</span>
 
 <span class="n">SAFE_METHODS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;HEAD&quot;</span><span class="p">,</span> <span class="s2">&quot;OPTIONS&quot;</span><span class="p">,</span> <span class="s2">&quot;TRACE&quot;</span><span class="p">}</span>
 <span class="n">SENSITIVE_COOKIES</span> <span class="o">=</span> <span class="p">{</span>
@@ -327,15 +320,6 @@
             <span class="n">response</span><span class="o">.</span><span class="n">set_cookie</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">response</span>
 
-    <span class="nd">@app</span><span class="o">.</span><span class="n">exception_handler</span><span class="p">(</span><span class="n">ExpiredSignatureError</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">redirect_to_refresh_token</span><span class="p">(</span>
-        <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
-        <span class="n">exc</span><span class="p">:</span> <span class="n">ExpiredSignatureError</span><span class="p">,</span>
-        <span class="c1"># redirects: int = Query(0),  # TO DO: Count redirects to detect loops?</span>
-    <span class="p">):</span>
-        <span class="nb">next</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">quote_plus</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">RedirectResponse</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;/token/refresh?next=</span><span class="si">{</span><span class="nb">next</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
     <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
         <span class="n">CORSMiddleware</span><span class="p">,</span>
         <span class="n">allow_origins</span><span class="o">=</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">allow_origins</span><span class="p">,</span>
@@ -344,7 +328,35 @@
         <span class="n">allow_headers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*&quot;</span><span class="p">],</span>
     <span class="p">)</span>
 
+    <span class="n">app</span><span class="o">.</span><span class="n">openapi</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">custom_openapi</span><span class="p">,</span> <span class="n">app</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">app</span></div>
+
+
+<span class="k">def</span> <span class="nf">custom_openapi</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The app&#39;s openapi method will be monkey-patched with this.</span>
+
+<span class="sd">    This is the approach the documentation recommends.</span>
+
+<span class="sd">    https://fastapi.tiangolo.com/advanced/extending-openapi/</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">__version__</span>
+
+    <span class="k">if</span> <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span>
+    <span class="c1"># Customize heading.</span>
+    <span class="n">openapi_schema</span> <span class="o">=</span> <span class="n">get_openapi</span><span class="p">(</span>
+        <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Tiled&quot;</span><span class="p">,</span>
+        <span class="n">version</span><span class="o">=</span><span class="n">__version__</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Structured data access service&quot;</span><span class="p">,</span>
+        <span class="n">routes</span><span class="o">=</span><span class="n">app</span><span class="o">.</span><span class="n">routes</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># Insert refreshUrl.</span>
+    <span class="n">openapi_schema</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">][</span><span class="s2">&quot;securitySchemes&quot;</span><span class="p">][</span><span class="s2">&quot;OAuth2PasswordBearer&quot;</span><span class="p">][</span><span class="s2">&quot;flows&quot;</span><span class="p">][</span>
+        <span class="s2">&quot;password&quot;</span>
+    <span class="p">][</span><span class="s2">&quot;refreshUrl&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;token/refresh&quot;</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span> <span class="o">=</span> <span class="n">openapi_schema</span>
+    <span class="k">return</span> <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span>
 
 
 <div class="viewcode-block" id="serve_catalog"><a class="viewcode-back" href="../../../reference/generated/tiled.server.app.serve_catalog.html#tiled.server.app.serve_catalog">[docs]</a><span class="k">def</span> <span class="nf">serve_catalog</span><span class="p">(</span>
