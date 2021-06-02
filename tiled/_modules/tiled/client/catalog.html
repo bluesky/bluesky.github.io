@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.catalog &mdash; tiled 0.1.0a14.post8+gf7e4490 documentation</title>
+  <title>tiled.client.catalog &mdash; tiled 0.1.0a14.post9+g7409fc0 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a14.post8+gf7e4490
+                0.1.0a14.post9+g7409fc0
               </div>
             
           
@@ -207,6 +207,7 @@
 <span class="kn">from</span> <span class="nn">..query_registration</span> <span class="kn">import</span> <span class="n">query_type_to_name</span>
 <span class="kn">from</span> <span class="nn">..queries</span> <span class="kn">import</span> <span class="n">KeyLookup</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">import_object</span><span class="p">,</span>
     <span class="n">OneShotCachedMap</span><span class="p">,</span>
     <span class="n">Sentinel</span><span class="p">,</span>
 <span class="p">)</span>
@@ -877,6 +878,8 @@
     <span class="n">server_settings</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">structure_clients</span><span class="o">=</span><span class="s2">&quot;numpy&quot;</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
+    <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">special_clients</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
@@ -907,6 +910,9 @@
 <span class="sd">        structure_family names (&quot;array&quot;, &quot;dataframe&quot;, &quot;variable&quot;,</span>
 <span class="sd">        &quot;data_array&quot;, &quot;dataset&quot;) to client objects. See</span>
 <span class="sd">        ``Catalog.DEFAULT_STRUCTURE_CLIENT_DISPATCH``.</span>
+<span class="sd">    cache : Cache, optional</span>
+<span class="sd">    offline : bool, optional</span>
+<span class="sd">        False by default. If True, rely on cache only.</span>
 <span class="sd">    special_clients : dict, optional</span>
 <span class="sd">        Advanced: Map client_type_hint from the server to special client</span>
 <span class="sd">        catalog objects. See also</span>
@@ -925,10 +931,10 @@
         <span class="n">structure_clients</span><span class="o">=</span><span class="n">structure_clients</span><span class="p">,</span>
         <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span>
         <span class="c1"># The cache and &quot;offline&quot; mode do not make much sense when we have an</span>
-        <span class="c1"># in-process connection. It&#39;s also not clear what URL we would use for the cache</span>
-        <span class="c1"># even if we wanted to.... but it might be worth rethinking this someday.</span>
-        <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="c1"># in-process connection, but we support it for the sake of testing and</span>
+        <span class="c1"># making direct access a drop in replacement for the normal service.</span>
+        <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
+        <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
         <span class="n">special_clients</span><span class="o">=</span><span class="n">special_clients</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
     <span class="p">)</span></div>
@@ -1006,7 +1012,7 @@
     <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="from_profile"><a class="viewcode-back" href="../../../reference/generated/tiled.client.from_profile.html#tiled.client.catalog.from_profile">[docs]</a><span class="k">def</span> <span class="nf">from_profile</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="from_profile"><a class="viewcode-back" href="../../../reference/generated/tiled.client.from_profile.html#tiled.client.catalog.from_profile">[docs]</a><span class="k">def</span> <span class="nf">from_profile</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">structure_clients</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Build a Catalog based a &#39;profile&#39; (a named configuration).</span>
 
@@ -1028,7 +1034,7 @@
 
 <span class="sd">    $ tiled profile show PROFILE_NAME</span>
 
-<span class="sd">    Any additional kwargs override profile content.</span>
+<span class="sd">    Any additional parameters override profile content. See from_uri for details.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="kn">from</span> <span class="nn">..profiles</span> <span class="kn">import</span> <span class="n">load_profiles</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">ProfileNotFound</span>
 
@@ -1041,27 +1047,40 @@
             <span class="sa">f</span><span class="s2">&quot;from directories </span><span class="si">{</span><span class="n">paths</span><span class="si">}</span><span class="s2">.&quot;</span>
         <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
     <span class="n">merged</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">profile_content</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">structure_clients</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">structure_clients</span>
     <span class="n">cache_config</span> <span class="o">=</span> <span class="n">merged</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cache&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">cache_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span> <span class="nn">tiled.client.cache</span> <span class="kn">import</span> <span class="n">Cache</span>
 
-        <span class="n">MSG</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Failed to apply cache configuration </span><span class="si">{</span><span class="n">cache_config</span><span class="si">!r}</span><span class="s2">&quot;</span>
-        <span class="c1"># cache_config should be one of:</span>
-        <span class="mi">6</span>
-        <span class="mi">6</span>
-        <span class="c1"># {&quot;memory&quot;: {...}}</span>
-        <span class="c1"># {&quot;disk&quot;: {...}}</span>
-        <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cache_config</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Mapping</span><span class="p">):</span>
+            <span class="c1"># All necessary validation has already been performed</span>
+            <span class="c1"># in load_profiles().</span>
             <span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">),)</span> <span class="o">=</span> <span class="n">cache_config</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">MSG</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;memory&quot;</span><span class="p">:</span>
-            <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="o">.</span><span class="n">in_memory</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;disk&quot;</span><span class="p">:</span>
-            <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="o">.</span><span class="n">on_disk</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;memory&quot;</span><span class="p">:</span>
+                <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="o">.</span><span class="n">in_memory</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;disk&quot;</span><span class="p">:</span>
+                <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="o">.</span><span class="n">on_disk</span><span class="p">(</span><span class="o">**</span><span class="n">value</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">MSG</span><span class="p">)</span>
+            <span class="c1"># Interpret this as a Cache object passed in directly.</span>
+            <span class="n">cache</span> <span class="o">=</span> <span class="n">cache_config</span>
         <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;cache&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cache</span>
+    <span class="n">structure_clients_</span> <span class="o">=</span> <span class="n">merged</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">structure_clients_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structure_clients_</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="c1"># Nothing to do.</span>
+            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">structure_clients_</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># This is a dict mapping structure families like &quot;array&quot; and &quot;dataframe&quot;</span>
+            <span class="c1"># to values. The values may be client objects or importable strings.</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">structure_clients_</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">class_</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">class_</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="n">result</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_</span>
+            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
     <span class="k">if</span> <span class="s2">&quot;direct&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
         <span class="c1"># The profiles specifies that there is no server. We should create</span>
         <span class="c1"># an app ourselves and use it directly via ASGI.</span>
