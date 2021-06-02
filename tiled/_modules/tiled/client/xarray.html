@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.xarray &mdash; tiled 0.1.0a14.post9+g7409fc0 documentation</title>
+  <title>tiled.client.xarray &mdash; tiled 0.1.0a14.post13+geeb0c74 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1.0a14.post9+g7409fc0
+                0.1.0a14.post13+geeb0c74
               </div>
             
           
@@ -198,9 +198,9 @@
 <span class="kn">import</span> <span class="nn">builtins</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 
-<span class="kn">import</span> <span class="nn">pyarrow</span>
 <span class="kn">import</span> <span class="nn">xarray</span>
 
+<span class="kn">from</span> <span class="nn">..structures.dataframe</span> <span class="kn">import</span> <span class="n">deserialize_arrow</span>
 <span class="kn">from</span> <span class="nn">..structures.xarray</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
     <span class="n">DataArrayStructure</span><span class="p">,</span>
@@ -488,7 +488,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_coords</span><span class="p">(</span><span class="n">structure</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_build_data_vars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="n">variables</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">data_vars</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">data_vars_clients</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">wide_table_fetcher</span> <span class="o">=</span> <span class="n">_WideTableFetcher</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_get_content_with_cache</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full_dataset&quot;</span><span class="p">]</span>
         <span class="p">)</span>
@@ -503,7 +503,7 @@
                 <span class="ow">and</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data_shape</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">)</span>
                 <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">data_array</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">coords</span><span class="p">)</span>
             <span class="p">):</span>
-                <span class="n">data_vars</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">wide_table_fetcher</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+                <span class="n">data_vars_clients</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">wide_table_fetcher</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">data_array</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">data_array_source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">DATA_ARRAY_CLIENT</span><span class="p">(</span>
                     <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
@@ -518,7 +518,9 @@
                     <span class="n">structure</span><span class="o">=</span><span class="n">data_array</span><span class="p">,</span>
                     <span class="n">route</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_route</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="n">data_vars</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_array_source</span>
+                <span class="n">data_vars_clients</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_array_source</span>
+        <span class="c1"># We deferred read() to the end for WideTableFetcher.</span>
+        <span class="n">data_vars</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">data_vars_clients</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
         <span class="k">return</span> <span class="n">data_vars</span>
 
     <span class="k">def</span> <span class="nf">_build_coords</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="n">variables</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -539,18 +541,19 @@
                 <span class="n">structure</span><span class="o">=</span><span class="n">variable</span><span class="p">,</span>
                 <span class="n">route</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_route</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">coords</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">variable_source</span>
+            <span class="n">coords</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">variable_source</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">coords</span>
 
 <div class="viewcode-block" id="DaskDatasetClient.read"><a class="viewcode-back" href="../../../reference/generated/tiled.client.xarray.DaskDatasetClient.read.html#tiled.client.xarray.DaskDatasetClient.read">[docs]</a>    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">macro</span>
         <span class="n">data_vars</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_data_vars</span><span class="p">(</span><span class="n">structure</span><span class="p">,</span> <span class="n">variables</span><span class="p">)</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_coords</span><span class="p">(</span><span class="n">structure</span><span class="p">,</span> <span class="n">variables</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">xarray</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span>
-            <span class="n">data_vars</span><span class="o">=</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">data_vars</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
-            <span class="n">coords</span><span class="o">=</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">coords</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">xarray</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span>
+            <span class="n">data_vars</span><span class="o">=</span><span class="n">data_vars</span><span class="p">,</span>
+            <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span>
             <span class="n">attrs</span><span class="o">=</span><span class="n">structure</span><span class="o">.</span><span class="n">attrs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ds</span></div>
 
     <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="p">):</span>
         <span class="c1"># This is type unstable, matching xarray&#39;s behavior.</span>
@@ -589,11 +592,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">variables</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">data_array</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot add variables; already fetched.&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">variables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">_MockClient</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">variables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_MockClient</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">data_array</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">dataframe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -604,17 +607,28 @@
                     <span class="s2">&quot;variable&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables</span><span class="p">,</span>
                 <span class="p">},</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">deserialize</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="o">=</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span>
 
 
 <span class="k">class</span> <span class="nc">_MockClient</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wto</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wto</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">data_array_structure</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">wto</span> <span class="o">=</span> <span class="n">wto</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_array_structure</span> <span class="o">=</span> <span class="n">data_array_structure</span>
 
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">wto</span><span class="o">.</span><span class="n">dataframe</span><span class="p">()[</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>  <span class="c1"># TODO Can we avoid .values here?</span>
+        <span class="c1"># TODO Can we avoid .values here?</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">wto</span><span class="o">.</span><span class="n">dataframe</span><span class="p">()[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_array_structure</span>
+        <span class="n">variable</span> <span class="o">=</span> <span class="n">xarray</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">dims</span><span class="o">=</span><span class="n">s</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">dims</span><span class="p">,</span>
+            <span class="n">attrs</span><span class="o">=</span><span class="n">s</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">attrs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># This DataArray always has no coords, by construction.</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">s</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">coords</span>
+        <span class="k">return</span> <span class="n">xarray</span><span class="o">.</span><span class="n">DataArray</span><span class="p">(</span><span class="n">variable</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">s</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">coords</span><span class="o">=</span><span class="p">{})</span>
 </pre></div>
 
            </div>
