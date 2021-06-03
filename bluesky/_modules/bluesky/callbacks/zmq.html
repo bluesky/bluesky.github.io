@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>bluesky.callbacks.zmq &mdash; bluesky 1.6.7.post48+gdb8276d3 documentation</title>
+  <title>bluesky.callbacks.zmq &mdash; bluesky 1.6.7.post52+g92666e55 documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                1.6.7.post48+gdb8276d3
+                1.6.7.post52+g92666e55
               </div>
             
           
@@ -201,12 +201,32 @@
            <div itemprop="articleBody">
             
   <h1>Source code for bluesky.callbacks.zmq</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">The key classes needed to use 0MQ for multiprocess document communication.</span>
+
+<span class="sd">`Publisher` : subscribe this to the RE to emit the documents.  Expects a server to</span>
+<span class="sd">have a SUBSCRIBE port open to PUB to.</span>
+
+<span class="sd">`RemoteDispatcher` : subscribe callbacks to this class in a remote process.  Expects</span>
+<span class="sd">a server to have a PUB port open to SUBSCRIBE to.</span>
+
+<span class="sd">`Proxy` : server that binds ports for Pubslisher to push to and the Dispatcher</span>
+<span class="sd">to listen to.  Typically this is started with the cli tool ``bluesky-zmq-proxy``</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">asyncio</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">pickle</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">from</span> <span class="nn">..run_engine</span> <span class="kn">import</span> <span class="n">Dispatcher</span><span class="p">,</span> <span class="n">DocumentNames</span>
+
+
+<span class="k">class</span> <span class="nc">Bluesky0MQDecodeError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Custom exception class for things that go wrong reading message from wire.&quot;&quot;&quot;</span>
+
+    <span class="o">...</span>
 
 
 <div class="viewcode-block" id="Publisher"><a class="viewcode-back" href="../../../callbacks.html#bluesky.callbacks.zmq.Publisher">[docs]</a><span class="k">class</span> <span class="nc">Publisher</span><span class="p">:</span>
@@ -420,7 +440,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="sa">b</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
                  <span class="n">loop</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">zmq</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">zmq_asyncio</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                 <span class="n">deserializer</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">):</span>
+                 <span class="n">deserializer</span><span class="o">=</span><span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;prefix must be bytes, not string&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="sa">b</span><span class="s1">&#39; &#39;</span> <span class="ow">in</span> <span class="n">prefix</span><span class="p">:</span>
@@ -446,27 +466,64 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">setsockopt_string</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUBSCRIBE</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">False</span>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strict</span> <span class="o">=</span> <span class="n">strict</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_poll</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">our_prefix</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prefix</span>  <span class="c1"># local var to save an attribute lookup</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="n">message</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
-            <span class="n">prefix</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-            <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">prefix</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39; &#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strict</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">Bluesky0MQDecodeError</span> <span class="kn">from</span> <span class="nn">e</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The message </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2"> could not be split into &quot;</span>
+                          <span class="s2">&quot;three parts by b&#39; &#39;.  Dropping message on floor &quot;</span>
+                          <span class="s2">&quot;and continuing&quot;</span>
+                          <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">continue</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">UnicodeDecodeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strict</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">Bluesky0MQDecodeError</span> <span class="kn">from</span> <span class="nn">e</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The name </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> can not be decoded as utf-8. &quot;</span>
+                          <span class="s2">&quot;Dropping message on the floor and continuing. &quot;</span>
+                          <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">continue</span>
             <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">our_prefix</span><span class="p">)</span> <span class="ow">or</span> <span class="n">prefix</span> <span class="o">==</span> <span class="n">our_prefix</span><span class="p">:</span>
-                <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deserializer</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deserializer</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strict</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">Bluesky0MQDecodeError</span> <span class="kn">from</span> <span class="nn">e</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1024</span><span class="p">:</span>
+                            <span class="n">msg_doc</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[:</span><span class="mi">1024</span><span class="p">]</span> <span class="o">+</span> <span class="sa">b</span><span class="s1">&#39;--SNIPPED--&#39;</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">msg_doc</span> <span class="o">=</span> <span class="n">doc</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to deserialize the </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> document &quot;</span>
+                              <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">msg_doc</span><span class="si">}</span><span class="s2"> using </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_deserializer</span><span class="si">}</span><span class="s2">. &quot;</span>
+                              <span class="s2">&quot;Dropping on floor and continuing&quot;</span>
+                              <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">continue</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">call_soon</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">,</span> <span class="n">DocumentNames</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">doc</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">closed</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;This RemoteDispatcher has already been &quot;</span>
                                <span class="s2">&quot;started and interrupted. Create a fresh &quot;</span>
-                               <span class="s2">&quot;instance with </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="p">)))</span>
+                               <span class="sa">f</span><span class="s2">&quot;instance with </span><span class="si">{</span><span class="bp">self</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_poll</span><span class="p">())</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">run_forever</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="p">)</span>
+            <span class="n">task_exception</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">exception</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">task_exception</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">task_exception</span>
         <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
             <span class="k">raise</span>
@@ -474,8 +531,6 @@
     <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_task</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span></div>
 </pre></div>
 
