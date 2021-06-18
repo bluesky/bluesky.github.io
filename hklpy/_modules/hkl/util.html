@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>hkl.util &mdash; hklpy 0+untagged.1.g443ab84.dirty documentation</title>
+  <title>hkl.util &mdash; hklpy 0+untagged.1.gcf12f75.dirty documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0+untagged.1.g443ab84.dirty
+                0+untagged.1.gcf12f75.dirty
               </div>
             
           
@@ -169,12 +169,31 @@
            <div itemprop="articleBody">
             
   <h1>Source code for hkl.util</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
-<span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">sys</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">namedtuple</span>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Utility functions and structures.</span>
 
+<span class="sd">.. autosummary::</span>
+<span class="sd">    ~diffractometer_types</span>
+<span class="sd">    ~get_position_tuple</span>
+<span class="sd">    ~Lattice</span>
+<span class="sd">    ~list_orientation_runs</span>
+<span class="sd">    ~new_detector</span>
+<span class="sd">    ~restore_constraints</span>
+<span class="sd">    ~restore_energy</span>
+<span class="sd">    ~restore_orientation</span>
+<span class="sd">    ~restore_reflections</span>
+<span class="sd">    ~restore_sample</span>
+<span class="sd">    ~restore_UB</span>
+<span class="sd">    ~run_orientation_info</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+<span class="kn">from</span> <span class="nn">.diffract</span> <span class="kn">import</span> <span class="n">Constraint</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">namedtuple</span>
+<span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">gi.repository</span> <span class="kn">import</span> <span class="n">Hkl</span> <span class="k">as</span> <span class="n">libhkl</span>
@@ -195,7 +214,15 @@
 <span class="s2">    diffractometer_types</span>
 <span class="s2">    get_position_tuple</span>
 <span class="s2">    Lattice</span>
+<span class="s2">    list_orientation_runs</span>
 <span class="s2">    new_detector</span>
+<span class="s2">    restore_constraints</span>
+<span class="s2">    restore_energy</span>
+<span class="s2">    restore_orientation</span>
+<span class="s2">    restore_reflections</span>
+<span class="s2">    restore_sample</span>
+<span class="s2">    restore_UB</span>
+<span class="s2">    run_orientation_info</span>
 <span class="s2">&quot;&quot;&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -265,7 +292,7 @@
 
 
 <span class="k">def</span> <span class="nf">hkl_euler_matrix</span><span class="p">(</span><span class="n">euler_x</span><span class="p">,</span> <span class="n">euler_y</span><span class="p">,</span> <span class="n">euler_z</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot; &quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Convert into matrix form.&quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">libhkl</span><span class="o">.</span><span class="n">Matrix</span><span class="o">.</span><span class="n">new_euler</span><span class="p">(</span><span class="n">euler_x</span><span class="p">,</span> <span class="n">euler_y</span><span class="p">,</span> <span class="n">euler_z</span><span class="p">)</span>
 
 
@@ -291,7 +318,7 @@
 
 
 <div class="viewcode-block" id="get_position_tuple"><a class="viewcode-back" href="../../util.html#hkl.util.get_position_tuple">[docs]</a><span class="k">def</span> <span class="nf">get_position_tuple</span><span class="p">(</span><span class="n">axis_names</span><span class="p">,</span> <span class="n">class_name</span><span class="o">=</span><span class="s2">&quot;Position&quot;</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot; &quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Return a namedtuple with the positions.&quot;&quot;&quot;</span>
     <span class="k">global</span> <span class="n">_position_tuples</span>
 
     <span class="n">key</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">axis_names</span><span class="p">)</span>
@@ -299,6 +326,257 @@
         <span class="n">_position_tuples</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="n">class_name</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">axis_names</span><span class="p">))</span>
 
     <span class="k">return</span> <span class="n">_position_tuples</span><span class="p">[</span><span class="n">key</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="list_orientation_runs"><a class="viewcode-back" href="../../util.html#hkl.util.list_orientation_runs">[docs]</a><span class="k">def</span> <span class="nf">list_orientation_runs</span><span class="p">(</span><span class="n">catalog</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">20</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    List the runs with orientation information.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    orientation information: Pandas DataFrame object</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    *args : [str]</span>
+<span class="sd">        A list of additional data column names to be displayed,</span>
+<span class="sd">        corresponding to the names of available orientation</span>
+<span class="sd">        information in the descriptor document.</span>
+
+<span class="sd">        Example::</span>
+
+<span class="sd">            list_orientation_runs(&quot;class_name&quot;, energy&quot;, &quot;energy_units&quot;, &quot;lattice&quot;)</span>
+
+<span class="sd">    catalog : object</span>
+<span class="sd">        Instance of a databroker catalog.</span>
+<span class="sd">    limit : int</span>
+<span class="sd">        Limit the list to the first ``limit`` rows. (default=20)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">buffer</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">default_columns</span> <span class="o">=</span> <span class="s2">&quot;sample_name diffractometer_name geometry_name&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+    <span class="n">display_columns</span> <span class="o">=</span> <span class="n">default_columns</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="n">catalog</span><span class="o">.</span><span class="n">v2</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="n">run_orientation_info</span><span class="p">(</span><span class="n">run</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">info</span><span class="p">):</span>
+            <span class="n">scan_id</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;start&quot;</span><span class="p">][</span><span class="s2">&quot;scan_id&quot;</span><span class="p">]</span>
+            <span class="n">uid</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">name</span><span class="p">[:</span><span class="mi">7</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+                <span class="n">orientation</span> <span class="o">=</span> <span class="n">info</span><span class="p">[</span><span class="n">device</span><span class="p">]</span>
+                <span class="n">row</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">scan_id</span><span class="o">=</span><span class="n">scan_id</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">display_columns</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">orientation</span><span class="p">:</span>
+                        <span class="n">row</span><span class="p">[</span><span class="n">f</span><span class="p">]</span> <span class="o">=</span> <span class="n">orientation</span><span class="p">[</span><span class="n">f</span><span class="p">]</span>
+                <span class="n">row</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">uid</span>
+                <span class="n">buffer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+                <span class="n">_count</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">_count</span> <span class="o">&gt;=</span> <span class="n">limit</span><span class="p">:</span>
+                    <span class="k">break</span>
+        <span class="k">if</span> <span class="n">_count</span> <span class="o">&gt;=</span> <span class="n">limit</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="run_orientation_info"><a class="viewcode-back" href="../../util.html#hkl.util.run_orientation_info">[docs]</a><span class="k">def</span> <span class="nf">run_orientation_info</span><span class="p">(</span><span class="n">run</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return a dictionary with orientation information in this run.</span>
+
+<span class="sd">    Dictionary is keyed by &quot;detector&quot; name (in case more than one</span>
+<span class="sd">    diffractometer was added as a &quot;detector&quot; to the run).</span>
+
+<span class="sd">    The orientation information is found in the descriptor document</span>
+<span class="sd">    of the primary stream.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    run : from Databroker</span>
+<span class="sd">        A Bluesky run, from databroker v2, such as ``cat.v2[-1]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">devices</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">run_conf</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">primary</span><span class="o">.</span><span class="n">config</span>
+    <span class="k">for</span> <span class="n">device</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">run_conf</span><span class="p">):</span>
+        <span class="n">conf</span> <span class="o">=</span> <span class="n">run_conf</span><span class="p">[</span><span class="n">device</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">device</span><span class="si">}</span><span class="s2">_orientation_attrs&quot;</span> <span class="ow">in</span> <span class="n">conf</span><span class="p">:</span>
+            <span class="c1"># fmt:off</span>
+            <span class="n">devices</span><span class="p">[</span><span class="n">device</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">item</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">device</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">:]:</span> <span class="n">conf</span><span class="p">[</span><span class="n">item</span><span class="p">]</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">conf</span>
+            <span class="p">}</span>
+            <span class="c1"># fmt:on</span>
+    <span class="k">return</span> <span class="n">devices</span></div>
+
+
+<span class="k">def</span> <span class="nf">_smart_signal_update</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">signal</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Write value to signal if not equal.  Not a plan.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">signal</span><span class="o">.</span><span class="n">get</span><span class="p">()</span> <span class="o">!=</span> <span class="n">value</span><span class="p">:</span>
+        <span class="n">signal</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_check_geometry</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check that geometry of recovered orientation matches diffractometer.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orientation : dict</span>
+<span class="sd">        Dictionary of orientation parameters (from</span>
+<span class="sd">        :func:`~hkl.util.run_orientation_info()`) recovered from run.</span>
+<span class="sd">    diffractometer : :class:`~hkl.diffract.Diffractometer()`</span>
+<span class="sd">        Diffractometer object.</span>
+
+<span class="sd">    Raise ValueError if mismatched.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;geometry_name&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">diffractometer</span><span class="o">.</span><span class="n">geometry_name</span><span class="o">.</span><span class="n">get</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Geometries do not match:&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot; Orientation=</span><span class="si">{</span><span class="n">orientation</span><span class="p">[</span><span class="s1">&#39;geometry_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">,&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">diffractometer</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">diffractometer</span><span class="o">.</span><span class="n">geometry_name</span><span class="o">.</span><span class="n">get</span><span class="p">()</span><span class="si">}</span><span class="s2">,&quot;</span>
+            <span class="s2">&quot; will not restore.&quot;</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="restore_constraints"><a class="viewcode-back" href="../../util.html#hkl.util.restore_constraints">[docs]</a><span class="k">def</span> <span class="nf">restore_constraints</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Restore any constraints from orientation information.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orientation : dict</span>
+<span class="sd">        Dictionary of orientation parameters (from</span>
+<span class="sd">        :func:`~hkl.util.run_orientation_info()`) recovered from run.</span>
+<span class="sd">    diffractometer : :class:`~hkl.diffract.Diffractometer()`</span>
+<span class="sd">        Diffractometer object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_check_geometry</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span>
+
+    <span class="c1"># fmt:off</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;_constraints&quot;</span><span class="p">]):</span>
+        <span class="n">con_dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">Constraint</span><span class="p">(</span><span class="o">*</span><span class="n">v</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;_reals&quot;</span><span class="p">],</span> <span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;_constraints&quot;</span><span class="p">])</span>
+        <span class="p">}</span>
+        <span class="n">diffractometer</span><span class="o">.</span><span class="n">apply_constraints</span><span class="p">(</span><span class="n">con_dict</span><span class="p">)</span></div>
+    <span class="c1"># fmt:on</span>
+
+
+<div class="viewcode-block" id="restore_energy"><a class="viewcode-back" href="../../util.html#hkl.util.restore_energy">[docs]</a><span class="k">def</span> <span class="nf">restore_energy</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Restore energy from orientation information.</span>
+
+<span class="sd">    NOTE: This makes blocking calls so do not use in bluesky plan.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orientation : dict</span>
+<span class="sd">        Dictionary of orientation parameters (from</span>
+<span class="sd">        :func:`~hkl.util.run_orientation_info()`) recovered from run.</span>
+<span class="sd">    diffractometer : :class:`~hkl.diffract.Diffractometer()`</span>
+<span class="sd">        Diffractometer object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="s2">&quot;energy energy_units energy_offset&quot;</span><span class="o">.</span><span class="n">split</span><span class="p">():</span>
+        <span class="n">_smart_signal_update</span><span class="p">(</span><span class="n">orientation</span><span class="p">[</span><span class="n">attr</span><span class="p">],</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">diffractometer</span><span class="p">,</span> <span class="n">attr</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="restore_reflections"><a class="viewcode-back" href="../../util.html#hkl.util.restore_reflections">[docs]</a><span class="k">def</span> <span class="nf">restore_reflections</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Restore any reflections from orientation information.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orientation : dict</span>
+<span class="sd">        Dictionary of orientation parameters (from</span>
+<span class="sd">        :func:`~hkl.util.run_orientation_info()`) recovered from run.</span>
+<span class="sd">    diffractometer : :class:`~hkl.diffract.Diffractometer()`</span>
+<span class="sd">        Diffractometer object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_check_geometry</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span>
+    <span class="c1"># remember this wavelength</span>
+    <span class="n">wavelength0</span> <span class="o">=</span> <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">wavelength</span>
+
+    <span class="c1"># short aliases</span>
+    <span class="n">pseudos</span> <span class="o">=</span> <span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;_pseudos&quot;</span><span class="p">]</span>
+    <span class="n">reals</span> <span class="o">=</span> <span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;_reals&quot;</span><span class="p">]</span>
+    <span class="n">orientation_reflections</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">ref_base</span> <span class="ow">in</span> <span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;reflections_details&quot;</span><span class="p">]:</span>
+        <span class="c1"># every reflection has its own wavelength</span>
+        <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">wavelength</span> <span class="o">=</span> <span class="n">ref_base</span><span class="p">[</span><span class="s2">&quot;wavelength&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Order of the items is important.</span>
+        <span class="c1"># Can&#39;t just use the dictionaries in ``orientation``.</span>
+        <span class="c1"># Get the canonical order from the orientation data.</span>
+        <span class="n">miller_indices</span> <span class="o">=</span> <span class="p">[</span><span class="n">ref_base</span><span class="p">[</span><span class="s2">&quot;reflection&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">pseudos</span><span class="p">]</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="p">[</span><span class="n">ref_base</span><span class="p">[</span><span class="s2">&quot;position&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">reals</span><span class="p">]</span>
+        <span class="n">ppp</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;PositionTuple&quot;</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">reals</span><span class="p">))(</span><span class="o">*</span><span class="n">positions</span><span class="p">)</span>
+
+        <span class="c1"># assemble the final form of the reflection for add_reflection()</span>
+        <span class="n">reflection</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">([</span><span class="o">*</span><span class="n">miller_indices</span><span class="p">,</span> <span class="n">ppp</span><span class="p">])</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">add_reflection</span><span class="p">(</span><span class="o">*</span><span class="n">reflection</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ref_base</span><span class="p">[</span><span class="s2">&quot;orientation_reflection&quot;</span><span class="p">]:</span>
+            <span class="n">orientation_reflections</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">orientation_reflections</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># compute **UB** from the last two orientation reflections</span>
+        <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">sample</span><span class="o">.</span><span class="n">compute_UB</span><span class="p">(</span><span class="o">*</span><span class="n">orientation_reflections</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:])</span>
+
+    <span class="c1"># restore previous wavelength</span>
+    <span class="k">if</span> <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">wavelength</span> <span class="o">!=</span> <span class="n">wavelength0</span><span class="p">:</span>
+        <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">wavelength</span> <span class="o">=</span> <span class="n">wavelength0</span></div>
+
+
+<div class="viewcode-block" id="restore_orientation"><a class="viewcode-back" href="../../util.html#hkl.util.restore_orientation">[docs]</a><span class="k">def</span> <span class="nf">restore_orientation</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Restore all orientation information.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orientation : dict</span>
+<span class="sd">        Dictionary of orientation parameters (from</span>
+<span class="sd">        :func:`~hkl.util.run_orientation_info()`) recovered from run.</span>
+<span class="sd">    diffractometer : :class:`~hkl.diffract.Diffractometer()`</span>
+<span class="sd">        Diffractometer object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_check_geometry</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span>
+    <span class="n">restore_energy</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span>
+    <span class="n">restore_sample</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span>
+    <span class="n">restore_constraints</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span>
+    <span class="n">restore_reflections</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="restore_sample"><a class="viewcode-back" href="../../util.html#hkl.util.restore_sample">[docs]</a><span class="k">def</span> <span class="nf">restore_sample</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Restore sample &amp; lattice from orientation information.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orientation : dict</span>
+<span class="sd">        Dictionary of orientation parameters (from</span>
+<span class="sd">        :func:`~hkl.util.run_orientation_info()`) recovered from run.</span>
+<span class="sd">    diffractometer : :class:`~hkl.diffract.Diffractometer()`</span>
+<span class="sd">        Diffractometer object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">nm</span> <span class="o">=</span> <span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;sample_name&quot;</span><span class="p">]</span>
+    <span class="n">lattice</span> <span class="o">=</span> <span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;lattice&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">nm</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">_samples</span><span class="p">:</span>
+        <span class="n">diffractometer</span><span class="o">.</span><span class="n">calc</span><span class="o">.</span><span class="n">new_sample</span><span class="p">(</span><span class="n">nm</span><span class="p">,</span> <span class="n">lattice</span><span class="o">=</span><span class="n">lattice</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sample &#39;</span><span class="si">{</span><span class="n">nm</span><span class="si">}</span><span class="s2">&#39; already exists in </span><span class="si">{</span><span class="n">diffractometer</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="restore_UB"><a class="viewcode-back" href="../../util.html#hkl.util.restore_UB">[docs]</a><span class="k">def</span> <span class="nf">restore_UB</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Restore **UB** matrix from orientation information.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orientation : dict</span>
+<span class="sd">        Dictionary of orientation parameters (from</span>
+<span class="sd">        :func:`~hkl.util.run_orientation_info()`) recovered from run.</span>
+<span class="sd">    diffractometer : :class:`~hkl.diffract.Diffractometer()`</span>
+<span class="sd">        Diffractometer object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_check_geometry</span><span class="p">(</span><span class="n">orientation</span><span class="p">,</span> <span class="n">diffractometer</span><span class="p">)</span>
+    <span class="n">_smart_signal_update</span><span class="p">(</span><span class="n">orientation</span><span class="p">[</span><span class="s2">&quot;UB&quot;</span><span class="p">],</span> <span class="n">diffractometer</span><span class="o">.</span><span class="n">UB</span><span class="p">)</span></div>
 </pre></div>
 
            </div>
