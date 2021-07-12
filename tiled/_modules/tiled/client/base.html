@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.base &mdash; tiled 0.1.0a20.post6+g5532e08 documentation</title>
+  <title>tiled.client.base &mdash; tiled 0.1.0a20.post18+gdbb5add documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a20.post6+g5532e08
+                0.1.0a20.post18+gdbb5add
               </div>
             
           
@@ -200,7 +200,7 @@
 <span></span><span class="kn">import</span> <span class="nn">msgpack</span>
 
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span>
-<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">reauthenticate_client</span>
+<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">reauthenticate</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">handle_error</span><span class="p">,</span>
     <span class="n">NEEDS_INITIALIZATION</span><span class="p">,</span>
@@ -218,6 +218,7 @@
         <span class="n">item</span><span class="p">,</span>
         <span class="n">username</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="p">,</span>
+        <span class="n">authentication_uri</span><span class="p">,</span>
         <span class="n">cache</span><span class="p">,</span>
         <span class="n">offline</span><span class="p">,</span>
         <span class="n">path</span><span class="p">,</span>
@@ -226,6 +227,7 @@
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">client</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">token_cache</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span> <span class="o">=</span> <span class="n">authentication_uri</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="o">=</span> <span class="n">username</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -305,6 +307,7 @@
             <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
             <span class="n">token_cache</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">,</span>
+            <span class="n">authentication_uri</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
@@ -378,12 +381,18 @@
             <span class="c1"># TODO Use a more targeted signal to know that refreshing the token will help.</span>
             <span class="c1"># Parse the error message? Add a special header from the server?</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">reauthenticate_client</span><span class="p">(</span>
+                <span class="n">tokens</span> <span class="o">=</span> <span class="n">reauthenticate</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_username</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">,</span>
                     <span class="n">token_cache</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;authorization&quot;</span><span class="p">]</span>
+                <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
+                <span class="n">auth_header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="c1"># Patch in the Authorization header for this request...</span>
+                <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_header</span>
+                <span class="c1"># And update the default headers for future requests.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_header</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">attempts</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">response</span></div>
 
