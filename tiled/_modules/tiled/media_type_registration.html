@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.media_type_registration &mdash; tiled 0.1.0a20.post31+g89c1c8b documentation</title>
+  <title>tiled.media_type_registration &mdash; tiled 0.1.0a20.post54+g3f0087a documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a20.post31+g89c1c8b
+                0.1.0a20.post54+g3f0087a
               </div>
             
           
@@ -107,6 +107,7 @@
 <p class="caption"><span class="caption-text">How To Guides</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../how-to/configuration.html">Serve Trees using Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../how-to/custom-formats.html">Add Support for a Custom Format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../how-to/profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../how-to/scaling.html">Control Speed, Memory Usage, and Disk Usage</a></li>
@@ -222,8 +223,10 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="Registry.__init__"><a class="viewcode-back" href="../../reference/generated/tiled.media_type_registration.Registry.html#tiled.media_type_registration.Registry.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_lookup</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lookup</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
         <span class="c1"># TODO Think about whether lazy registration makes any sense here.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_custom_aliases_by_type</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_custom_aliases</span> <span class="o">=</span> <span class="p">{}</span></div>
 
 <div class="viewcode-block" id="Registry.media_types"><a class="viewcode-back" href="../../reference/generated/tiled.media_type_registration.Registry.media_types.html#tiled.media_type_registration.Registry.media_types">[docs]</a>    <span class="k">def</span> <span class="nf">media_types</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure_family</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -254,6 +257,7 @@
                     <span class="n">aliases</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>  <span class="c1"># e.g. aliases == {&quot;text/csv&quot;: [&quot;csv&quot;]}</span>
             <span class="k">if</span> <span class="n">aliases</span><span class="p">:</span>
                 <span class="n">result</span><span class="p">[</span><span class="n">media_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">aliases</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_custom_aliases_by_type</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span></div>
 
 <div class="viewcode-block" id="Registry.register"><a class="viewcode-back" href="../../reference/generated/tiled.media_type_registration.Registry.register.html#tiled.media_type_registration.Registry.register">[docs]</a>    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure_family</span><span class="p">,</span> <span class="n">media_type</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
@@ -272,6 +276,16 @@
 <span class="sd">            and return bytes or memoryview</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lookup</span><span class="p">[</span><span class="n">structure_family</span><span class="p">][</span><span class="n">media_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">func</span></div>
+
+    <span class="k">def</span> <span class="nf">register_alias</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ext</span><span class="p">,</span> <span class="n">media_type</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_custom_aliases_by_type</span><span class="p">[</span><span class="n">media_type</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ext</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_custom_aliases</span><span class="p">[</span><span class="n">ext</span><span class="p">]</span> <span class="o">=</span> <span class="n">media_type</span>
+
+    <span class="k">def</span> <span class="nf">resolve_alias</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">alias</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">mimetypes</span><span class="o">.</span><span class="n">types_map</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;.</span><span class="si">{</span><span class="n">alias</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_custom_aliases</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">alias</span><span class="p">,</span> <span class="n">alias</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">dispatch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure_family</span><span class="p">,</span> <span class="n">media_type</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
