@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.base &mdash; tiled 0.1.0a21 documentation</title>
+  <title>tiled.client.base &mdash; tiled 0.1.0a22.post8+g576948d documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a21
+                0.1.0a22.post8+g576948d
               </div>
             
           
@@ -198,56 +198,37 @@
            <div itemprop="articleBody">
             
   <h1>Source code for tiled.client.base</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">msgpack</span>
-
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span>
-<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">reauthenticate</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">handle_error</span><span class="p">,</span>
-    <span class="n">NEEDS_INITIALIZATION</span><span class="p">,</span>
-    <span class="n">NotAvailableOffline</span><span class="p">,</span>
-    <span class="n">UNSET</span><span class="p">,</span>
-<span class="p">)</span>
+<span></span><span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span>
 <span class="kn">from</span> <span class="nn">..trees.utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span>
 
 
 <div class="viewcode-block" id="BaseClient"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.html#tiled.client.base.BaseClient">[docs]</a><span class="k">class</span> <span class="nc">BaseClient</span><span class="p">:</span>
 <div class="viewcode-block" id="BaseClient.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.html#tiled.client.base.BaseClient.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">client</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">item</span><span class="p">,</span>
-        <span class="n">username</span><span class="p">,</span>
-        <span class="n">token_cache</span><span class="p">,</span>
-        <span class="n">authentication_uri</span><span class="p">,</span>
-        <span class="n">cache</span><span class="p">,</span>
-        <span class="n">offline</span><span class="p">,</span>
         <span class="n">path</span><span class="p">,</span>
         <span class="n">metadata</span><span class="p">,</span>
         <span class="n">params</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">client</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">token_cache</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span> <span class="o">=</span> <span class="n">authentication_uri</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="o">=</span> <span class="n">username</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_context</span> <span class="o">=</span> <span class="n">context</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;path is expected to be a list of segments&quot;</span><span class="p">)</span>
         <span class="c1"># Stash *immutable* copies just to be safe.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_path</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">path</span> <span class="ow">or</span> <span class="p">[])</span>
-        <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="n">NEEDS_INITIALIZATION</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_item</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_item</span> <span class="o">=</span> <span class="n">item</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_item</span> <span class="o">=</span> <span class="n">item</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># a cache just for __len__</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="n">params</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span></div>
 
     <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&lt;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&gt;&quot;</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_context</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">item</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -274,12 +255,18 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">username</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_username</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">username</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">offline</span>
+
+    <span class="nd">@offline</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">offline</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
 <div class="viewcode-block" id="BaseClient.new_variation"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.new_variation.html#tiled.client.base.BaseClient.new_variation">[docs]</a>    <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">offline</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
-        <span class="n">cache</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">path</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">params</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
@@ -288,10 +275,6 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        This is intended primarily for internal use and use by subclasses.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">offline</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
-            <span class="n">offline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span>
-        <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
-            <span class="n">cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span>
         <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
             <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span>
         <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
@@ -299,114 +282,23 @@
         <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
             <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_params</span>
         <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span>
-            <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
             <span class="n">item</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">,</span>
-            <span class="n">username</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_username</span><span class="p">,</span>
-            <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
-            <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-            <span class="n">token_cache</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">,</span>
-            <span class="n">authentication_uri</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
-
-    <span class="k">def</span> <span class="nf">_get_content_with_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">accept</span><span class="p">:</span>
-            <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Accept&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">accept</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">raw</span>  <span class="c1"># URL as tuple</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
-            <span class="c1"># We must rely on the cache alone.</span>
-            <span class="n">reservation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_reservation</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotAvailableOffline</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-            <span class="n">content</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">content</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># TODO Do we ever get here?</span>
-                <span class="k">raise</span> <span class="n">NotAvailableOffline</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">content</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># No cache, so we can use the client straightforwardly.</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-            <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
-        <span class="c1"># If we get this far, we have an online client and a cache.</span>
-        <span class="n">reservation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_reservation</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;If-None-Match&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">etag</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-            <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">304</span><span class="p">:</span>  <span class="c1"># HTTP 304 Not Modified</span>
-                <span class="c1"># Read from the cache</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
-            <span class="k">elif</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
-                <span class="n">etag</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ETag&quot;</span><span class="p">)</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
-                <span class="c1"># TODO Respect Cache-control headers (e.g. &quot;no-store&quot;)</span>
-                <span class="k">if</span> <span class="n">etag</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Write to cache.</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">put_etag_for_url</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">put_content</span><span class="p">(</span><span class="n">etag</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Unexpected status_code </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-        <span class="k">finally</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">reservation</span><span class="o">.</span><span class="n">ensure_released</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">content</span>
-
-    <span class="k">def</span> <span class="nf">_get_json_with_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_get_content_with_cache</span><span class="p">(</span>
-                <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-            <span class="p">),</span>
-            <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">attempts</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Handle httpx&#39;s timeout API, which uses a special internal sentinel to mean</span>
-<span class="sd">        &quot;no timeout&quot; and therefore must not be passed any value (including None)</span>
-<span class="sd">        if we want no timeout.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">:</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">attempts</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
-            <span class="c1"># Try refreshing the token.</span>
-            <span class="c1"># TODO Use a more targeted signal to know that refreshing the token will help.</span>
-            <span class="c1"># Parse the error message? Add a special header from the server?</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">tokens</span> <span class="o">=</span> <span class="n">reauthenticate</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_username</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">,</span>
-                    <span class="n">token_cache</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
-                <span class="n">auth_header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="c1"># Patch in the Authorization header for this request...</span>
-                <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_header</span>
-                <span class="c1"># And update the default headers for future requests.</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_header</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">attempts</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">response</span></div>
+        <span class="p">)</span></div></div>
 
 
 <span class="k">class</span> <span class="nc">BaseStructureClient</span><span class="p">(</span><span class="n">BaseClient</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">client</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span> <span class="o">=</span> <span class="n">structure</span>
 
     <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -418,7 +310,7 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Access all the data.</span>
 
-<span class="sd">        This causes it to be cached if the client is configured with a cache.</span>
+<span class="sd">        This causes it to be cached if the context is configured with a cache.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span></div>
@@ -446,7 +338,7 @@
         <span class="c1"># our structure (as part of the some larger structure) and passed it</span>
         <span class="c1"># in.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_json_with_cache</span><span class="p">(</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;/metadata/</span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
                 <span class="n">params</span><span class="o">=</span><span class="p">{</span>
                     <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;structure.micro&quot;</span><span class="p">,</span> <span class="s2">&quot;structure.macro&quot;</span><span class="p">],</span>
