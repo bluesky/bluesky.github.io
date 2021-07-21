@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+g31f2d93 documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+g7f1ef7e documentation</title>
   
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.post1+g31f2d93
+                0.post1+g7f1ef7e
               </div>
             
           
@@ -145,6 +145,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#queue-item-remove-batch"><strong>‘queue_item_remove_batch’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-item-move"><strong>‘queue_item_move’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-item-move-batch"><strong>‘queue_item_move_batch’</strong></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#queue-item-execute"><strong>‘queue_item_execute’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-clear"><strong>‘queue_clear’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-start"><strong>‘queue_start’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-stop"><strong>‘queue_stop’</strong></a></li>
@@ -331,6 +332,7 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <li><p><a class="reference internal" href="#method-queue-item-remove-batch"><span class="std std-ref">‘queue_item_remove_batch’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-queue-item-move"><span class="std std-ref">‘queue_item_move’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-queue-item-move-batch"><span class="std std-ref">‘queue_item_move_batch’</span></a></p></li>
+<li><p><a class="reference internal" href="#method-queue-item-execute"><span class="std std-ref">‘queue_item_execute’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-queue-clear"><span class="std std-ref">‘queue_clear’</span></a></p></li>
 </ul>
 <p>Start and stop execution of the plan queue:</p>
@@ -1330,6 +1332,77 @@ arranged in the order in which they are inserted in the queue. Returns empty lis
 if the operation fails.</p>
 </dd>
 <dt><strong>qsize</strong>: <em>int</em> or <em>None</em></dt><dd><p>the size of the queue or <em>None</em> if operation fails.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>Immediate: no follow-up requests are required.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="queue-item-execute">
+<span id="method-queue-item-execute"></span><h4><strong>‘queue_item_execute’</strong><a class="headerlink" href="#queue-item-execute" title="Permalink to this headline">¶</a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 88%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘queue_item_execute’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Immediately start execution of the submitted item. The item may be a plan or an
+instruction. The request fails if item execution can not be started immediately
+(RE Manager is not in <em>IDLE</em> state, RE Worker environment does not exist, etc.).
+If the request succeeds, the item is executed once. The item is not added to
+the queue if it can not be immediately started and it is not pushed back into
+the queue in case its execution fails/stops. If the queue is in the <em>LOOP</em> mode,
+the executed item is not added to the back of the queue after completion.
+The API request does not alter the sequence of enqueued plans.</p>
+<p>The API is primarily intended for implementing of interactive workflows, in which
+users are controlling the experiment using client GUI application and user actions
+(such as mouse click on a plot) are converted into the requests to execute plans
+in RE Worker environment. Interactive workflows may be used for calibration of
+the instrument, while the queue may be used to run sequences of scheduled experiments.</p>
+<p>Internally the API request adds the submitted item to the front of the queue
+and immediately attempts to start its execution. The item is removed from the queue
+almost immediately and never pushed back into the queue. If the item is a plan,
+the results of execution are added to plan history as usual. The respective history
+item could be accessed to check if the plan was executed successfully.</p>
+<p>The API <strong>does not start execution of the queue</strong>. Once execution of the submitted
+item is finished, RE Manager is switched to the IDLE state.</p>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><dl class="simple">
+<dt><strong>item</strong>: <em>dict</em></dt><dd><p>the dictionary of plan or instruction parameters. Plans are distinguished from
+instructions based the value of the required parameter ‘item_type’. Currently
+supported item types are ‘plan’ and ‘instruction’.</p>
+</dd>
+<dt><strong>user_group</strong>: <em>str</em></dt><dd><p>the name of the user group (e.g. ‘admin’).</p>
+</dd>
+<dt><strong>user</strong>: <em>str</em></dt><dd><p>the name of the user (e.g. ‘John Doe’). The name is included in the item metadata
+and may be used to identify the user who added the item to the queue. It is not
+passed to the Run Engine or included in run metadata.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
+</dd>
+<dt><strong>qsize</strong>: <em>int</em> or <em>None</em></dt><dd><p>the number of items in the plan queue after the plan was added if
+the operation was successful, <em>None</em> otherwise</p>
+</dd>
+<dt><strong>item</strong>: <em>dict</em> or <em>None</em> (optional)</dt><dd><p>the inserted item. The item contains the assigned item UID. In case of error
+the item may be returned without modification (with assigned UID). <em>None</em> will be
+returned if request does not contain item parameters.</p>
 </dd>
 </dl>
 </td>
