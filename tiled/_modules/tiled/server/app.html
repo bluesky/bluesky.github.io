@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.server.app &mdash; tiled 0.1.0a24.post5+g42ae249 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a24.post13+g2c62fa8 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a24.post5+g42ae249
+                0.1.0a24.post13+g2c62fa8
               </div>
             
           
@@ -217,9 +217,18 @@
     <span class="n">authentication_router</span><span class="p">,</span>
     <span class="n">get_authenticator</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">get_root_tree</span><span class="p">,</span> <span class="n">PatchedStreamingResponse</span>
+<span class="kn">from</span> <span class="nn">.compression</span> <span class="kn">import</span> <span class="n">CompressionMiddleware</span>
+<span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">get_root_tree</span><span class="p">,</span>
+    <span class="n">get_query_registry</span><span class="p">,</span>
+    <span class="n">get_serialization_registry</span><span class="p">,</span>
+    <span class="n">PatchedStreamingResponse</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.router</span> <span class="kn">import</span> <span class="n">declare_search_router</span><span class="p">,</span> <span class="n">router</span>
 <span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
+<span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
+<span class="p">)</span>
 
 
 <span class="n">SAFE_METHODS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;HEAD&quot;</span><span class="p">,</span> <span class="s2">&quot;OPTIONS&quot;</span><span class="p">,</span> <span class="s2">&quot;TRACE&quot;</span><span class="p">}</span>
@@ -232,7 +241,7 @@
 <span class="n">CSRF_QUERY_PARAMETER</span> <span class="o">=</span> <span class="s2">&quot;csrf&quot;</span>
 
 
-<div class="viewcode-block" id="get_app"><a class="viewcode-back" href="../../../reference/generated/tiled.server.app.get_app.html#tiled.server.app.get_app">[docs]</a><span class="k">def</span> <span class="nf">get_app</span><span class="p">(</span><span class="n">include_routers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="get_app"><a class="viewcode-back" href="../../../reference/generated/tiled.server.app.get_app.html#tiled.server.app.get_app">[docs]</a><span class="k">def</span> <span class="nf">get_app</span><span class="p">(</span><span class="n">query_registry</span><span class="p">,</span> <span class="n">compression_registry</span><span class="p">,</span> <span class="n">include_routers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Construct an instance of the FastAPI application.</span>
 
@@ -253,10 +262,16 @@
     <span class="k">async</span> <span class="k">def</span> <span class="nf">startup_event</span><span class="p">():</span>
         <span class="c1"># The /search route is defined at server startup so that the user has the</span>
         <span class="c1"># opporunity to register custom query types before startup.</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">declare_search_router</span><span class="p">())</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">declare_search_router</span><span class="p">(</span><span class="n">query_registry</span><span class="p">))</span>
         <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">allow_origins</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
             <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span><span class="o">.</span><span class="n">allow_origins</span>
         <span class="p">)</span>
+
+    <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
+        <span class="n">CompressionMiddleware</span><span class="p">,</span>
+        <span class="n">compression_registry</span><span class="o">=</span><span class="n">compression_registry</span><span class="p">,</span>
+        <span class="n">minimum_size</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">add_server_timing_header</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
@@ -368,6 +383,9 @@
     <span class="n">tree</span><span class="p">,</span>
     <span class="n">authentication</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">server_settings</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">query_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">serialization_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">compression_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Serve a Tree</span>
@@ -417,10 +435,30 @@
     <span class="n">include_routers</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">include_routers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;include_routers&quot;</span><span class="p">,</span> <span class="p">[]))</span>
     <span class="n">include_routers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="s2">&quot;include_routers&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-    <span class="n">app</span> <span class="o">=</span> <span class="n">get_app</span><span class="p">(</span><span class="n">include_routers</span><span class="o">=</span><span class="n">include_routers</span><span class="p">)</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">get_app</span><span class="p">(</span>
+        <span class="n">query_registry</span> <span class="ow">or</span> <span class="n">get_query_registry</span><span class="p">(),</span>
+        <span class="n">compression_registry</span> <span class="ow">or</span> <span class="n">default_compression_registry</span><span class="p">,</span>
+        <span class="n">include_routers</span><span class="o">=</span><span class="n">include_routers</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_authenticator</span><span class="p">]</span> <span class="o">=</span> <span class="n">override_get_authenticator</span>
     <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_root_tree</span><span class="p">]</span> <span class="o">=</span> <span class="n">override_get_root_tree</span>
     <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]</span> <span class="o">=</span> <span class="n">override_get_settings</span>
+    <span class="k">if</span> <span class="n">query_registry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">override_get_query_registry</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">query_registry</span>
+
+        <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_query_registry</span><span class="p">]</span> <span class="o">=</span> <span class="n">override_get_query_registry</span>
+    <span class="k">if</span> <span class="n">serialization_registry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">override_get_serialization_registry</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">serialization_registry</span>
+
+        <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span>
+            <span class="n">get_serialization_registry</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">override_get_serialization_registry</span>
     <span class="k">return</span> <span class="n">app</span></div>
 
 
