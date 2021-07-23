@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.media_type_registration &mdash; tiled 0.1.0a24.post14+g19d4167 documentation</title>
+  <title>tiled.media_type_registration &mdash; tiled 0.1.0a24.post21+g54e8539 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a24.post14+g19d4167
+                0.1.0a24.post21+g54e8539
               </div>
             
           
@@ -198,12 +198,13 @@
            <div itemprop="articleBody">
             
   <h1>Source code for tiled.media_type_registration</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">gzip</span>
+<span></span><span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">gzip</span>
 <span class="kn">import</span> <span class="nn">mimetypes</span>
 
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
 
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">DictView</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">modules_available</span>
 
 
 <div class="viewcode-block" id="SerializationRegistry"><a class="viewcode-back" href="../../reference/generated/tiled.media_type_registration.SerializationRegistry.html#tiled.media_type_registration.SerializationRegistry">[docs]</a><span class="k">class</span> <span class="nc">SerializationRegistry</span><span class="p">:</span>
@@ -309,10 +310,13 @@
 
 <span class="k">class</span> <span class="nc">CompressionRegistry</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_lookup</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lookup</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="n">collections</span><span class="o">.</span><span class="n">OrderedDict</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">encodings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">media_type</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lookup</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">media_type</span><span class="p">,</span> <span class="p">[]))</span>
+        <span class="c1"># The last encoding registered is the first preferred by server</span>
+        <span class="c1"># during content negotiation. Thus, any user-registered</span>
+        <span class="c1"># ones will get tried first (if the client accepts them).</span>
+        <span class="k">return</span> <span class="nb">reversed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lookup</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">media_type</span><span class="p">,</span> <span class="p">[]))</span>
 
     <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">media_type</span><span class="p">,</span> <span class="n">encoding</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -370,6 +374,47 @@
     <span class="s2">&quot;gzip&quot;</span><span class="p">,</span>
     <span class="k">lambda</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">gzip</span><span class="o">.</span><span class="n">GzipFile</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;wb&quot;</span><span class="p">,</span> <span class="n">fileobj</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span> <span class="n">compresslevel</span><span class="o">=</span><span class="mi">9</span><span class="p">),</span>
 <span class="p">)</span>
+<span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;gzip&quot;</span><span class="p">,</span>
+    <span class="c1"># Use a lower compression level. High compression is extremely slow</span>
+    <span class="c1"># (~60 seconds) on large array data.</span>
+    <span class="k">lambda</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">gzip</span><span class="o">.</span><span class="n">GzipFile</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;wb&quot;</span><span class="p">,</span> <span class="n">fileobj</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span> <span class="n">compresslevel</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;blosc&quot;</span><span class="p">):</span>
+
+    <span class="kn">import</span> <span class="nn">blosc</span>
+
+    <span class="k">class</span> <span class="nc">BloscBuffer</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Imitate the API provided by gzip.GzipFile and used by tiled.server.compression.</span>
+
+<span class="sd">        It&#39;s not clear to me yet what this buys us, but I think we should follow</span>
+<span class="sd">        the pattern set by starlette until we have a clear reason not to.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="n">file</span>
+
+        <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="s2">&quot;itemsize&quot;</span><span class="p">):</span>
+                <span class="c1"># This could be memoryview or numpy.ndarray, for example.</span>
+                <span class="c1"># Blosc uses item-aware shuffling for improved results.</span>
+                <span class="n">compressed</span> <span class="o">=</span> <span class="n">blosc</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">typesize</span><span class="o">=</span><span class="n">b</span><span class="o">.</span><span class="n">itemsize</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">compressed</span> <span class="o">=</span> <span class="n">blosc</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">b</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">compressed</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">pass</span>
+
+    <span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+        <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;blosc&quot;</span><span class="p">,</span>
+        <span class="c1"># Use a lower compression level. High compression is extremely slow</span>
+        <span class="c1"># (~60 seconds) on large array data.</span>
+        <span class="k">lambda</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">BloscBuffer</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span>
+    <span class="p">)</span>
 </pre></div>
 
            </div>
