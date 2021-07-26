@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.media_type_registration &mdash; tiled 0.1.0a26 documentation</title>
+  <title>tiled.media_type_registration &mdash; tiled 0.1.0a26.post4+g26983bb documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a26
+                0.1.0a26.post4+g26983bb
               </div>
             
           
@@ -116,6 +116,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../explanations/structures.html">Structures</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../explanations/security.html">Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../explanations/compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../explanations/access-control.html">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../explanations/faq.html">FAQ</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../explanations/lineage.html">How Tiled Fits into the Ecosystem</a></li>
@@ -204,7 +205,12 @@
 
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
 
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">modules_available</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
+    <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span>
+    <span class="n">DictView</span><span class="p">,</span>
+    <span class="n">modules_available</span><span class="p">,</span>
+<span class="p">)</span>
 
 
 <div class="viewcode-block" id="SerializationRegistry"><a class="viewcode-back" href="../../reference/generated/tiled.media_type_registration.SerializationRegistry.html#tiled.media_type_registration.SerializationRegistry">[docs]</a><span class="k">class</span> <span class="nc">SerializationRegistry</span><span class="p">:</span>
@@ -374,13 +380,130 @@
     <span class="s2">&quot;gzip&quot;</span><span class="p">,</span>
     <span class="k">lambda</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">gzip</span><span class="o">.</span><span class="n">GzipFile</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;wb&quot;</span><span class="p">,</span> <span class="n">fileobj</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span> <span class="n">compresslevel</span><span class="o">=</span><span class="mi">9</span><span class="p">),</span>
 <span class="p">)</span>
-<span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+<span class="k">for</span> <span class="n">media_type</span> <span class="ow">in</span> <span class="p">[</span>
     <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;gzip&quot;</span><span class="p">,</span>
-    <span class="c1"># Use a lower compression level. High compression is extremely slow</span>
-    <span class="c1"># (~60 seconds) on large array data.</span>
-    <span class="k">lambda</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">gzip</span><span class="o">.</span><span class="n">GzipFile</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;wb&quot;</span><span class="p">,</span> <span class="n">fileobj</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span> <span class="n">compresslevel</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
-<span class="p">)</span>
+    <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
+    <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span>
+    <span class="s2">&quot;text/csv&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;text/plain&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;text/html&quot;</span><span class="p">,</span>
+<span class="p">]:</span>
+    <span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+        <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;gzip&quot;</span><span class="p">,</span>
+        <span class="c1"># Use a lower compression level. High compression is extremely slow</span>
+        <span class="c1"># (~60 seconds) on large array data.</span>
+        <span class="k">lambda</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">gzip</span><span class="o">.</span><span class="n">GzipFile</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;wb&quot;</span><span class="p">,</span> <span class="n">fileobj</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span> <span class="n">compresslevel</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+    <span class="p">)</span>
+
+<span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;zstandard&quot;</span><span class="p">):</span>
+
+    <span class="kn">import</span> <span class="nn">zstandard</span>
+
+    <span class="c1"># These defaults are cribbed from</span>
+    <span class="c1"># https://docs.dask.org/en/latest/configuration-reference.html</span>
+    <span class="c1"># TODO Make compression settings configurable.</span>
+    <span class="c1"># This complex in our case because, as with gzip, we may</span>
+    <span class="c1"># want configure differently for different media types.</span>
+    <span class="n">zstd_compressor</span> <span class="o">=</span> <span class="n">zstandard</span><span class="o">.</span><span class="n">ZstdCompressor</span><span class="p">(</span>
+        <span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">threads</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">class</span> <span class="nc">ZstdBuffer</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Imitate the API provided by gzip.GzipFile and used by tiled.server.compression.</span>
+
+<span class="sd">        It&#39;s not clear to me yet what this buys us, but I think we should follow</span>
+<span class="sd">        the pattern set by starlette until we have a clear reason not to.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="n">file</span>
+
+        <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">zstd_compressor</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+
+        <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">pass</span>
+
+    <span class="k">for</span> <span class="n">media_type</span> <span class="ow">in</span> <span class="p">[</span>
+        <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
+        <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
+        <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span>
+        <span class="s2">&quot;text/csv&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;text/html&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;text/plain&quot;</span><span class="p">,</span>
+    <span class="p">]:</span>
+        <span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="n">media_type</span><span class="p">,</span>
+            <span class="s2">&quot;zstd&quot;</span><span class="p">,</span>
+            <span class="n">ZstdBuffer</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;lz4&quot;</span><span class="p">):</span>
+
+    <span class="kn">import</span> <span class="nn">lz4</span>
+
+    <span class="c1"># These fallback and workaround paths are cribbed from</span>
+    <span class="c1"># distributed.protocol.compression.</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># try using the new lz4 API</span>
+        <span class="kn">import</span> <span class="nn">lz4.block</span>
+
+        <span class="n">lz4_compress</span> <span class="o">=</span> <span class="n">lz4</span><span class="o">.</span><span class="n">block</span><span class="o">.</span><span class="n">compress</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="c1"># fall back to old one</span>
+        <span class="n">lz4_compress</span> <span class="o">=</span> <span class="n">lz4</span><span class="o">.</span><span class="n">LZ4_compress</span>
+
+    <span class="c1"># helper to bypass missing memoryview support in current lz4</span>
+    <span class="c1"># (fixed in later versions)</span>
+
+    <span class="k">def</span> <span class="nf">_fixed_lz4_compress</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">lz4_compress</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">memoryview</span><span class="p">,</span> <span class="nb">bytearray</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="n">lz4_compress</span><span class="p">(</span><span class="nb">bytes</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span>
+
+    <span class="k">class</span> <span class="nc">LZ4Buffer</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Imitate the API provided by gzip.GzipFile and used by tiled.server.compression.</span>
+
+<span class="sd">        It&#39;s not clear to me yet what this buys us, but I think we should follow</span>
+<span class="sd">        the pattern set by starlette until we have a clear reason not to.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="n">file</span>
+
+        <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">_fixed_lz4_compress</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+
+        <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">pass</span>
+
+    <span class="k">for</span> <span class="n">media_type</span> <span class="ow">in</span> <span class="p">[</span>
+        <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
+        <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
+        <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span>
+        <span class="s2">&quot;text/csv&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;text/html&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;text/plain&quot;</span><span class="p">,</span>
+    <span class="p">]:</span>
+        <span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="n">media_type</span><span class="p">,</span>
+            <span class="s2">&quot;lz4&quot;</span><span class="p">,</span>
+            <span class="n">LZ4Buffer</span><span class="p">,</span>
+        <span class="p">)</span>
+
 <span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;blosc&quot;</span><span class="p">):</span>
 
     <span class="kn">import</span> <span class="nn">blosc</span>
@@ -414,13 +537,12 @@
         <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">pass</span>
 
-    <span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-        <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;blosc&quot;</span><span class="p">,</span>
-        <span class="c1"># Use a lower compression level. High compression is extremely slow</span>
-        <span class="c1"># (~60 seconds) on large array data.</span>
-        <span class="k">lambda</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">BloscBuffer</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span>
-    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">media_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;application/octet-stream&quot;</span><span class="p">,</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">]:</span>
+        <span class="n">compression_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+            <span class="n">media_type</span><span class="p">,</span>
+            <span class="s2">&quot;blosc&quot;</span><span class="p">,</span>
+            <span class="n">BloscBuffer</span><span class="p">,</span>
+        <span class="p">)</span>
 </pre></div>
 
            </div>
