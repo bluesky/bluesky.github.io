@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.trees.files &mdash; tiled 0.1.0a27.post2+g2f69c50 documentation</title>
+  <title>tiled.trees.files &mdash; tiled 0.1.0a28.post13+gf757d30 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a27.post2+g2f69c50
+                0.1.0a28.post13+gf757d30
               </div>
             
           
@@ -108,6 +108,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/configuration.html">Serve Trees using Configuration Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/custom-formats.html">Add Support for a Custom Format</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/custom-formats.html#define-an-importer">Define an Importer</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/scaling.html">Control Speed, Memory Usage, and Disk Usage</a></li>
@@ -272,14 +273,17 @@
     <span class="k">def</span> <span class="nf">from_directory</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">directory</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
         <span class="n">ignore_re_dirs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">ignore_re_files</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">readers_by_mimetype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">mimetypes_by_file_ext</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">key_from_filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">authenticated_identity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">error_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">error_if_missing</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">directory</span><span class="p">):</span>
@@ -302,6 +306,12 @@
         <span class="n">merged_mimetypes_by_file_ext</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">ChainMap</span><span class="p">(</span>
             <span class="n">mimetypes_by_file_ext</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DEFAULT_MIMETYPES_BY_FILE_EXT</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="n">key_from_filename</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+
+            <span class="k">def</span> <span class="nf">key_from_filename</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+                <span class="c1"># identity</span>
+                <span class="k">return</span> <span class="n">filename</span>
+
         <span class="c1"># Map subdirectory path parts, as in (&#39;a&#39;, &#39;b&#39;, &#39;c&#39;), to mapping of partials.</span>
         <span class="c1"># This single index represents the entire nested directory structure. (We</span>
         <span class="c1"># could have done this recursively, with each sub-Tree watching its own</span>
@@ -325,6 +335,7 @@
                 <span class="n">index</span><span class="p">,</span>
                 <span class="n">merged_readers_by_mimetype</span><span class="p">,</span>
                 <span class="n">merged_mimetypes_by_file_ext</span><span class="p">,</span>
+                <span class="n">key_from_filename</span><span class="p">,</span>
                 <span class="n">initial_scan_complete</span><span class="p">,</span>
                 <span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
             <span class="p">),</span>
@@ -372,7 +383,8 @@
                     <span class="k">continue</span>
                 <span class="c1"># Add items to the mapping for this root directory.</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">filename</span><span class="p">]</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
+                    <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+                    <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
                         <span class="n">merged_readers_by_mimetype</span><span class="p">,</span>
                         <span class="n">merged_mimetypes_by_file_ext</span><span class="p">,</span>
                         <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">filename</span><span class="p">),</span>
@@ -390,6 +402,10 @@
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">authenticated_identity</span><span class="o">=</span><span class="n">authenticated_identity</span><span class="p">,</span>
             <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">,</span>
+            <span class="c1"># The __init__ of this class does not accept any other</span>
+            <span class="c1"># kwargs, but subclasses can use this to set up additional</span>
+            <span class="c1"># instance state.</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
 <div class="viewcode-block" id="Tree.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.trees.files.Tree.html#tiled.trees.files.Tree.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -431,6 +447,7 @@
     <span class="n">index</span><span class="p">,</span>
     <span class="n">readers_by_mimetype</span><span class="p">,</span>
     <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
+    <span class="n">key_from_filename</span><span class="p">,</span>
     <span class="n">initial_scan_complete</span><span class="p">,</span>
     <span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
     <span class="n">poll_interval</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
@@ -451,11 +468,17 @@
                     <span class="n">directory</span><span class="p">,</span>
                     <span class="n">readers_by_mimetype</span><span class="p">,</span>
                     <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
+                    <span class="n">key_from_filename</span><span class="p">,</span>
                     <span class="n">index</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="c1"># Process changes just collected.</span>
             <span class="n">_process_changes</span><span class="p">(</span>
-                <span class="n">changes</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">readers_by_mimetype</span><span class="p">,</span> <span class="n">mimetypes_by_file_ext</span><span class="p">,</span> <span class="n">index</span>
+                <span class="n">changes</span><span class="p">,</span>
+                <span class="n">directory</span><span class="p">,</span>
+                <span class="n">readers_by_mimetype</span><span class="p">,</span>
+                <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
+                <span class="n">key_from_filename</span><span class="p">,</span>
+                <span class="n">index</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># The initial scan is still going. Stash the changes for later.</span>
@@ -464,7 +487,12 @@
 
 
 <span class="k">def</span> <span class="nf">_process_changes</span><span class="p">(</span>
-    <span class="n">changes</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">readers_by_mimetype</span><span class="p">,</span> <span class="n">mimetypes_by_file_ext</span><span class="p">,</span> <span class="n">index</span>
+    <span class="n">changes</span><span class="p">,</span>
+    <span class="n">directory</span><span class="p">,</span>
+    <span class="n">readers_by_mimetype</span><span class="p">,</span>
+    <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
+    <span class="n">key_from_filename</span><span class="p">,</span>
+    <span class="n">index</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="n">ignore</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">changes</span><span class="p">:</span>
@@ -478,7 +506,8 @@
         <span class="n">parent_parts</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parts</span>
         <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">added</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
                     <span class="n">readers_by_mimetype</span><span class="p">,</span>
                     <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
                     <span class="n">path</span><span class="p">,</span>
@@ -489,7 +518,8 @@
                 <span class="c1"># for this filename.</span>
                 <span class="n">ignore</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">deleted</span><span class="p">:</span>
-            <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">modified</span><span class="p">:</span>
             <span class="c1"># Why do we need a try/except here? A reasonable question!</span>
             <span class="c1"># Normally, we would learn about the file first via a Change.added</span>
@@ -500,7 +530,8 @@
             <span class="c1"># to our index. Therefore, we guard this with a try/except, knowing</span>
             <span class="c1"># that this could be the first time we see this path.</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
                     <span class="n">readers_by_mimetype</span><span class="p">,</span>
                     <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
                     <span class="n">path</span><span class="p">,</span>

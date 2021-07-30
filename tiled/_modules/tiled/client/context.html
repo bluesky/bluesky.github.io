@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.context &mdash; tiled 0.1.0a27.post2+g2f69c50 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a28.post13+gf757d30 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a27.post2+g2f69c50
+                0.1.0a28.post13+gf757d30
               </div>
             
           
@@ -108,6 +108,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/configuration.html">Serve Trees using Configuration Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/custom-formats.html">Add Support for a Custom Format</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/custom-formats.html#define-an-importer">Define an Importer</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/scaling.html">Control Speed, Memory Usage, and Disk Usage</a></li>
@@ -242,7 +243,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
 <span class="p">):</span>
-    <span class="p">(</span><span class="n">context</span><span class="p">,)</span> <span class="o">=</span> <span class="n">_context_from_uri_or_profile</span><span class="p">(</span>
+    <span class="n">context</span> <span class="o">=</span> <span class="n">_context_from_uri_or_profile</span><span class="p">(</span>
         <span class="n">uri_or_profile</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">authentication_uri</span><span class="p">,</span> <span class="n">token_cache</span><span class="p">,</span> <span class="n">verify</span>
     <span class="p">)</span>
     <span class="c1"># This has a side effect of storing the refresh token in the token_cache, if set.</span>
@@ -255,7 +256,6 @@
     <span class="n">authentication_uri</span><span class="p">,</span>
     <span class="n">token_cache</span><span class="p">,</span>
     <span class="n">verify</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="p">,</span>
     <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
@@ -287,6 +287,7 @@
             <span class="k">if</span> <span class="s2">&quot;uri&quot;</span> <span class="ow">in</span> <span class="n">profile_content</span><span class="p">:</span>
                 <span class="n">uri</span> <span class="o">=</span> <span class="n">profile_content</span><span class="p">[</span><span class="s2">&quot;uri&quot;</span><span class="p">]</span>
                 <span class="n">verify</span> <span class="o">=</span> <span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;verify&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+                <span class="n">headers</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;headers&quot;</span><span class="p">,</span> <span class="p">{}))</span>
                 <span class="n">client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
                     <span class="n">base_url</span><span class="o">=</span><span class="n">uri</span><span class="p">,</span>
                     <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
@@ -313,11 +314,12 @@
                 <span class="n">context</span> <span class="o">=</span> <span class="n">context_from_tree</span><span class="p">(</span><span class="o">**</span><span class="n">serve_tree_kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">profile_content</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid profile content&quot;</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="n">TreeValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Not sure what to do with tree </span><span class="si">{</span><span class="n">uri_or_profile</span><span class="si">!r}</span><span class="s2">. &quot;</span>
-            <span class="s2">&quot;It does not look like a URI (it does not start with http[s]://) &quot;</span>
-            <span class="s2">&quot;and it does not match any profiles.&quot;</span>
-        <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TreeValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Not sure what to do with tree </span><span class="si">{</span><span class="n">uri_or_profile</span><span class="si">!r}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;It does not look like a URI (it does not start with http[s]://) &quot;</span>
+                <span class="s2">&quot;and it does not match any profiles.&quot;</span>
+            <span class="p">)</span>
     <span class="k">return</span> <span class="n">context</span>
 
 
@@ -355,7 +357,7 @@
 
         <span class="c1"># Authenticate. If a valid refresh_token is available in the token_cache,</span>
         <span class="c1"># it will be used. Otherwise, this will prompt for a password.</span>
-        <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">offline</span><span class="p">:</span>
             <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reauthenticate</span><span class="p">()</span>
             <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
             <span class="n">client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -485,8 +487,6 @@
         <span class="k">return</span> <span class="n">response</span>
 
 <div class="viewcode-block" id="Context.authenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.authenticate.html#tiled.client.context.Context.authenticate">[docs]</a>    <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
-            <span class="k">return</span>
         <span class="c1"># Make an initial &quot;safe&quot; request to let the server set the CSRF cookie.</span>
         <span class="c1"># TODO: Skip this if we already have a valid CSRF cookie for the authentication domain.</span>
         <span class="c1"># TODO: The server should support HEAD requests so we can do this more cheaply.</span>
@@ -523,8 +523,6 @@
         <span class="k">return</span> <span class="n">tokens</span></div>
 
 <div class="viewcode-block" id="Context.reauthenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.reauthenticate.html#tiled.client.context.Context.reauthenticate">[docs]</a>    <span class="k">def</span> <span class="nf">reauthenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
-            <span class="k">return</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_refresh</span><span class="p">()</span>
         <span class="k">except</span> <span class="n">CannotRefreshAuthentication</span><span class="p">:</span>
