@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.trees.files &mdash; tiled 0.1.0a28.post49+g4168d82 documentation</title>
+  <title>tiled.trees.files &mdash; tiled 0.1.0a28.post51+ge5f7530 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a28.post49+g4168d82
+                0.1.0a28.post51+ge5f7530
               </div>
             
           
@@ -206,9 +206,9 @@
 <span class="kn">import</span> <span class="nn">mimetypes</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">queue</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">threading</span>
-<span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">from</span> <span class="nn">watchgod.watcher</span> <span class="kn">import</span> <span class="n">RegExpWatcher</span><span class="p">,</span> <span class="n">Change</span>
@@ -327,6 +327,7 @@
         <span class="c1">#    avoid a possibile a race condition.</span>
         <span class="n">initial_scan_complete</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">watcher_thread_kill_switch</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">manual_trigger</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
         <span class="n">watcher_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
             <span class="n">target</span><span class="o">=</span><span class="n">_watch</span><span class="p">,</span>
             <span class="n">args</span><span class="o">=</span><span class="p">(</span>
@@ -339,6 +340,7 @@
                 <span class="n">key_from_filename</span><span class="p">,</span>
                 <span class="n">initial_scan_complete</span><span class="p">,</span>
                 <span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
+                <span class="n">manual_trigger</span><span class="p">,</span>
             <span class="p">),</span>
             <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">name</span><span class="o">=</span><span class="s2">&quot;tiled-watch-filesystem-changes&quot;</span><span class="p">,</span>
@@ -401,6 +403,7 @@
             <span class="n">directory</span><span class="o">=</span><span class="n">directory</span><span class="p">,</span>
             <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
             <span class="n">watcher_thread_kill_switch</span><span class="o">=</span><span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
+            <span class="n">manual_trigger</span><span class="o">=</span><span class="n">manual_trigger</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">authenticated_identity</span><span class="o">=</span><span class="n">authenticated_identity</span><span class="p">,</span>
             <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">,</span>
@@ -416,6 +419,7 @@
         <span class="n">directory</span><span class="p">,</span>
         <span class="n">index</span><span class="p">,</span>
         <span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
+        <span class="n">manual_trigger</span><span class="p">,</span>
         <span class="n">metadata</span><span class="p">,</span>
         <span class="n">access_policy</span><span class="p">,</span>
         <span class="n">authenticated_identity</span><span class="p">,</span>
@@ -428,7 +432,16 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">=</span> <span class="n">directory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">=</span> <span class="n">index</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_watcher_thread_kill_switch</span> <span class="o">=</span> <span class="n">watcher_thread_kill_switch</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_watcher_thread_kill_switch</span> <span class="o">=</span> <span class="n">watcher_thread_kill_switch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_manual_trigger</span> <span class="o">=</span> <span class="n">manual_trigger</span></div>
+
+    <span class="k">def</span> <span class="nf">update_now</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;Force an update and block until it completes.&quot;</span>
+        <span class="n">event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_manual_trigger</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+        <span class="c1"># The worker thread will set this Event when processing completes.</span>
+        <span class="c1"># Wait on that, and the return.</span>
+        <span class="n">event</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">directory</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -438,6 +451,7 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span>
             <span class="o">*</span><span class="n">args</span><span class="p">,</span>
             <span class="n">watcher_thread_kill_switch</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_watcher_thread_kill_switch</span><span class="p">,</span>
+            <span class="n">manual_trigger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">manual_trigger</span><span class="p">,</span>
             <span class="n">directory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">,</span>
             <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -459,6 +473,7 @@
     <span class="n">key_from_filename</span><span class="p">,</span>
     <span class="n">initial_scan_complete</span><span class="p">,</span>
     <span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
+    <span class="n">manual_trigger</span><span class="p">,</span>
     <span class="n">poll_interval</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="n">watcher</span> <span class="o">=</span> <span class="n">RegExpWatcher</span><span class="p">(</span>
@@ -467,6 +482,7 @@
         <span class="n">re_dirs</span><span class="o">=</span><span class="n">ignore_re_dirs</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">queued_changes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">event</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">while</span> <span class="ow">not</span> <span class="n">watcher_thread_kill_switch</span><span class="p">:</span>
         <span class="n">changes</span> <span class="o">=</span> <span class="n">watcher</span><span class="o">.</span><span class="n">check</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">initial_scan_complete</span><span class="p">:</span>
@@ -492,7 +508,14 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># The initial scan is still going. Stash the changes for later.</span>
             <span class="n">queued_changes</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">changes</span><span class="p">)</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">poll_interval</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">event</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># The processing above was the result of a manual trigger.</span>
+            <span class="c1"># Confirm to the sender that it has now completed.</span>
+            <span class="n">event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">event</span> <span class="o">=</span> <span class="n">manual_trigger</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">poll_interval</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
+            <span class="n">event</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <span class="k">def</span> <span class="nf">_process_changes</span><span class="p">(</span>
