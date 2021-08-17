@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.client.xarray &mdash; tiled 0.1.0a28.post60+gb667a9e documentation</title>
+  <title>tiled.client.xarray &mdash; tiled 0.1.0a28.post69+ga9ef862 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a28.post60+gb667a9e
+                0.1.0a28.post69+ga9ef862
               </div>
             
           
@@ -204,6 +204,7 @@
 <span class="kn">import</span> <span class="nn">builtins</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 
+<span class="kn">import</span> <span class="nn">pandas</span>
 <span class="kn">import</span> <span class="nn">xarray</span>
 
 <span class="kn">from</span> <span class="nn">..structures.dataframe</span> <span class="kn">import</span> <span class="n">deserialize_arrow</span>
@@ -556,6 +557,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span></div>
 
 
+<span class="n">URL_CHARACTER_LIMIT</span> <span class="o">=</span> <span class="mi">2000</span>  <span class="c1"># number of characters</span>
+<span class="n">_EXTRA_CHARS_PER_ITEM</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="s2">&quot;&amp;variable=&quot;</span><span class="p">)</span>
+
+
 <span class="k">class</span> <span class="nc">_WideTableFetcher</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">get</span><span class="p">,</span> <span class="n">link</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">get</span> <span class="o">=</span> <span class="n">get</span>
@@ -571,15 +576,42 @@
 
     <span class="k">def</span> <span class="nf">dataframe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">link</span><span class="p">,</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
-                    <span class="s2">&quot;variable&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="o">=</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+            <span class="c1"># If self.variables contains many and/or lengthy names,</span>
+            <span class="c1"># we can bump into the URI size limit commonly imposed by</span>
+            <span class="c1"># HTTP stacks (e.g. nginx). The HTTP spec does not define a limit,</span>
+            <span class="c1"># but a common setting is 4K or 8K (for all the headers together).</span>
+            <span class="c1"># As another reference point, Internet Explorer imposes a</span>
+            <span class="c1"># 2048-character limit on URLs.</span>
+            <span class="n">variables</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">dataframes</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">budget</span> <span class="o">=</span> <span class="n">URL_CHARACTER_LIMIT</span>
+            <span class="n">budget</span> <span class="o">-=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">link</span><span class="p">)</span>
+            <span class="c1"># Fetch the variables in batches.</span>
+            <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">variables</span><span class="p">:</span>
+                <span class="n">budget</span> <span class="o">-=</span> <span class="n">_EXTRA_CHARS_PER_ITEM</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">variable</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">budget</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># Fetch a batch and then add `variable` to the next batch.</span>
+                    <span class="n">dataframes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fetch_variables</span><span class="p">(</span><span class="n">variables</span><span class="p">))</span>
+                    <span class="n">variables</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                    <span class="n">budget</span> <span class="o">=</span> <span class="n">URL_CHARACTER_LIMIT</span> <span class="o">-</span> <span class="p">(</span>
+                        <span class="n">_EXTRA_CHARS_PER_ITEM</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">variable</span><span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="n">variables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">variable</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">variables</span><span class="p">:</span>
+                <span class="c1"># Fetch the final batch.</span>
+                <span class="n">dataframes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fetch_variables</span><span class="p">(</span><span class="n">variables</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dataframes</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span>
+
+    <span class="k">def</span> <span class="nf">_fetch_variables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="p">):</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">link</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
+                <span class="s2">&quot;variable&quot;</span><span class="p">:</span> <span class="n">variables</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_MockClient</span><span class="p">:</span>
