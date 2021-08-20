@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Authentication Details &mdash; tiled 0.1.0a30.post2+g8231168 documentation</title>
+  <title>Authentication Details &mdash; tiled 0.1.0a30.post5+ga7d8939 documentation</title>
   
 
   
@@ -70,7 +70,7 @@
             
             
               <div class="version">
-                0.1.0a30.post2+g8231168
+                0.1.0a30.post5+ga7d8939
               </div>
             
           
@@ -130,7 +130,10 @@
 <li class="toctree-l1"><a class="reference internal" href="http-api-overview.html">HTTP API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="python-client.html">Python Client</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Authentication Details</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#configure-session-lifetime-parameters">Configure session lifetime parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#client-authentcation-flow">Client authentcation flow</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="#configure-session-lifetime-parameters">Configure session lifetime parameters</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#set-and-rotate-the-signing-key">Set and Rotate the Signing Key</a></li>
 </ul>
 </li>
@@ -212,11 +215,108 @@
 <p>See <a class="reference internal" href="../explanations/security.html"><span class="doc">Security</span></a> for an overview.
 This page addresses technical details relevant to:</p>
 <ul class="simple">
+<li><p>Client authentcation flow</p></li>
+</ul>
+<ul class="simple">
 <li><p>Customizing the various lifetimes (timeouts) in the system</p></li>
 <li><p>Horizontally scaling deployments</p></li>
 </ul>
-<div class="section" id="configure-session-lifetime-parameters">
-<h2>Configure session lifetime parameters<a class="headerlink" href="#configure-session-lifetime-parameters" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="client-authentcation-flow">
+<h2>Client authentcation flow<a class="headerlink" href="#client-authentcation-flow" title="Permalink to this headline">¶</a></h2>
+<p>In this section we’ll use the command-line HTTP client
+<a class="reference external" href="https://httie.io/">httpie</a> and <a class="reference external" href="https://stedolan.github.io/jq/">jq</a> to parse
+the JSON responses.</p>
+<p>We’ll start a tiled server with a demo “toy” authentcation system to work
+against. Save the following <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and start a server like so.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
+    authenticator: tiled.authenticators:DictionaryAuthenticator
+    args:
+        users_to_passwords:
+            alice: ${ALICE_PASSWORD}
+            bob: ${BOB_PASSWORD}
+            cara: ${CARA_PASSWORD}
+trees:
+    - path: /
+      tree: tiled.examples.toy_authentication:tree
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALICE_PASSWORD</span><span class="o">=</span><span class="n">secret1</span> <span class="n">BOB_PASSWORD</span><span class="o">=</span><span class="n">secret2</span> <span class="n">CARA_PASSWORD</span><span class="o">=</span><span class="n">secret3</span> <span class="n">tiled</span> <span class="n">serve</span> <span class="n">config</span> <span class="n">config</span><span class="o">.</span><span class="n">yml</span>
+</pre></div>
+</div>
+<p>Exchange username/password credentials for “access” and “refresh” tokens.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --form POST :8000/token username=alice password=secret1 &gt; tokens.json
+</pre></div>
+</div>
+<p>The content of <code class="docutils literal notranslate"><span class="pre">tokens.json</span></code> looks like</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">&quot;access_token&quot;</span><span class="p">:</span><span class="s2">&quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6MTYyODEwNTQyMiwidHlwZSI6ImFjY2VzcyJ9.bd8T3yYo9LDxBaCB3luSbSBh4dcVJDfXTFtW9s6aa3Q&quot;</span><span class="p">,</span>
+ <span class="nt">&quot;expires_in&quot;</span><span class="p">:</span><span class="mi">900</span><span class="p">,</span>
+ <span class="nt">&quot;refresh_token&quot;</span><span class="p">:</span><span class="s2">&quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsInR5cGUiOiJyZWZyZXNoIiwiaWF0IjoxNjI4MTE4OTIyLjU3NTM4NSwic2lkIjoxMzgwNjIwMjE2MTg3ODQyMTM2NzgwNzQ2NjEwNzE3NTAxMzEyNTMsInNjdCI6MTYyODExODkyMi41NzUzODV9.ms0y8x4csMVvyDozCCa2RE48nRDEd16RFK9RbrsBS5E&quot;</span><span class="p">,</span>
+ <span class="nt">&quot;refresh_token_expires_in&quot;</span><span class="p">:</span><span class="mi">604800</span><span class="p">,</span>
+ <span class="nt">&quot;token_type&quot;</span><span class="p">:</span><span class="s2">&quot;bearer&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Make an authenticated request using that access token.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http GET :8000/metadata/ &quot;Authorization:Bearer `jq -r .access_token tokens.json`&quot;
+HTTP/1.1 200 OK
+content-length: 239
+content-type: application/json
+date: Wed, 04 Aug 2021 19:17:56 GMT
+etag: c1f7b0169f6baabad75f80a0bf6a2656
+server: uvicorn
+server-timing: app;dur=3.9
+set-cookie: tiled_csrf=1-Cpa1WcwggakZ91FtNsscjM8VO1N1znmuILlL5hGY8; HttpOnly; Path=/; SameSite=lax
+
+{
+    &quot;data&quot;: {
+        &quot;attributes&quot;: {
+            &quot;count&quot;: 2,
+            &quot;metadata&quot;: {},
+            &quot;sorting&quot;: null,
+            &quot;specs&quot;: null
+        },
+        &quot;id&quot;: &quot;&quot;,
+        &quot;links&quot;: {
+            &quot;search&quot;: &quot;http://localhost:8000/search/&quot;,
+            &quot;self&quot;: &quot;http://localhost:8000/metadata/&quot;
+        },
+        &quot;meta&quot;: null,
+        &quot;type&quot;: &quot;tree&quot;
+    },
+    &quot;error&quot;: null,
+    &quot;links&quot;: null,
+    &quot;meta&quot;: {}
+}
+</pre></div>
+</div>
+<p>When the access token expires (after 15 minutes, by default) requests will be
+rejected like this.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http GET :8000/metadata/ &quot;Authorization:Bearer `jq -r .access_token tokens.json`&quot;
+HTTP/1.1 401 Unauthorized
+content-length: 53
+content-type: application/json
+date: Wed, 04 Aug 2021 19:22:07 GMT
+server: uvicorn
+server-timing: app;dur=2.7
+set-cookie: tiled_csrf=6sPHOrjBRzZOiSuXOXNtaDNyNNeqQj86nPIXf7X3C1M; HttpOnly; Path=/; SameSite=lax
+
+{
+    &quot;detail&quot;: &quot;Access token has expired. Refresh token.&quot;
+}
+</pre></div>
+</div>
+<p>Exchange the refresh token for a fresh pair of access and refresh tokens.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST :8000/token/refresh refresh_token=`jq -r .refresh_token tokens.json` &gt; tokens.json
+</pre></div>
+</div>
+<p>And resume making requests with the new access token.</p>
+<p>To experiment with token expiry and renewal, it can be useful to tune the various
+“max age” parameters very low—10 seconds or so. The next section describes how
+to configure these parameters.</p>
+</div>
+</div>
+<div class="tex2jax_ignore mathjax_ignore section" id="configure-session-lifetime-parameters">
+<h1>Configure session lifetime parameters<a class="headerlink" href="#configure-session-lifetime-parameters" title="Permalink to this headline">¶</a></h1>
 <p>The server implements “sliding sessions”. The following are tunable:</p>
 <ul class="simple">
 <li><p>Maximum inactive session age — Time after which inactive sessions
@@ -244,7 +344,6 @@ given in units of seconds. The default values are shown.</p>
 </pre></div>
 </div>
 <p>See also <a class="reference internal" href="service-configuration.html"><span class="doc">Service Configuration Reference</span></a>.</p>
-</div>
 <div class="section" id="set-and-rotate-the-signing-key">
 <h2>Set and Rotate the Signing Key<a class="headerlink" href="#set-and-rotate-the-signing-key" title="Permalink to this headline">¶</a></h2>
 <p>The access tokens are signed using a secret key that, by default, is generated
