@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.trees.files &mdash; tiled 0.1.0a30.post16+gba4203f documentation</title>
+  <title>tiled.trees.files &mdash; tiled 0.1.0a30.post31+g2c6da1c documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a30.post16+gba4203f
+                0.1.0a30.post31+g2c6da1c
               </div>
             
           
@@ -219,9 +219,62 @@
 <span class="kn">from</span> <span class="nn">.in_memory</span> <span class="kn">import</span> <span class="n">Tree</span> <span class="k">as</span> <span class="n">TreeInMemory</span>
 
 
+<span class="n">POLL_INTERVAL</span> <span class="o">=</span> <span class="mf">0.2</span>  <span class="c1"># seconds between periodic scans of filesystem</span>
+
+
+<span class="k">def</span> <span class="nf">strip_suffixes</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For use with key_from_filename parameter.</span>
+
+<span class="sd">    This gives the &#39;base&#39; as the key.</span>
+
+<span class="sd">    &gt;&gt;&gt; strip_suffixes(&quot;a.tif&quot;)</span>
+<span class="sd">    &quot;a&quot;</span>
+
+<span class="sd">    &gt;&gt;&gt; strip_suffixes(&quot;thing.tar.gz&quot;)</span>
+<span class="sd">    &quot;thing&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+    <span class="c1"># You would think there would be a method for this, but there is not.</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">suffixes</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)[:</span> <span class="o">-</span><span class="nb">sum</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">path</span><span class="o">.</span><span class="n">suffixes</span><span class="p">])]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">filename</span>
+
+
+<span class="k">def</span> <span class="nf">identity</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For use with key_from_filename parameter.</span>
+
+<span class="sd">    This give the full filename (with suffixes) as the key.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">filename</span>
+
+
 <div class="viewcode-block" id="Tree"><a class="viewcode-back" href="../../../reference/generated/tiled.trees.files.Tree.html#tiled.trees.files.Tree">[docs]</a><span class="k">class</span> <span class="nc">Tree</span><span class="p">(</span><span class="n">TreeInMemory</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    A Tree constructed by walking a directory and watching it for changes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ignore_re_dirs : str, optional</span>
+<span class="sd">        Regular expression. Matched directories will be ignored.</span>
+<span class="sd">    ignore_re_files : str, optional</span>
+<span class="sd">        Regular expression. Matched files will be ignored.</span>
+<span class="sd">    readers_by_mimetype : dict, optional</span>
+<span class="sd">        Map a mimetype to a Reader suitable for that mimetype</span>
+<span class="sd">    mimetypes_by_file_ext : dict, optional</span>
+<span class="sd">        Map a file extension (e.g. &#39;.tif&#39;) to a mimetype (e.g. &#39;image/tiff&#39;)</span>
+<span class="sd">    key_from_filename : callable[str] -&gt; str,</span>
+<span class="sd">        Given a filename, return the key for the item that will represent it.</span>
+<span class="sd">        By default, this strips off the suffixes, so &quot;a.tif&quot; -&gt; &quot;a&quot;.</span>
+<span class="sd">    metadata : dict, optional,</span>
+<span class="sd">        Metadata for the top-level node of this tree.</span>
+<span class="sd">    access_policy : AccessPolicy, optional</span>
+<span class="sd">    authenticated_identity : str, optional</span>
+<span class="sd">    error_if_missing : boolean, optional</span>
+<span class="sd">        If True (default) raise an error if the directory does not exist.</span>
+<span class="sd">        If False, wait and poll for the directory to be created later.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -281,7 +334,7 @@
         <span class="n">ignore_re_files</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">readers_by_mimetype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">mimetypes_by_file_ext</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">key_from_filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">key_from_filename</span><span class="o">=</span><span class="n">strip_suffixes</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">authenticated_identity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -302,6 +355,8 @@
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">readers_by_mimetype</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                 <span class="n">readers_by_mimetype</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key_from_filename</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">key_from_filename</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">key_from_filename</span><span class="p">)</span>
         <span class="c1"># User-provided readers take precedence over defaults.</span>
         <span class="n">merged_readers_by_mimetype</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">ChainMap</span><span class="p">(</span>
             <span class="n">readers_by_mimetype</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DEFAULT_READERS_BY_MIMETYPE</span>
@@ -310,12 +365,6 @@
         <span class="n">merged_mimetypes_by_file_ext</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">ChainMap</span><span class="p">(</span>
             <span class="n">mimetypes_by_file_ext</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DEFAULT_MIMETYPES_BY_FILE_EXT</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="n">key_from_filename</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-
-            <span class="k">def</span> <span class="nf">key_from_filename</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
-                <span class="c1"># identity</span>
-                <span class="k">return</span> <span class="n">filename</span>
-
         <span class="c1"># Map subdirectory path parts, as in (&#39;a&#39;, &#39;b&#39;, &#39;c&#39;), to mapping of partials.</span>
         <span class="c1"># This single index represents the entire nested directory structure. (We</span>
         <span class="c1"># could have done this recursively, with each sub-Tree watching its own</span>
@@ -323,6 +372,8 @@
         <span class="c1"># walk of the nested directory structure and having a single thread watching</span>
         <span class="c1"># for changes within that structure.)</span>
         <span class="n">index</span> <span class="o">=</span> <span class="p">{():</span> <span class="p">{}}</span>
+        <span class="c1"># Map key to set of filepaths that map to that key.</span>
+        <span class="n">collision_tracker</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
         <span class="c1"># 1. Start watching directory for changes and accumulating a queue of them.</span>
         <span class="c1"># 2. Do an initial scan of the files in the directory.</span>
         <span class="c1"># 3. When the initial scan completes, start processing changes. This</span>
@@ -345,6 +396,7 @@
                 <span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
                 <span class="n">manual_trigger</span><span class="p">,</span>
                 <span class="n">greedy</span><span class="p">,</span>
+                <span class="n">collision_tracker</span><span class="p">,</span>
             <span class="p">),</span>
             <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">name</span><span class="o">=</span><span class="s2">&quot;tiled-watch-filesystem-changes&quot;</span><span class="p">,</span>
@@ -369,15 +421,7 @@
                     <span class="n">valid_subdirectories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
             <span class="n">subdirectories</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">valid_subdirectories</span>
             <span class="k">for</span> <span class="n">subdirectory</span> <span class="ow">in</span> <span class="n">subdirectories</span><span class="p">:</span>
-                <span class="c1"># Make a new mapping and a corresponding Tree for this subdirectory.</span>
-                <span class="n">mapping</span> <span class="o">=</span> <span class="p">{}</span>
-                <span class="n">index</span><span class="p">[</span><span class="n">parts</span> <span class="o">+</span> <span class="p">(</span><span class="n">subdirectory</span><span class="p">,)]</span> <span class="o">=</span> <span class="n">mapping</span>
-                <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
-                    <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">subdirectory</span><span class="p">]</span> <span class="o">=</span> <span class="n">TreeInMemory</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">subdirectory</span><span class="p">]</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
-                        <span class="n">TreeInMemory</span><span class="p">,</span> <span class="n">CachingMap</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
-                    <span class="p">)</span>
+                <span class="n">_new_subdir</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">parts</span><span class="p">,</span> <span class="n">subdirectory</span><span class="p">,</span> <span class="n">greedy</span><span class="p">)</span>
             <span class="c1"># Account for ignore_re_files and update which files we will traverse.</span>
             <span class="n">valid_files</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
@@ -392,19 +436,33 @@
                 <span class="p">):</span>
                     <span class="k">continue</span>
                 <span class="c1"># Add items to the mapping for this root directory.</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
-                    <span class="n">reader_factory</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
-                        <span class="n">merged_readers_by_mimetype</span><span class="p">,</span>
-                        <span class="n">merged_mimetypes_by_file_ext</span><span class="p">,</span>
-                        <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">filename</span><span class="p">),</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+                <span class="n">filepath</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="o">*</span><span class="n">parts</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">collision_tracker</span><span class="p">:</span>
+                    <span class="c1"># There is already a filepath that maps to this key!</span>
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                        <span class="n">COLLISION_WARNING</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="n">filepath</span><span class="o">=</span><span class="n">filepath</span><span class="p">,</span>
+                            <span class="n">existing</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">]],</span>
+                            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+                        <span class="p">)</span>
                     <span class="p">)</span>
-                    <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
-                        <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span><span class="p">()</span>
+                    <span class="k">del</span> <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">reader_factory</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
+                            <span class="n">merged_readers_by_mimetype</span><span class="p">,</span>
+                            <span class="n">merged_mimetypes_by_file_ext</span><span class="p">,</span>
+                            <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">filename</span><span class="p">),</span>
+                        <span class="p">)</span>
+                    <span class="k">except</span> <span class="n">NoReaderAvailable</span><span class="p">:</span>
+                        <span class="k">pass</span>
                     <span class="k">else</span><span class="p">:</span>
-                        <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span>
-                <span class="k">except</span> <span class="n">NoReaderAvailable</span><span class="p">:</span>
-                    <span class="k">pass</span>
+                        <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
+                            <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span><span class="p">()</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">index</span><span class="p">[</span><span class="n">parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span>
+                <span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
         <span class="c1"># Appending any object will cause bool(initial_scan_complete) to</span>
         <span class="c1"># evaluate to True.</span>
         <span class="n">initial_scan_complete</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">object</span><span class="p">())</span>
@@ -486,7 +544,7 @@
     <span class="n">watcher_thread_kill_switch</span><span class="p">,</span>
     <span class="n">manual_trigger</span><span class="p">,</span>
     <span class="n">greedy</span><span class="p">,</span>
-    <span class="n">poll_interval</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="n">collision_tracker</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="n">watcher</span> <span class="o">=</span> <span class="n">RegExpWatcher</span><span class="p">(</span>
         <span class="n">directory</span><span class="p">,</span>
@@ -508,6 +566,7 @@
                     <span class="n">key_from_filename</span><span class="p">,</span>
                     <span class="n">index</span><span class="p">,</span>
                     <span class="n">greedy</span><span class="p">,</span>
+                    <span class="n">collision_tracker</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="c1"># Process changes just collected.</span>
             <span class="n">_process_changes</span><span class="p">(</span>
@@ -518,6 +577,7 @@
                 <span class="n">key_from_filename</span><span class="p">,</span>
                 <span class="n">index</span><span class="p">,</span>
                 <span class="n">greedy</span><span class="p">,</span>
+                <span class="n">collision_tracker</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># The initial scan is still going. Stash the changes for later.</span>
@@ -527,7 +587,7 @@
             <span class="c1"># Confirm to the sender that it has now completed.</span>
             <span class="n">event</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">event</span> <span class="o">=</span> <span class="n">manual_trigger</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">poll_interval</span><span class="p">)</span>
+            <span class="n">event</span> <span class="o">=</span> <span class="n">manual_trigger</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">POLL_INTERVAL</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
             <span class="n">event</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -540,6 +600,7 @@
     <span class="n">key_from_filename</span><span class="p">,</span>
     <span class="n">index</span><span class="p">,</span>
     <span class="n">greedy</span><span class="p">,</span>
+    <span class="n">collision_tracker</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="n">ignore</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">changes</span><span class="p">:</span>
@@ -548,30 +609,78 @@
             <span class="c1"># We have seen this before and could not find a Reader for it.</span>
             <span class="c1"># Do not try again.</span>
             <span class="k">continue</span>
-        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span>
-        <span class="n">parent_parts</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parts</span>
+        <span class="n">rel_path</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+        <span class="n">parent_parts</span> <span class="o">=</span> <span class="n">rel_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parts</span>
         <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">added</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+                <span class="n">_new_subdir</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">parent_parts</span><span class="p">,</span> <span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">greedy</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
                 <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-                <span class="n">reader_factory</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
-                    <span class="n">readers_by_mimetype</span><span class="p">,</span>
-                    <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
-                    <span class="n">path</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
-                    <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">collision_tracker</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                    <span class="c1"># The collision tracker contains a nonempty set.</span>
+                    <span class="c1"># There is already a filepath that maps to this key!</span>
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                        <span class="n">COLLISION_WARNING</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="n">filepath</span><span class="o">=</span><span class="n">rel_path</span><span class="p">,</span>
+                            <span class="n">existing</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">]],</span>
+                            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">del</span> <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span>
-            <span class="k">except</span> <span class="n">NoReaderAvailable</span><span class="p">:</span>
-                <span class="c1"># Ignore this file in the future.</span>
-                <span class="c1"># We already know that we do not know how to find a Reader</span>
-                <span class="c1"># for this filename.</span>
-                <span class="n">ignore</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                    <span class="c1"># We may observe the creation of a file before we observe the creation of its</span>
+                    <span class="c1"># directory.</span>
+                    <span class="k">if</span> <span class="n">parent_parts</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">index</span><span class="p">:</span>
+                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">parent_parts</span><span class="p">)):</span>
+                            <span class="k">if</span> <span class="n">parent_parts</span><span class="p">[:</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">i</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">index</span><span class="p">:</span>
+                                <span class="n">_new_subdir</span><span class="p">(</span>
+                                    <span class="n">index</span><span class="p">,</span> <span class="n">parent_parts</span><span class="p">[:</span><span class="n">i</span><span class="p">],</span> <span class="n">parent_parts</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">greedy</span>
+                                <span class="p">)</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">reader_factory</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
+                            <span class="n">readers_by_mimetype</span><span class="p">,</span>
+                            <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
+                            <span class="n">path</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="k">except</span> <span class="n">NoReaderAvailable</span><span class="p">:</span>
+                        <span class="c1"># Ignore this file in the future.</span>
+                        <span class="c1"># We already know that we do not know how to find a Reader</span>
+                        <span class="c1"># for this filename.</span>
+                        <span class="n">ignore</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
+                            <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span><span class="p">()</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span>
+                    <span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">rel_path</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">deleted</span><span class="p">:</span>
-            <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-            <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+                <span class="n">index</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">parent_parts</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">rel_path</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># A key collision was resolved by the removal (or renaming)</span>
+                    <span class="c1"># of a conflicting file.</span>
+                    <span class="p">(</span><span class="n">rel_path_with_newly_unique_key</span><span class="p">,)</span> <span class="o">=</span> <span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                    <span class="n">collision_tracker</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                    <span class="c1"># Process the remaining file which now has a key that is unique.</span>
+                    <span class="n">_process_changes</span><span class="p">(</span>
+                        <span class="p">[(</span><span class="n">Change</span><span class="o">.</span><span class="n">added</span><span class="p">,</span> <span class="n">directory</span> <span class="o">/</span> <span class="n">rel_path_with_newly_unique_key</span><span class="p">)],</span>
+                        <span class="n">directory</span><span class="p">,</span>
+                        <span class="n">readers_by_mimetype</span><span class="p">,</span>
+                        <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
+                        <span class="n">key_from_filename</span><span class="p">,</span>
+                        <span class="n">index</span><span class="p">,</span>
+                        <span class="n">greedy</span><span class="p">,</span>
+                        <span class="n">collision_tracker</span><span class="p">,</span>
+                    <span class="p">)</span>
         <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">modified</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+                <span class="c1"># Nothing to do</span>
+                <span class="k">continue</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
             <span class="c1"># Why do we need a try/except here? A reasonable question!</span>
             <span class="c1"># Normally, we would learn about the file first via a Change.added</span>
             <span class="c1"># or via the initial scan. Then, later, when we learn about modification</span>
@@ -581,21 +690,21 @@
             <span class="c1"># to our index. Therefore, we guard this with a try/except, knowing</span>
             <span class="c1"># that this could be the first time we see this path.</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">key</span> <span class="o">=</span> <span class="n">key_from_filename</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
                 <span class="n">reader_factory</span> <span class="o">=</span> <span class="n">_reader_factory_for_file</span><span class="p">(</span>
                     <span class="n">readers_by_mimetype</span><span class="p">,</span>
                     <span class="n">mimetypes_by_file_ext</span><span class="p">,</span>
                     <span class="n">path</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
-                    <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span><span class="p">()</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span>
             <span class="k">except</span> <span class="n">NoReaderAvailable</span><span class="p">:</span>
                 <span class="c1"># Ignore this file in the future.</span>
                 <span class="c1"># We already know that we do not know how to find a Reader</span>
                 <span class="c1"># for this filename.</span>
                 <span class="n">ignore</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
+                    <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reader_factory</span>
 
 
 <span class="k">def</span> <span class="nf">_reader_factory_for_file</span><span class="p">(</span><span class="n">readers_by_mimetype</span><span class="p">,</span> <span class="n">mimetypes_by_file_ext</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
@@ -634,6 +743,33 @@
 
 <span class="k">class</span> <span class="nc">NoReaderAvailable</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
     <span class="k">pass</span>
+
+
+<span class="k">def</span> <span class="nf">_new_subdir</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">parent_parts</span><span class="p">,</span> <span class="n">subdirectory</span><span class="p">,</span> <span class="n">greedy</span><span class="p">):</span>
+    <span class="s2">&quot;make a new mapping and a corresponding tree for this subdirectory.&quot;</span>
+    <span class="n">mapping</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span> <span class="o">+</span> <span class="p">(</span><span class="n">subdirectory</span><span class="p">,)]</span> <span class="o">=</span> <span class="n">mapping</span>
+    <span class="k">if</span> <span class="n">greedy</span><span class="p">:</span>
+        <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">subdirectory</span><span class="p">]</span> <span class="o">=</span> <span class="n">TreeInMemory</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">index</span><span class="p">[</span><span class="n">parent_parts</span><span class="p">][</span><span class="n">subdirectory</span><span class="p">]</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+            <span class="n">TreeInMemory</span><span class="p">,</span> <span class="n">CachingMap</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
+        <span class="p">)</span>
+
+
+<span class="n">COLLISION_WARNING</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;The file </span><span class="si">{filepath!s}</span><span class="s2"> maps to the key </span><span class="si">{key!r}</span><span class="s2">. &quot;</span>
+    <span class="s2">&quot;which collides with the file(s) </span><span class="si">{existing!r}</span><span class="s2">. &quot;</span>
+    <span class="s2">&quot;All files that map to this key will be ignored until the collision is resolved. &quot;</span>
+    <span class="s2">&quot;To resolve this do one of the following: &quot;</span>
+    <span class="s2">&quot;(1) Use the full, unique filename as the key, &quot;</span>
+    <span class="s2">&quot;via the commandline flag --keep-ext &quot;</span>
+    <span class="s2">&quot;or the configurable argument &quot;</span>
+    <span class="s2">&quot;key_from_filename: &#39;tiled.trees.files:identity&#39;  # Use full filename as key &quot;</span>
+    <span class="s2">&quot;(2) Remove or rename one of the files. &quot;</span>
+    <span class="s2">&quot;(3) Use a custom key_from_filename that &quot;</span>
+    <span class="s2">&quot;generates unique keys for this case.&quot;</span>
+<span class="p">)</span>
 </pre></div>
 
            </div>
