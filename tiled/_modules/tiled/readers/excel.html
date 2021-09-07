@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.readers.excel &mdash; tiled 0.1.0a30.post53+gb50c27d documentation</title>
+  <title>tiled.readers.excel &mdash; tiled 0.1.0a30.post100+gd1dbd33 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a30.post53+gb50c27d
+                0.1.0a30.post100+gd1dbd33
               </div>
             
           
@@ -110,7 +110,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/custom-formats.html">Add Support for a Custom Format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../how-to/scaling.html">Control Speed, Memory Usage, and Disk Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/tune-caches.html">Tune Caches to Balance Speed and Memory Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/docker.html">Run Tiled using Docker</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Explanations</span></p>
@@ -118,6 +118,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/structures.html">Structures</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caching Design and Roadmap</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/access-control.html">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/scaling-down.html">Scaling Tiled Down</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/faq.html">FAQ</a></li>
@@ -202,8 +203,9 @@
            <div itemprop="articleBody">
             
   <h1>Source code for tiled.readers.excel</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">..trees.in_memory</span> <span class="kn">import</span> <span class="n">Tree</span>
-<span class="kn">from</span> <span class="nn">.dataframe</span> <span class="kn">import</span> <span class="n">DataFrameAdapter</span>
+<span></span><span class="kn">from</span> <span class="nn">.dataframe</span> <span class="kn">import</span> <span class="n">DataFrameAdapter</span>
+<span class="kn">from</span> <span class="nn">..trees.in_memory</span> <span class="kn">import</span> <span class="n">Tree</span>
+<span class="kn">from</span> <span class="nn">..server.object_cache</span> <span class="kn">import</span> <span class="n">get_object_cache</span><span class="p">,</span> <span class="n">NO_CACHE</span><span class="p">,</span> <span class="n">with_object_cache</span>
 
 <span class="kn">import</span> <span class="nn">dask.dataframe</span>
 <span class="kn">import</span> <span class="nn">pandas</span>
@@ -242,15 +244,21 @@
             <span class="n">excel_file</span> <span class="o">=</span> <span class="n">file</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">excel_file</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">ExcelFile</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
-        <span class="n">mapping</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">sheet_name</span><span class="p">:</span> <span class="n">DataFrameAdapter</span><span class="p">(</span>
-                <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
-                    <span class="n">excel_file</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">sheet_name</span><span class="p">),</span>
-                    <span class="n">npartitions</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># TODO Be smarter about this.</span>
-                <span class="p">)</span>
+        <span class="c1"># If an instance has previously been created using the same parameters,</span>
+        <span class="c1"># then we are here because the caller wants a *fresh* view on this data.</span>
+        <span class="c1"># Therefore, we should clear any cached data.</span>
+        <span class="n">cache</span> <span class="o">=</span> <span class="n">get_object_cache</span><span class="p">()</span>
+        <span class="n">mapping</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">sheet_name</span> <span class="ow">in</span> <span class="n">excel_file</span><span class="o">.</span><span class="n">sheet_names</span><span class="p">:</span>
+            <span class="n">cache_key</span> <span class="o">=</span> <span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">sheet_name</span><span class="p">)</span>
+            <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
+                <span class="n">with_object_cache</span><span class="p">(</span><span class="n">cache_key</span><span class="p">,</span> <span class="n">excel_file</span><span class="o">.</span><span class="n">parse</span><span class="p">,</span> <span class="n">sheet_name</span><span class="p">),</span>
+                <span class="n">npartitions</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># TODO Be smarter about this.</span>
             <span class="p">)</span>
-            <span class="k">for</span> <span class="n">sheet_name</span> <span class="ow">in</span> <span class="n">excel_file</span><span class="o">.</span><span class="n">sheet_names</span>
-        <span class="p">}</span>
+            <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">NO_CACHE</span><span class="p">:</span>
+                <span class="n">cache</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">cache_key</span><span class="p">)</span>  <span class="c1"># parsed sheet content</span>
+                <span class="n">cache</span><span class="o">.</span><span class="n">discard_dask</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">__dask_keys__</span><span class="p">())</span>  <span class="c1"># dask tasks</span>
+            <span class="n">mapping</span><span class="p">[</span><span class="n">sheet_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">DataFrameAdapter</span><span class="p">(</span><span class="n">ddf</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span></div>
 </pre></div>
 

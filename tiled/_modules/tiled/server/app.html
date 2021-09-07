@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.server.app &mdash; tiled 0.1.0a30.post53+gb50c27d documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a30.post100+gd1dbd33 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a30.post53+gb50c27d
+                0.1.0a30.post100+gd1dbd33
               </div>
             
           
@@ -110,7 +110,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/custom-formats.html">Add Support for a Custom Format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../how-to/scaling.html">Control Speed, Memory Usage, and Disk Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/tune-caches.html">Tune Caches to Balance Speed and Memory Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/docker.html">Run Tiled using Docker</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Explanations</span></p>
@@ -118,6 +118,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/structures.html">Structures</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caching Design and Roadmap</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/access-control.html">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/scaling-down.html">Scaling Tiled Down</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/faq.html">FAQ</a></li>
@@ -202,11 +203,11 @@
            <div itemprop="articleBody">
             
   <h1>Source code for tiled.server.app</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
+<span></span><span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">secrets</span>
 <span class="kn">import</span> <span class="nn">sys</span>
-<span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
 
 <span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span>
@@ -227,6 +228,13 @@
     <span class="n">get_query_registry</span><span class="p">,</span>
     <span class="n">get_serialization_registry</span><span class="p">,</span>
     <span class="n">PatchedStreamingResponse</span><span class="p">,</span>
+    <span class="n">record_timing</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">.object_cache</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ObjectCache</span><span class="p">,</span>
+    <span class="n">logger</span> <span class="k">as</span> <span class="n">object_cache_logger</span><span class="p">,</span>
+    <span class="n">NO_CACHE</span><span class="p">,</span>
+    <span class="n">set_object_cache</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.router</span> <span class="kn">import</span> <span class="n">declare_search_router</span><span class="p">,</span> <span class="n">router</span>
 <span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
@@ -265,9 +273,8 @@
     <span class="nd">@app</span><span class="o">.</span><span class="n">on_event</span><span class="p">(</span><span class="s2">&quot;startup&quot;</span><span class="p">)</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">startup_event</span><span class="p">():</span>
         <span class="c1"># Validate the single-user API key.</span>
-        <span class="n">single_user_api_key</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span>
-            <span class="n">get_settings</span>
-        <span class="p">]()</span><span class="o">.</span><span class="n">single_user_api_key</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span>
+        <span class="n">single_user_api_key</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">single_user_api_key</span>
         <span class="k">if</span> <span class="n">single_user_api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">single_user_api_key</span><span class="o">.</span><span class="n">isalnum</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -290,9 +297,36 @@
         <span class="c1"># The /search route is defined at server startup so that the user has the</span>
         <span class="c1"># opporunity to register custom query types before startup.</span>
         <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">declare_search_router</span><span class="p">(</span><span class="n">query_registry</span><span class="p">))</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">allow_origins</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
-            <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span><span class="o">.</span><span class="n">allow_origins</span>
-        <span class="p">)</span>
+
+        <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">allow_origins</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">allow_origins</span><span class="p">)</span>
+
+        <span class="n">object_cache_logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">object_cache_log_level</span><span class="o">.</span><span class="n">upper</span><span class="p">())</span>
+        <span class="n">object_cache_available_bytes</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">object_cache_available_bytes</span>
+        <span class="kn">import</span> <span class="nn">psutil</span>
+
+        <span class="n">TOTAL_PHYSICAL_MEMORY</span> <span class="o">=</span> <span class="n">psutil</span><span class="o">.</span><span class="n">virtual_memory</span><span class="p">()</span><span class="o">.</span><span class="n">total</span>
+        <span class="k">if</span> <span class="n">object_cache_available_bytes</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Negative object cache size is not interpretable.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">object_cache_available_bytes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">cache</span> <span class="o">=</span> <span class="n">NO_CACHE</span>
+            <span class="n">object_cache_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;disabled&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">object_cache_available_bytes</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="c1"># Interpret this as a fraction of system memory.</span>
+
+                <span class="n">object_cache_available_bytes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span>
+                    <span class="n">TOTAL_PHYSICAL_MEMORY</span> <span class="o">*</span> <span class="n">object_cache_available_bytes</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">object_cache_available_bytes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">object_cache_available_bytes</span><span class="p">)</span>
+            <span class="n">cache</span> <span class="o">=</span> <span class="n">ObjectCache</span><span class="p">(</span><span class="n">object_cache_available_bytes</span><span class="p">)</span>
+            <span class="n">percentage</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span>
+                <span class="n">object_cache_available_bytes</span> <span class="o">/</span> <span class="n">TOTAL_PHYSICAL_MEMORY</span> <span class="o">*</span> <span class="mi">100</span>
+            <span class="p">)</span>
+            <span class="n">object_cache_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Will use up to </span><span class="si">{</span><span class="n">object_cache_available_bytes</span><span class="si">}</span><span class="s2"> bytes (</span><span class="si">{</span><span class="n">percentage</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2">% of total physical RAM)&quot;</span>
+            <span class="p">)</span>
+        <span class="n">set_object_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
 
     <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
         <span class="n">CompressionMiddleware</span><span class="p">,</span>
@@ -308,12 +342,18 @@
         <span class="c1"># estimate it based on request/response time, but if we add more detailed</span>
         <span class="c1"># information here we should keep in mind security concerns and perhaps</span>
         <span class="c1"># only include this for certain users.</span>
-        <span class="c1"># Units are ms.</span>
-        <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="c1"># Initialize a dict that routes and dependencies can stash metrics in.</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
+        <span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">metrics</span> <span class="o">=</span> <span class="n">metrics</span>
+        <span class="c1"># Record the overall application time.</span>
+        <span class="k">with</span> <span class="n">record_timing</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="s2">&quot;app&quot;</span><span class="p">):</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Server-Timing&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">;&quot;</span>
+            <span class="o">+</span> <span class="s2">&quot;;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">metric</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">metric</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">metrics_</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">metrics_</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">)</span>
         <span class="n">response</span><span class="o">.</span><span class="vm">__class__</span> <span class="o">=</span> <span class="n">PatchedStreamingResponse</span>  <span class="c1"># tolerate memoryview</span>
-        <span class="n">process_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span>
-        <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Server-Timing&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;app;dur=</span><span class="si">{</span><span class="mi">1000</span> <span class="o">*</span> <span class="n">process_time</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="k">return</span> <span class="n">response</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
@@ -453,6 +493,15 @@
         <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;allow_origins&quot;</span><span class="p">]:</span>
             <span class="k">if</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="nb">setattr</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">server_settings</span><span class="p">[</span><span class="n">item</span><span class="p">])</span>
+        <span class="n">object_cache_available_bytes</span> <span class="o">=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;object_cache&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;available_bytes&quot;</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">object_cache_available_bytes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">setattr</span><span class="p">(</span>
+                <span class="n">settings</span><span class="p">,</span>
+                <span class="s2">&quot;object_cache_available_bytes&quot;</span><span class="p">,</span>
+                <span class="n">object_cache_available_bytes</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">settings</span>
 
     <span class="c1"># The Tree and Authenticator have the opportunity to add custom routes to</span>

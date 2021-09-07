@@ -7,7 +7,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>tiled.readers.dataframe &mdash; tiled 0.1.0a30.post53+gb50c27d documentation</title>
+  <title>tiled.readers.dataframe &mdash; tiled 0.1.0a30.post100+gd1dbd33 documentation</title>
   
 
   
@@ -68,7 +68,7 @@
             
             
               <div class="version">
-                0.1.0a30.post53+gb50c27d
+                0.1.0a30.post100+gd1dbd33
               </div>
             
           
@@ -110,7 +110,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/custom-formats.html">Add Support for a Custom Format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../how-to/scaling.html">Control Speed, Memory Usage, and Disk Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/tune-caches.html">Tune Caches to Balance Speed and Memory Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/docker.html">Run Tiled using Docker</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Explanations</span></p>
@@ -118,6 +118,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/structures.html">Structures</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caching Design and Roadmap</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/access-control.html">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/scaling-down.html">Scaling Tiled Down</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/faq.html">FAQ</a></li>
@@ -202,10 +203,12 @@
            <div itemprop="articleBody">
             
   <h1>Source code for tiled.readers.dataframe</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">dask.dataframe</span>
+<span></span><span class="kn">import</span> <span class="nn">dask.base</span>
+<span class="kn">import</span> <span class="nn">dask.dataframe</span>
 
 <span class="kn">from</span> <span class="nn">..structures.dataframe</span> <span class="kn">import</span> <span class="n">DataFrameMacroStructure</span><span class="p">,</span> <span class="n">DataFrameMicroStructure</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span>
+<span class="kn">from</span> <span class="nn">..server.object_cache</span> <span class="kn">import</span> <span class="n">get_object_cache</span><span class="p">,</span> <span class="n">NO_CACHE</span>
 
 
 <div class="viewcode-block" id="DataFrameAdapter"><a class="viewcode-back" href="../../../reference/generated/tiled.readers.dataframe.DataFrameAdapter.html#tiled.readers.dataframe.DataFrameAdapter">[docs]</a><span class="k">class</span> <span class="nc">DataFrameAdapter</span><span class="p">:</span>
@@ -226,13 +229,9 @@
 
     <span class="n">structure_family</span> <span class="o">=</span> <span class="s2">&quot;dataframe&quot;</span>
 
-<div class="viewcode-block" id="DataFrameAdapter.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.readers.dataframe.DataFrameAdapter.html#tiled.readers.dataframe.DataFrameAdapter.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;data must be a dask.dataframe.Dataframe, not a </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">data</span></div>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_pandas</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
 
 <div class="viewcode-block" id="DataFrameAdapter.read_csv"><a class="viewcode-back" href="../../../reference/generated/tiled.readers.dataframe.DataFrameAdapter.read_csv.html#tiled.readers.dataframe.DataFrameAdapter.read_csv">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">read_csv</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -249,11 +248,14 @@
 <span class="sd">        &gt;&gt;&gt; DataFrameAdapter.read_csv(&quot;myfiles.*.csv&quot;)</span>
 <span class="sd">        &gt;&gt;&gt; DataFrameAdapter.read_csv(&quot;s3://bucket/myfiles.*.csv&quot;)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span></div>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">from_pandas</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
+        <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="c1"># If an instance has previously been created using the same parameters,</span>
+        <span class="c1"># then we are here because the caller wants a *fresh* view on this data.</span>
+        <span class="c1"># Therefore, we should clear any cached data.</span>
+        <span class="n">cache</span> <span class="o">=</span> <span class="n">get_object_cache</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">NO_CACHE</span><span class="p">:</span>
+            <span class="n">cache</span><span class="o">.</span><span class="n">discard_dask</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">__dask_keys__</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">ddf</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span></div>
 
     <span class="n">read_csv</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="p">(</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -263,45 +265,43 @@
         <span class="o">+</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="o">.</span><span class="vm">__doc__</span>
     <span class="p">)</span>
 
+<div class="viewcode-block" id="DataFrameAdapter.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.readers.dataframe.DataFrameAdapter.html#tiled.readers.dataframe.DataFrameAdapter.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ddf</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ddf</span> <span class="o">=</span> <span class="n">ddf</span></div>
+
     <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="si">!r}</span><span class="s2">)&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_ddf</span><span class="si">!r}</span><span class="s2">)&quot;</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">DictView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">macrostructure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">DataFrameMacroStructure</span><span class="o">.</span><span class="n">from_dask_dataframe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DataFrameMacroStructure</span><span class="o">.</span><span class="n">from_dask_dataframe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ddf</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">microstructure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">DataFrameMicroStructure</span><span class="o">.</span><span class="n">from_dask_dataframe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DataFrameMicroStructure</span><span class="o">.</span><span class="n">from_dask_dataframe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ddf</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="c1"># TODO For the array reader we require returning a *lazy* object here.</span>
         <span class="c1"># Should rethink that. As is, this is inconsistent.</span>
         <span class="c1"># But we very intentionally do not support fancy row-slicing because</span>
         <span class="c1"># that becomes complex fast and it out of scope for Tiled.</span>
-        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+        <span class="n">ddf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ddf</span>
         <span class="k">if</span> <span class="n">columns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+            <span class="n">ddf</span> <span class="o">=</span> <span class="n">ddf</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span>
+        <span class="c1"># Note: If the cache is set to NO_CACHE, this is a null context.</span>
+        <span class="k">with</span> <span class="n">get_object_cache</span><span class="p">()</span><span class="o">.</span><span class="n">dask_context</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">ddf</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">read_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">partition</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">partition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">partitions</span><span class="p">[</span><span class="n">partition</span><span class="p">]</span>
+        <span class="n">partition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ddf</span><span class="o">.</span><span class="n">partitions</span><span class="p">[</span><span class="n">partition</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">columns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Sub-select columns.</span>
             <span class="n">partition</span> <span class="o">=</span> <span class="n">partition</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">partition</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
-
-    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># Allow the garbage collector to reclaim this memory.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span>
-
-    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+        <span class="c1"># Note: If the cache is set to NO_CACHE, this is a null context.</span>
+        <span class="k">with</span> <span class="n">get_object_cache</span><span class="p">()</span><span class="o">.</span><span class="n">dask_context</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">partition</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span></div>
 </pre></div>
 
            </div>
