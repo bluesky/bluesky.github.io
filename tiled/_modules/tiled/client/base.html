@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.base &mdash; tiled 0.1.0a36.post5+g156811c documentation</title>
+  <title>tiled.client.base &mdash; tiled 0.1.0a36.post31+gba982bf documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a36.post5+g156811c
+                0.1.0a36.post31+gba982bf
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -112,7 +112,9 @@
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.client.base</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span>
+<span></span><span class="kn">import</span> <span class="nn">importlib</span>
+
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">OneShotCachedMap</span>
 <span class="kn">from</span> <span class="nn">..trees.utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span>
 
 
@@ -234,11 +236,13 @@
 <span class="k">class</span> <span class="nc">BaseArrayClient</span><span class="p">(</span><span class="n">BaseStructureClient</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Shared by Array, DataArray, Dataset</span>
-
-<span class="sd">    Subclass must define:</span>
-
-<span class="sd">    * STRUCTURE_TYPE : type</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">route</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">route</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">):</span>
+            <span class="n">route</span> <span class="o">=</span> <span class="n">route</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_route</span> <span class="o">=</span> <span class="n">route</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="BaseArrayClient.structure"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseArrayClient.structure.html#tiled.client.base.BaseArrayClient.structure">[docs]</a>    <span class="k">def</span> <span class="nf">structure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Notice that we are NOT *caching* in self._structure here. We are</span>
@@ -249,15 +253,45 @@
             <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">,</span>
                 <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;structure.micro&quot;</span><span class="p">,</span> <span class="s2">&quot;structure.macro&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="s2">&quot;structure.micro&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;structure.macro&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;structure_family&quot;</span><span class="p">,</span>
+                    <span class="p">],</span>
                     <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
                 <span class="p">},</span>
             <span class="p">)</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span>
-            <span class="n">structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">STRUCTURE_TYPE</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+            <span class="n">attributes</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;attributes&quot;</span><span class="p">]</span>
+            <span class="n">structure_type</span> <span class="o">=</span> <span class="n">ARRAY_STRUCTURE_TYPES</span><span class="p">[</span><span class="n">attributes</span><span class="p">[</span><span class="s2">&quot;structure_family&quot;</span><span class="p">]]</span>
+            <span class="n">structure</span> <span class="o">=</span> <span class="n">structure_type</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">attributes</span><span class="p">[</span><span class="s2">&quot;structure&quot;</span><span class="p">])</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span>
         <span class="k">return</span> <span class="n">structure</span></div>
+
+
+<span class="c1"># Defer imports to avoid numpy requirement in this module.</span>
+<span class="n">ARRAY_STRUCTURE_TYPES</span> <span class="o">=</span> <span class="n">OneShotCachedMap</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;array&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
+            <span class="s2">&quot;...structures.array&quot;</span><span class="p">,</span> <span class="n">BaseArrayClient</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">ArrayStructure</span><span class="p">,</span>
+        <span class="s2">&quot;structured_array_generic&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
+            <span class="s2">&quot;...structures.structured_array&quot;</span><span class="p">,</span> <span class="n">BaseArrayClient</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">StructuredArrayGenericStructure</span><span class="p">,</span>
+        <span class="s2">&quot;structured_array_tabular&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
+            <span class="s2">&quot;...structures.structured_array&quot;</span><span class="p">,</span> <span class="n">BaseArrayClient</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">StructuredArrayTabularStructure</span><span class="p">,</span>
+        <span class="s2">&quot;variable&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
+            <span class="s2">&quot;...structures.xarray&quot;</span><span class="p">,</span> <span class="n">BaseArrayClient</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">VariableStructure</span><span class="p">,</span>
+        <span class="s2">&quot;data_array&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
+            <span class="s2">&quot;...structures.xarray&quot;</span><span class="p">,</span> <span class="n">BaseArrayClient</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">DataArrayStructure</span><span class="p">,</span>
+        <span class="s2">&quot;dataset&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
+            <span class="s2">&quot;...structures.xarray&quot;</span><span class="p">,</span> <span class="n">BaseArrayClient</span><span class="o">.</span><span class="vm">__module__</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">DatasetStructure</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
 </pre></div>
 
            </div>
