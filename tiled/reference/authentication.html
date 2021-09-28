@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Authentication Details &mdash; tiled 0.1.0a37.post7+g937f757 documentation</title>
+  <title>Authentication Details &mdash; tiled 0.1.0a37.post9+g206b8ca documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             <a href="../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a37.post7+g937f757
+                0.1.0a37.post9+g206b8ca
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -81,7 +81,11 @@
 <li class="toctree-l1"><a class="reference internal" href="http-api-overview.html">HTTP API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="python-client.html">Python Client</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Authentication Details</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#client-authentcation-flow">Client authentcation flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#client-authentication-flow">Client authentication flow</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#scenario-1-authenticator-directly-handles-credentials">Scenario 1: Authenticator Directly Handles Credentials</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#scenario-2-authenticator-refers-to-a-third-party-identity-provider">Scenario 2: Authenticator Refers to a Third-Party Identity Provider</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="#configure-session-lifetime-parameters">Configure session lifetime parameters</a><ul>
@@ -125,19 +129,23 @@
 <p>See <a class="reference internal" href="../explanations/security.html"><span class="doc">Security</span></a> for an overview.
 This page addresses technical details relevant to:</p>
 <ul class="simple">
-<li><p>Client authentcation flow</p></li>
+<li><p>Client authentication flow</p></li>
 </ul>
 <ul class="simple">
 <li><p>Customizing the various lifetimes (timeouts) in the system</p></li>
 <li><p>Horizontally scaling deployments</p></li>
 </ul>
-<section id="client-authentcation-flow">
-<h2>Client authentcation flow<a class="headerlink" href="#client-authentcation-flow" title="Permalink to this headline">¶</a></h2>
+<section id="client-authentication-flow">
+<h2>Client authentication flow<a class="headerlink" href="#client-authentication-flow" title="Permalink to this headline">¶</a></h2>
 <p>In this section we’ll use the command-line HTTP client
 <a class="reference external" href="https://httie.io/">httpie</a> and <a class="reference external" href="https://stedolan.github.io/jq/">jq</a> to parse
 the JSON responses.</p>
-<p>We’ll start a tiled server with a demo “toy” authentcation system to work
-against. Save the following <code class="docutils literal notranslate"><span class="pre">config.yml</span></code> and start a server like so.</p>
+<p>Some Tiled servers handle credentials directly. Others refer the user to a web
+browser to authenticate with a third party (e.g. ORCID, Google) and return to
+Tiled with a token. We will demonstrate each in turn.</p>
+<p>To test the first kind, we’ll start a tiled server with a demo “toy”
+authentication system to work against. Save the following <code class="docutils literal notranslate"><span class="pre">config.yml</span></code> and start
+a server like so.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
     authenticator: tiled.authenticators:DictionaryAuthenticator
     args:
@@ -153,8 +161,18 @@ trees:
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALICE_PASSWORD</span><span class="o">=</span><span class="n">secret1</span> <span class="n">BOB_PASSWORD</span><span class="o">=</span><span class="n">secret2</span> <span class="n">CARA_PASSWORD</span><span class="o">=</span><span class="n">secret3</span> <span class="n">tiled</span> <span class="n">serve</span> <span class="n">config</span> <span class="n">config</span><span class="o">.</span><span class="n">yml</span>
 </pre></div>
 </div>
+<p>To test the second kind, we’ll use <code class="docutils literal notranslate"><span class="pre">https://tiled-demo.blueskyproject.io</span></code>, which
+is configured to use <a class="reference external" href="https://orcid.org/">ORCID</a> for authentication.</p>
+<section id="scenario-1-authenticator-directly-handles-credentials">
+<h3>Scenario 1: Authenticator Directly Handles Credentials<a class="headerlink" href="#scenario-1-authenticator-directly-handles-credentials" title="Permalink to this headline">¶</a></h3>
+<p>An initial handshake with the <code class="docutils literal notranslate"><span class="pre">/</span></code> route tells us that this server uses
+<code class="docutils literal notranslate"><span class="pre">&quot;password&quot;</span></code> authentication.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http :8000/ | jq .authentication.type
+&quot;password&quot;
+</pre></div>
+</div>
 <p>Exchange username/password credentials for “access” and “refresh” tokens.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --form POST :8000/token username=alice password=secret1 &gt; tokens.json
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --form POST :8000/auth/token username=alice password=secret1 &gt; tokens.json
 </pre></div>
 </div>
 <p>The content of <code class="docutils literal notranslate"><span class="pre">tokens.json</span></code> looks like</p>
@@ -216,13 +234,38 @@ set-cookie: tiled_csrf=6sPHOrjBRzZOiSuXOXNtaDNyNNeqQj86nPIXf7X3C1M; HttpOnly; Pa
 </pre></div>
 </div>
 <p>Exchange the refresh token for a fresh pair of access and refresh tokens.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST :8000/token/refresh refresh_token=`jq -r .refresh_token tokens.json` &gt; tokens.json
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST :8000/auth/token/refresh refresh_token=`jq -r .refresh_token tokens.json` &gt; tokens.json
 </pre></div>
 </div>
 <p>And resume making requests with the new access token.</p>
 <p>To experiment with token expiry and renewal, it can be useful to tune the various
 “max age” parameters very low—10 seconds or so. The next section describes how
 to configure these parameters.</p>
+</section>
+<section id="scenario-2-authenticator-refers-to-a-third-party-identity-provider">
+<h3>Scenario 2: Authenticator Refers to a Third-Party Identity Provider<a class="headerlink" href="#scenario-2-authenticator-refers-to-a-third-party-identity-provider" title="Permalink to this headline">¶</a></h3>
+<p>An initial handshake with the <code class="docutils literal notranslate"><span class="pre">/</span></code> route tells us that this server uses
+<code class="docutils literal notranslate"><span class="pre">&quot;external&quot;</span></code> authentication.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http https://tiled-demo.blueskyproject.io/ | jq .authentication.type
+&quot;external&quot;
+</pre></div>
+</div>
+<p>Elsewhere in this same response, we can find the authentication endpoint for
+this external identity provider.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http https://tiled-demo.blueskyproject.io/ | jq .authentication.endpoint
+&quot;https://orcid.org/oauth/authorize?client_id=APP-0ROS9DU5F717F7XN&amp;response_type=code&amp;scope=openid&amp;redirect_uri=https://tiled-demo.blueskyproject.io/auth/code&quot;,
+</pre></div>
+</div>
+<p>Navigate to this address in a web browser, log in when prompted, and authorize
+Tiled when prompted.  You will be redirected to a page at
+<code class="docutils literal notranslate"><span class="pre">https://tiled-demo.blueskyproject.io/auth/code?code=[redacted]</span></code> and shown
+a valid refresh token from Tiled that encodes your ORCID username. Exchange the
+refresh token for an access token and a fresh refresh token like so.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST https://tiled-demo.blueskyproject.io/token/refresh refresh_token=&quot;TOKEN PASTED FROM WEB BROWSER&quot; &gt; tokens.json
+</pre></div>
+</div>
+<p>From here, everything follows the same as in Scenario 1, above.</p>
+</section>
 </section>
 </section>
 <section class="tex2jax_ignore mathjax_ignore" id="configure-session-lifetime-parameters">
