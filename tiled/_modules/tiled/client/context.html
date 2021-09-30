@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a37.post11+g59456f0 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a37.post13+g386204f documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a37.post11+g59456f0
+                0.1.0a37.post13+g386204f
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -48,6 +48,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/slicing.html">Load Slices of Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/caching.html">Keep a Local Copy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Deliberate Export</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
@@ -125,11 +126,11 @@
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ASYNC_EVENT_HOOKS</span><span class="p">,</span>
     <span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">,</span>
-    <span class="n">EVENT_HOOKS</span><span class="p">,</span>
     <span class="n">handle_error</span><span class="p">,</span>
     <span class="n">NotAvailableOffline</span><span class="p">,</span>
     <span class="n">UNSET</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span>
 
 
 <span class="n">DEFAULT_TOKEN_CACHE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
@@ -146,96 +147,122 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">login</span><span class="p">(</span>
+<span class="k">def</span> <span class="nf">logout</span><span class="p">(</span>
     <span class="n">uri_or_profile</span><span class="p">,</span>
-    <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">authentication_uri</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
 <span class="p">):</span>
-    <span class="n">context</span> <span class="o">=</span> <span class="n">_context_from_uri_or_profile</span><span class="p">(</span>
-        <span class="n">uri_or_profile</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">authentication_uri</span><span class="p">,</span> <span class="n">token_cache</span><span class="p">,</span> <span class="n">verify</span>
-    <span class="p">)</span>
-    <span class="c1"># This has a side effect of storing the refresh token in the token_cache, if set.</span>
-    <span class="k">return</span> <span class="n">context</span><span class="o">.</span><span class="n">authenticate</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Logout of a given session.</span>
+
+<span class="sd">    If not logged in, calling this function has no effect.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    uri_or_profile : str</span>
+<span class="sd">    token_directory : str or Path, optional</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    netloc : str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
+        <span class="n">netloc</span> <span class="o">=</span> <span class="n">_netloc_from_uri_or_profile</span><span class="p">(</span><span class="n">uri_or_profile</span><span class="p">)</span>
+        <span class="n">directory</span> <span class="o">=</span> <span class="n">_token_directory</span><span class="p">(</span>
+            <span class="n">token_cache</span><span class="p">,</span>
+            <span class="n">netloc</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">netloc</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># unknowable</span>
+    <span class="n">token_cache</span> <span class="o">=</span> <span class="n">TokenCache</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+    <span class="n">token_cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">netloc</span>
 
 
-<span class="k">def</span> <span class="nf">_context_from_uri_or_profile</span><span class="p">(</span>
-    <span class="n">uri_or_profile</span><span class="p">,</span>
-    <span class="n">username</span><span class="p">,</span>
-    <span class="n">authentication_uri</span><span class="p">,</span>
-    <span class="n">token_cache</span><span class="p">,</span>
-    <span class="n">verify</span><span class="p">,</span>
-    <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-<span class="p">):</span>
-    <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
-    <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept-encoding&quot;</span><span class="p">,</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">))</span>
+<div class="viewcode-block" id="sessions"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.sessions.html#tiled.client.context.sessions">[docs]</a><span class="k">def</span> <span class="nf">sessions</span><span class="p">(</span><span class="n">token_directory</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    List all sessions.</span>
+
+<span class="sd">    Note that this may include expired sessions. It does not confirm that</span>
+<span class="sd">    any cached tokens are still valid.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    token_directory : str or Path, optional</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tokens : dict</span>
+<span class="sd">        Maps netloc to refresh_token</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tokens</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">Path</span><span class="p">(</span><span class="n">token_directory</span><span class="p">)</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+            <span class="c1"># Some stray file. Ignore it.</span>
+            <span class="k">continue</span>
+        <span class="n">refresh_token_file</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="s2">&quot;refresh_token&quot;</span>
+        <span class="n">netloc</span> <span class="o">=</span> <span class="n">directory</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">if</span> <span class="n">refresh_token_file</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">refresh_token_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+                <span class="n">token</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+            <span class="n">tokens</span><span class="p">[</span><span class="n">netloc</span><span class="p">]</span> <span class="o">=</span> <span class="n">token</span>
+    <span class="k">return</span> <span class="n">tokens</span></div>
+
+
+<div class="viewcode-block" id="logout_all"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.logout_all.html#tiled.client.context.logout_all">[docs]</a><span class="k">def</span> <span class="nf">logout_all</span><span class="p">(</span><span class="n">token_directory</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Logout of a all sessions.</span>
+
+<span class="sd">    If not logged in to any sessions, calling this function has no effect.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    token_directory : str or Path, optional</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    logged_out_from : list</span>
+<span class="sd">        List of netloc of logged-out sessions</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logged_out_from</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">Path</span><span class="p">(</span><span class="n">token_directory</span><span class="p">)</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+            <span class="c1"># Some stray file. Ignore it.</span>
+            <span class="k">continue</span>
+        <span class="n">refresh_token_file</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="s2">&quot;refresh_token&quot;</span>
+        <span class="k">if</span> <span class="n">refresh_token_file</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+            <span class="n">refresh_token_file</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+            <span class="n">netloc</span> <span class="o">=</span> <span class="n">directory</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">logged_out_from</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">netloc</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">logged_out_from</span></div>
+
+
+<span class="k">def</span> <span class="nf">_netloc_from_uri_or_profile</span><span class="p">(</span><span class="n">uri_or_profile</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">uri_or_profile</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;http://&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">uri_or_profile</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;https://&quot;</span><span class="p">):</span>
         <span class="c1"># This looks like a URI.</span>
         <span class="n">uri</span> <span class="o">=</span> <span class="n">uri_or_profile</span>
-        <span class="n">client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
-            <span class="n">base_url</span><span class="o">=</span><span class="n">uri</span><span class="p">,</span>
-            <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
-            <span class="n">event_hooks</span><span class="o">=</span><span class="n">EVENT_HOOKS</span><span class="p">,</span>
-            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
-            <span class="n">timeout</span><span class="o">=</span><span class="n">httpx</span><span class="o">.</span><span class="n">Timeout</span><span class="p">(</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="mf">20.0</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="n">context</span> <span class="o">=</span> <span class="n">Context</span><span class="p">(</span>
-            <span class="n">client</span><span class="p">,</span>
-            <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span>
-            <span class="n">authentication_uri</span><span class="o">=</span><span class="n">authentication_uri</span><span class="p">,</span>
-            <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
-        <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Is this a profile name?</span>
         <span class="kn">from</span> <span class="nn">..profiles</span> <span class="kn">import</span> <span class="n">load_profiles</span>
 
-        <span class="c1"># Is this a profile name?</span>
         <span class="n">profiles</span> <span class="o">=</span> <span class="n">load_profiles</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">uri_or_profile</span> <span class="ow">in</span> <span class="n">profiles</span><span class="p">:</span>
             <span class="n">profile_name</span> <span class="o">=</span> <span class="n">uri_or_profile</span>
-            <span class="n">filepath</span><span class="p">,</span> <span class="n">profile_content</span> <span class="o">=</span> <span class="n">profiles</span><span class="p">[</span><span class="n">profile_name</span><span class="p">]</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">profile_content</span> <span class="o">=</span> <span class="n">profiles</span><span class="p">[</span><span class="n">profile_name</span><span class="p">]</span>
             <span class="k">if</span> <span class="s2">&quot;uri&quot;</span> <span class="ow">in</span> <span class="n">profile_content</span><span class="p">:</span>
                 <span class="n">uri</span> <span class="o">=</span> <span class="n">profile_content</span><span class="p">[</span><span class="s2">&quot;uri&quot;</span><span class="p">]</span>
-                <span class="n">verify</span> <span class="o">=</span> <span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;verify&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-                <span class="n">headers</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;headers&quot;</span><span class="p">,</span> <span class="p">{}))</span>
-                <span class="n">client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
-                    <span class="n">base_url</span><span class="o">=</span><span class="n">uri</span><span class="p">,</span>
-                    <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
-                    <span class="n">event_hooks</span><span class="o">=</span><span class="n">EVENT_HOOKS</span><span class="p">,</span>
-                    <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
-                    <span class="n">timeout</span><span class="o">=</span><span class="n">httpx</span><span class="o">.</span><span class="n">Timeout</span><span class="p">(</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">read</span><span class="o">=</span><span class="mf">20.0</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="n">context</span> <span class="o">=</span> <span class="n">Context</span><span class="p">(</span>
-                    <span class="n">client</span><span class="p">,</span>
-                    <span class="n">username</span><span class="o">=</span><span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;username&quot;</span><span class="p">),</span>
-                    <span class="n">authentication_uri</span><span class="o">=</span><span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;authentication_uri&quot;</span><span class="p">),</span>
-                    <span class="n">cache</span><span class="o">=</span><span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cache&quot;</span><span class="p">),</span>
-                    <span class="n">offline</span><span class="o">=</span><span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;offline&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-                    <span class="n">token_cache</span><span class="o">=</span><span class="n">profile_content</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;token_cache&quot;</span><span class="p">,</span> <span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">),</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="s2">&quot;direct&quot;</span> <span class="ow">in</span> <span class="n">profile_content</span><span class="p">:</span>
-                <span class="c1"># The profiles specifies that there is no server. We should create</span>
-                <span class="c1"># an app ourselves and use it directly via ASGI.</span>
-                <span class="kn">from</span> <span class="nn">..config</span> <span class="kn">import</span> <span class="n">construct_serve_tree_kwargs</span>
-
-                <span class="n">serve_tree_kwargs</span> <span class="o">=</span> <span class="n">construct_serve_tree_kwargs</span><span class="p">(</span>
-                    <span class="n">profile_content</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;direct&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">source_filepath</span><span class="o">=</span><span class="n">filepath</span>
-                <span class="p">)</span>
-                <span class="n">context</span> <span class="o">=</span> <span class="n">context_from_tree</span><span class="p">(</span><span class="o">**</span><span class="n">serve_tree_kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">profile_content</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid profile content&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Logout does not apply to profiles with inline (&#39;direct&#39;) &quot;</span>
+                    <span class="s2">&quot;server configuration.&quot;</span>
+                <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">TreeValueError</span><span class="p">(</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Not sure what to do with tree </span><span class="si">{</span><span class="n">uri_or_profile</span><span class="si">!r}</span><span class="s2">. &quot;</span>
                 <span class="s2">&quot;It does not look like a URI (it does not start with http[s]://) &quot;</span>
                 <span class="s2">&quot;and it does not match any profiles.&quot;</span>
             <span class="p">)</span>
-    <span class="k">return</span> <span class="n">context</span>
-
-
-<span class="k">class</span> <span class="nc">TreeValueError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
-    <span class="k">pass</span>
+    <span class="k">return</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span><span class="o">.</span><span class="n">netloc</span>
 
 
 <span class="k">class</span> <span class="nc">CannotRefreshAuthentication</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
@@ -273,6 +300,10 @@
             <span class="p">)</span>
             <span class="n">token_cache</span> <span class="o">=</span> <span class="n">TokenCache</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">token_cache</span>
+        <span class="c1"># The token *cache* is optional. The tokens attrbiute is always present,</span>
+        <span class="c1"># and it isn&#39;t actually used for anything internally. It&#39;s just a view</span>
+        <span class="c1"># of the current tokens.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_app</span> <span class="o">=</span> <span class="n">app</span>
 
         <span class="c1"># Make an initial &quot;safe&quot; request to let the server set the CSRF cookie.</span>
@@ -310,6 +341,11 @@
             <span class="c1"># Strip &quot;/metadata&quot;</span>
             <span class="n">path_parts</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_path_parts</span> <span class="o">=</span> <span class="n">path_parts</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;A view of the current access and refresh tokens.&quot;</span>
+        <span class="k">return</span> <span class="n">DictView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -488,6 +524,9 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># We are using a token cache. Store the new refresh token.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">refresh_token</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">refresh_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">],</span> <span class="n">access_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">tokens</span></div>
 
 <div class="viewcode-block" id="Context.reauthenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.reauthenticate.html#tiled.client.context.Context.reauthenticate">[docs]</a>    <span class="k">def</span> <span class="nf">reauthenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
@@ -508,6 +547,17 @@
         <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;username&quot;</span><span class="p">]</span>
+
+<div class="viewcode-block" id="Context.logout"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.logout.html#tiled.client.context.Context.logout">[docs]</a>    <span class="k">def</span> <span class="nf">logout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Clear the access token and the cached refresh token.</span>
+
+<span class="sd">        This method is idempotent.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authentication&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
 
     <span class="k">def</span> <span class="nf">_refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">refresh_token</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">refresh_token</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -547,6 +597,9 @@
         <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
         <span class="n">auth_header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_header</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">refresh_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">],</span> <span class="n">access_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">tokens</span></div>
 
 
