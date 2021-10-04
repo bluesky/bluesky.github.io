@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.annotation_decorator &mdash; bluesky-queueserver 0.post1+gcbd490e documentation</title>
+  <title>bluesky_queueserver.manager.annotation_decorator &mdash; bluesky-queueserver 0.post1+g1c58399 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gcbd490e
+                0.post1+g1c58399
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -126,7 +126,7 @@
             <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
             <span class="s2">&quot;additionalProperties&quot;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">}],</span>
+                <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">},</span>
             <span class="p">},</span>
         <span class="p">},</span>
     <span class="p">},</span>
@@ -296,9 +296,16 @@
         <span class="k">nonlocal</span> <span class="n">annotation</span>
         <span class="n">annotation</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">annotation</span><span class="p">)</span>
 
-        <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span>
-            <span class="n">instance</span><span class="o">=</span><span class="n">annotation</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">_parameter_annotation_schema</span><span class="p">,</span> <span class="n">types</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;array&quot;</span><span class="p">:</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)}</span>
-        <span class="p">)</span>
+        <span class="c1"># Create custom validator which recognizes lists and tuples as jsonschema &#39;arrays&#39;</span>
+        <span class="k">def</span> <span class="nf">is_array</span><span class="p">(</span><span class="n">checker</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span>
+
+        <span class="n">type_checker</span> <span class="o">=</span> <span class="n">jsonschema</span><span class="o">.</span><span class="n">Draft3Validator</span><span class="o">.</span><span class="n">TYPE_CHECKER</span><span class="o">.</span><span class="n">redefine</span><span class="p">(</span><span class="s2">&quot;array&quot;</span><span class="p">,</span> <span class="n">is_array</span><span class="p">)</span>
+        <span class="n">ValidatorCustom</span> <span class="o">=</span> <span class="n">jsonschema</span><span class="o">.</span><span class="n">validators</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">jsonschema</span><span class="o">.</span><span class="n">Draft3Validator</span><span class="p">,</span> <span class="n">type_checker</span><span class="o">=</span><span class="n">type_checker</span><span class="p">)</span>
+        <span class="n">validator</span> <span class="o">=</span> <span class="n">ValidatorCustom</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">_parameter_annotation_schema</span><span class="p">)</span>
+
+        <span class="c1"># Validate annotation</span>
+        <span class="n">validator</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">annotation</span><span class="p">)</span>
 
         <span class="n">sig</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
         <span class="n">parameters</span> <span class="o">=</span> <span class="n">sig</span><span class="o">.</span><span class="n">parameters</span>
