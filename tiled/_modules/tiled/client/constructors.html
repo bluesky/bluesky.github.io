@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.constructors &mdash; tiled 0.1.0a38.post1+gbcf0543 documentation</title>
+  <title>tiled.client.constructors &mdash; tiled 0.1.0a38.post3+gc0def8a documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a38.post1+gbcf0543
+                0.1.0a38.post3+gc0def8a
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -122,7 +122,7 @@
 <span class="kn">from</span> <span class="nn">.context</span> <span class="kn">import</span> <span class="n">context_from_tree</span><span class="p">,</span> <span class="n">Context</span><span class="p">,</span> <span class="n">DEFAULT_TOKEN_CACHE</span>
 <span class="kn">from</span> <span class="nn">.node</span> <span class="kn">import</span> <span class="n">Node</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">,</span> <span class="n">EVENT_HOOKS</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">import_object</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">import_object</span><span class="p">,</span> <span class="n">prepend_to_sys_path</span>
 
 
 <div class="viewcode-block" id="from_uri"><a class="viewcode-back" href="../../../reference/generated/tiled.client.from_uri.html#tiled.client.from_uri">[docs]</a><span class="k">def</span> <span class="nf">from_uri</span><span class="p">(</span>
@@ -375,6 +375,8 @@
 
 <span class="sd">    Any additional parameters override profile content. See from_uri for details.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># We accept structure_clients as a separate parameter so that it</span>
+    <span class="c1"># may be invoked positionally, as in from_profile(&quot;...&quot;, &quot;dask&quot;).</span>
     <span class="kn">from</span> <span class="nn">..profiles</span> <span class="kn">import</span> <span class="n">load_profiles</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">ProfileNotFound</span>
 
     <span class="n">profiles</span> <span class="o">=</span> <span class="n">load_profiles</span><span class="p">()</span>
@@ -404,22 +406,42 @@
             <span class="c1"># Interpret this as a Cache object passed in directly.</span>
             <span class="n">cache</span> <span class="o">=</span> <span class="n">cache_config</span>
         <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;cache&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cache</span>
-    <span class="n">structure_clients_</span> <span class="o">=</span> <span class="n">merged</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">structure_clients_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structure_clients_</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="c1"># Nothing to do.</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">structure_clients_</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># This is a dict mapping structure families like &quot;array&quot; and &quot;dataframe&quot;</span>
-            <span class="c1"># to values. The values may be client objects or importable strings.</span>
+    <span class="c1"># Below, we may convert importable strings like</span>
+    <span class="c1"># &quot;package.module:obj&quot; to live objects. Include the profile&#39;s</span>
+    <span class="c1"># source directory in the import path, temporarily.</span>
+    <span class="k">with</span> <span class="n">prepend_to_sys_path</span><span class="p">(</span><span class="n">filepath</span><span class="o">.</span><span class="n">parent</span><span class="p">):</span>
+        <span class="n">structure_clients_</span> <span class="o">=</span> <span class="n">merged</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">structure_clients_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structure_clients_</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="c1"># Nothing to do.</span>
+                <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">structure_clients_</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># This is a dict mapping structure families like &quot;array&quot; and &quot;dataframe&quot;</span>
+                <span class="c1"># to values. The values may be client objects or importable strings.</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">structure_clients_</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                        <span class="n">class_</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">accept_live_object</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">class_</span> <span class="o">=</span> <span class="n">value</span>
+                    <span class="n">result</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_</span>
+                <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="n">special_clients_</span> <span class="o">=</span> <span class="n">merged</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;special_clients&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">special_clients_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># This is a dict mapping specs like &quot;BlueskyRun&quot; to values. The</span>
+            <span class="c1"># values may be client objects or importable strings.</span>
             <span class="n">result</span> <span class="o">=</span> <span class="p">{}</span>
-            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">structure_clients_</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">special_clients_</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                    <span class="n">class_</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">class_</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">accept_live_object</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="n">breakpoint</span><span class="p">()</span>
+                        <span class="k">raise</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">class_</span> <span class="o">=</span> <span class="n">value</span>
                 <span class="n">result</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;structure_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
+            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;special_clients&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
     <span class="k">if</span> <span class="s2">&quot;direct&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
         <span class="c1"># The profiles specifies that there is no server. We should create</span>
         <span class="c1"># an app ourselves and use it directly via ASGI.</span>
