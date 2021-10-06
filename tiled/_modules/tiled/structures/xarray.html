@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.structures.xarray &mdash; tiled 0.1.0a38 documentation</title>
+  <title>tiled.structures.xarray &mdash; tiled 0.1.0a38.post1+gbcf0543 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a38
+                0.1.0a38.post1+gbcf0543
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -115,11 +115,15 @@
   <h1>Source code for tiled.structures.xarray</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">import</span> <span class="nn">io</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">xarray</span>
 
 <span class="kn">from</span> <span class="nn">.array</span> <span class="kn">import</span> <span class="n">ArrayStructure</span>
+<span class="kn">from</span> <span class="nn">.structured_array</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">StructuredArrayGenericStructure</span><span class="p">,</span>
+    <span class="n">StructuredArrayTabularStructure</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.dataframe</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
     <span class="n">serialize_arrow</span><span class="p">,</span>
@@ -132,18 +136,32 @@
 <span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="n">serialization_registry</span><span class="p">,</span> <span class="n">deserialization_registry</span>
 
 
+<span class="n">_ARRAY_STRUCTURES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;array&quot;</span><span class="p">:</span> <span class="n">ArrayStructure</span><span class="p">,</span>
+    <span class="s2">&quot;structured_array_generic&quot;</span><span class="p">:</span> <span class="n">StructuredArrayGenericStructure</span><span class="p">,</span>
+    <span class="s2">&quot;structured_array_tabular&quot;</span><span class="p">:</span> <span class="n">StructuredArrayTabularStructure</span><span class="p">,</span>
+<span class="p">}</span>
+
+
 <div class="viewcode-block" id="VariableMacroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.xarray.VariableMacroStructure.html#tiled.structures.xarray.VariableMacroStructure">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">VariableMacroStructure</span><span class="p">:</span>
     <span class="n">dims</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-    <span class="n">data</span><span class="p">:</span> <span class="n">ArrayStructure</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
+        <span class="n">ArrayStructure</span><span class="p">,</span> <span class="n">StructuredArrayGenericStructure</span><span class="p">,</span> <span class="n">StructuredArrayTabularStructure</span>
+    <span class="p">]</span>
     <span class="n">attrs</span><span class="p">:</span> <span class="n">Dict</span>  <span class="c1"># TODO Use JSONSerializableDict</span>
+    <span class="n">array_structure_family</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;array&quot;</span>
     <span class="c1"># TODO Variables also have `encoding`. Do we want to carry that as well?</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">structure</span><span class="p">):</span>
+        <span class="c1"># Fall back to &quot;array&quot; default for backward-compatibility.</span>
+        <span class="n">array_structure_cls</span> <span class="o">=</span> <span class="n">_ARRAY_STRUCTURES</span><span class="p">[</span>
+            <span class="n">structure</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;array_structure_family&quot;</span><span class="p">,</span> <span class="s2">&quot;array&quot;</span><span class="p">)</span>
+        <span class="p">]</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">dims</span><span class="o">=</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;dims&quot;</span><span class="p">],</span>
-            <span class="n">data</span><span class="o">=</span><span class="n">ArrayStructure</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]),</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">array_structure_cls</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]),</span>
             <span class="n">attrs</span><span class="o">=</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;attrs&quot;</span><span class="p">],</span>
         <span class="p">)</span></div>
 
