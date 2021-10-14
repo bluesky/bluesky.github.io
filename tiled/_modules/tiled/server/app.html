@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a40.post4+gf3bc240 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a40.post7+g8213c3e documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a40.post4+gf3bc240
+                0.1.0a40.post7+g8213c3e
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -142,6 +142,7 @@
     <span class="n">PatchedStreamingResponse</span><span class="p">,</span>
     <span class="n">record_timing</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">.metrics</span> <span class="kn">import</span> <span class="n">capture_request_metrics</span>
 <span class="kn">from</span> <span class="nn">.object_cache</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ObjectCache</span><span class="p">,</span>
     <span class="n">logger</span> <span class="k">as</span> <span class="n">object_cache_logger</span><span class="p">,</span>
@@ -259,7 +260,13 @@
     <span class="p">)</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">add_server_timing_header</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">capture_metrics</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This does two things:</span>
+
+<span class="sd">        - Place metrics in Server-Timing header, in accordance with HTTP spec.</span>
+<span class="sd">        - Capture metrics in prometheus. The proemetheus metrics are availabe from /metrics.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing</span>
         <span class="c1"># https://w3c.github.io/server-timing/#the-server-timing-header-field</span>
         <span class="c1"># This information seems safe to share because the user can easily</span>
@@ -272,12 +279,24 @@
         <span class="c1"># Record the overall application time.</span>
         <span class="k">with</span> <span class="n">record_timing</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="s2">&quot;app&quot;</span><span class="p">):</span>
             <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="c1"># Server-Timing specifies times should be in milliseconds.</span>
+        <span class="c1"># Prometheus specifies times should be in seconds.</span>
+        <span class="c1"># Therefore, we store as seconds and convert to ms for Server-Timing here.</span>
+        <span class="c1"># That is what the factor of 1000 below is doing.</span>
         <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Server-Timing&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">;&quot;</span>
-            <span class="o">+</span> <span class="s2">&quot;;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">metric</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">metric</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">metrics_</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="o">+</span> <span class="s2">&quot;;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">metric</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">value</span> <span class="o">*</span> <span class="mi">1000</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="k">if</span> <span class="n">metric</span> <span class="o">==</span> <span class="s2">&quot;dur&quot;</span>
+                    <span class="k">else</span> <span class="s2">&quot;</span><span class="si">{metric}</span><span class="s2">=</span><span class="si">{value:.1f}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">metric</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">metrics_</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">)</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">metrics_</span> <span class="ow">in</span> <span class="n">metrics</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">)</span>
         <span class="n">response</span><span class="o">.</span><span class="vm">__class__</span> <span class="o">=</span> <span class="n">PatchedStreamingResponse</span>  <span class="c1"># tolerate memoryview</span>
+        <span class="n">capture_request_metrics</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">response</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">response</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
