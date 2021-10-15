@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.xarray &mdash; tiled 0.1.0a40.post16+g71e9dd2 documentation</title>
+  <title>tiled.client.xarray &mdash; tiled 0.1.0a40.post19+g422aecf documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a40.post16+g71e9dd2
+                0.1.0a40.post19+g422aecf
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -484,14 +484,20 @@
     <span class="k">def</span> <span class="nf">data_vars</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">macro</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_coords_clients</span><span class="p">(</span><span class="n">structure</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_data_vars_clients</span><span class="p">(</span><span class="n">structure</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span>
+        <span class="c1"># Turn off wide table optimization so that we return normal</span>
+        <span class="c1"># [Dask]DataArrayClients and not internal _MockClients.</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_data_vars_clients</span><span class="p">(</span>
+            <span class="n">structure</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">coords</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">macro</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_coords_clients</span><span class="p">(</span><span class="n">structure</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_build_data_vars_clients</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">variables</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_build_data_vars_clients</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">variables</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">):</span>
         <span class="n">data_vars_clients</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">wide_table_fetcher</span> <span class="o">=</span> <span class="n">_WideTableFetcher</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_content</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full_dataset&quot;</span><span class="p">],</span> <span class="n">coords</span>
@@ -502,8 +508,10 @@
 
             <span class="c1"># Optimization: Download scalar data as DataFrame.</span>
             <span class="n">data_shape</span> <span class="o">=</span> <span class="n">data_array</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">variable</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">macro</span><span class="o">.</span><span class="n">shape</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">LENGTH_LIMIT_FOR_WIDE_TABLE_OPTIMIZATION</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
-                <span class="nb">len</span><span class="p">(</span><span class="n">data_shape</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">optimize_wide_table</span>
+                <span class="ow">and</span> <span class="p">(</span><span class="n">data_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">LENGTH_LIMIT_FOR_WIDE_TABLE_OPTIMIZATION</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data_shape</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">)</span>
             <span class="p">):</span>
                 <span class="n">data_vars_clients</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">wide_table_fetcher</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">data_array</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -587,7 +595,7 @@
         <span class="k">if</span> <span class="n">variables</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Note: The singular/plural inconsistency here is due to the fact that</span>
             <span class="c1"># [&quot;A&quot;, &quot;B&quot;] will be encoded in the URL as variable=A&amp;variable=B</span>
-            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;variable&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">variables</span><span class="p">)</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;variable&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">variables</span>
         <span class="k">return</span> <span class="n">export_util</span><span class="p">(</span>
             <span class="n">filepath</span><span class="p">,</span>
             <span class="nb">format</span><span class="p">,</span>
