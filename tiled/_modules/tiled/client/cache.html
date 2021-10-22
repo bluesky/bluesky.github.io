@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.cache &mdash; tiled 0.1.0a42.post9+g271fb36 documentation</title>
+  <title>tiled.client.cache &mdash; tiled 0.1.0a42.post48+gcadb8c6 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a42.post9+g271fb36
+                0.1.0a42.post48+gcadb8c6
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -126,14 +126,104 @@
 <span class="sd">the same source directory as this module.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 <span class="kn">import</span> <span class="nn">collections.abc</span>
+<span class="kn">import</span> <span class="nn">enum</span>
 <span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">hashlib</span>
 <span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">types</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span>
 <span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">log</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">from</span> <span class="nn">heapdict</span> <span class="kn">import</span> <span class="n">heapdict</span>
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">Headers</span>
+
+<span class="k">if</span> <span class="n">__debug__</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">logger</span>
+
+
+<span class="k">class</span> <span class="nc">Revalidate</span><span class="p">(</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">FORCE</span> <span class="o">=</span> <span class="s2">&quot;force&quot;</span>
+    <span class="n">IF_EXPIRED</span> <span class="o">=</span> <span class="s2">&quot;if_expired&quot;</span>
+    <span class="n">IF_WE_MUST</span> <span class="o">=</span> <span class="s2">&quot;if_we_must&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="n">member</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">member</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">member</span> <span class="o">=</span> <span class="n">member</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="n">member</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">WhenFull</span><span class="p">(</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">EVICT</span> <span class="o">=</span> <span class="s2">&quot;evict&quot;</span>
+    <span class="n">ERROR</span> <span class="o">=</span> <span class="s2">&quot;error&quot;</span>
+    <span class="n">WARN</span> <span class="o">=</span> <span class="s2">&quot;warn&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="n">member</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">member</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">member</span> <span class="o">=</span> <span class="n">member</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="n">member</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">UrlItem</span><span class="p">(</span>
+    <span class="n">collections</span><span class="o">.</span><span class="n">namedtuple</span><span class="p">(</span>
+        <span class="s2">&quot;UrlItem&quot;</span><span class="p">,</span>
+        <span class="p">[</span>
+            <span class="s2">&quot;size&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;media_type&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;encoding&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;etag&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;must_revalidate&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;expires&quot;</span><span class="p">,</span>
+        <span class="p">],</span>
+    <span class="p">)</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    An item in the cache mapping URLs to ETags (with other Headers info)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_headers</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">headers</span><span class="p">):</span>
+        <span class="n">expires_str</span> <span class="o">=</span> <span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expires&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">expires_str</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">expires</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">expires_str</span><span class="p">,</span> <span class="n">HTTP_EXPIRES_HEADER_FORMAT</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">expires</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">size</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;content-length&quot;</span><span class="p">]),</span>
+            <span class="n">media_type</span><span class="o">=</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;content-type&quot;</span><span class="p">],</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="c1"># Record encoding when we start writing compressed data.</span>
+            <span class="c1"># We currently always write it uncompressed, so the encoding is None.</span>
+            <span class="c1"># encoding=headers.get(&quot;content-encoding&quot;),</span>
+            <span class="n">etag</span><span class="o">=</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;etag&quot;</span><span class="p">],</span>
+            <span class="n">must_revalidate</span><span class="o">=</span><span class="s2">&quot;must-revalidate&quot;</span> <span class="ow">in</span> <span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cache-control&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+            <span class="n">expires</span><span class="o">=</span><span class="n">expires</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_text</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">text</span><span class="p">):</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="n">Headers</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+            <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;: &quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">headers</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_headers</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">to_text</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;content-length&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">),</span>
+            <span class="s2">&quot;content-type&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">media_type</span><span class="p">,</span>
+            <span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">etag</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">must_revalidate</span><span class="p">:</span>
+            <span class="n">headers</span><span class="p">[</span><span class="s2">&quot;cache-control&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;must-revalidate&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">headers</span><span class="p">[</span><span class="s2">&quot;expires&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expires</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="n">HTTP_EXPIRES_HEADER_FORMAT</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">headers</span><span class="p">[</span><span class="s2">&quot;content-encoding&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoding</span>
+        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">headers</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
 
 
 <div class="viewcode-block" id="download"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.download.html#tiled.client.cache.download">[docs]</a><span class="k">def</span> <span class="nf">download</span><span class="p">(</span><span class="o">*</span><span class="n">entries</span><span class="p">):</span>
@@ -175,9 +265,20 @@
 <span class="sd">    &gt;&gt;&gt; from tiled.client.cache import Cache</span>
 <span class="sd">    &gt;&gt;&gt; client = from_uri(&quot;http://...&quot;, cache=Cache.on_disk(&quot;my_cache_directory&quot;), offline=True)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># TODO Use multiple processes to ensure we are saturating our network connection.</span>
     <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
-        <span class="n">entry</span><span class="o">.</span><span class="n">touch</span><span class="p">()</span></div>
+        <span class="n">entry</span><span class="o">.</span><span class="n">download</span><span class="p">()</span>
+    <span class="c1"># Protect explicitly downloaded data from being silently evicted.</span>
+    <span class="n">entry</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">when_full</span> <span class="o">=</span> <span class="n">WhenFull</span><span class="o">.</span><span class="n">ERROR</span></div>
+
+
+<span class="c1"># This is a silly time format, but it is the HTTP standard.</span>
+<span class="n">HTTP_EXPIRES_HEADER_FORMAT</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">%a</span><span class="s2">, </span><span class="si">%d</span><span class="s2"> %b %Y %H:%M:%S GMT&quot;</span>
+<span class="n">UNIT_SECOND</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">ZERO_SECONDS</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_round_seconds</span><span class="p">(</span><span class="n">dt</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">dt</span> <span class="o">/</span> <span class="n">UNIT_SECOND</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">Reservation</span><span class="p">:</span>
@@ -189,9 +290,10 @@
 <span class="sd">    using `ensure_released()`.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">,</span> <span class="n">lock</span><span class="p">,</span> <span class="n">load_content</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">renew</span><span class="p">,</span> <span class="n">lock</span><span class="p">,</span> <span class="n">load_content</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="o">=</span> <span class="n">url</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">etag</span> <span class="o">=</span> <span class="n">etag</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">item</span> <span class="o">=</span> <span class="n">item</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_renew</span> <span class="o">=</span> <span class="n">renew</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">lock</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock_held</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_load_content</span> <span class="o">=</span> <span class="n">load_content</span>
@@ -199,9 +301,30 @@
 
     <span class="k">def</span> <span class="nf">load_content</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Return the content and release the reservation.&quot;</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
         <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_content</span><span class="p">()</span>
+        <span class="n">duration</span> <span class="o">=</span> <span class="mi">1000</span> <span class="o">*</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>  <span class="c1"># units: ms</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">__debug__</span><span class="p">:</span>
+            <span class="c1"># Use _ for thousands separator in bytes.</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s2">&quot;Cache read (</span><span class="si">%s</span><span class="s2"> B in </span><span class="si">%.1f</span><span class="s2"> ms) </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">content</span><span class="p">)</span><span class="si">:</span><span class="s2">_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">duration</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">content</span>
+
+    <span class="k">def</span> <span class="nf">is_stale</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">expires</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">stale</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">time_remaining</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">expires</span>
+            <span class="n">stale</span> <span class="o">=</span> <span class="n">time_remaining</span> <span class="o">&gt;</span> <span class="n">ZERO_SECONDS</span>
+        <span class="k">return</span> <span class="n">stale</span>
+
+    <span class="k">def</span> <span class="nf">renew</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">expires</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_renew</span><span class="p">(</span><span class="n">expires</span><span class="o">=</span><span class="n">expires</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">ensure_released</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Release the reservation. This is idempotent.&quot;</span>
@@ -225,7 +348,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="Cache.in_memory"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.in_memory.html#tiled.client.cache.Cache.in_memory">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">in_memory</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">available_bytes</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">error_if_full</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">scorer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">in_memory</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">capacity</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">scorer</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        An in-memory cache of data from the server</span>
 
@@ -239,28 +362,19 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        available_bytes : integer</span>
+<span class="sd">        capacity : integer</span>
 <span class="sd">            e.g. 2e9 to use up to 2 GB of RAM</span>
-<span class="sd">        error_if_full : boolean, optional</span>
-<span class="sd">            By default, the cache starts evicting the least-used items when</span>
-<span class="sd">            it fills up. This is generally fine when working with a</span>
-<span class="sd">            connection to the server. But if the goal is to cache for</span>
-<span class="sd">            *offline* use, it is better to be notified by and error that the</span>
-<span class="sd">            cache is full. Then the user can respond by increasing</span>
-<span class="sd">            available_bytes, using a different storage volume for the cache,</span>
-<span class="sd">            or choosing to a different (smaller) set of entries to download.</span>
 <span class="sd">        scorer : Scorer</span>
 <span class="sd">            Determines which items to evict from the cache when it grows full.</span>
 <span class="sd">            See tiled.client.cache.Scorer for example.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">available_bytes</span><span class="p">,</span>
-            <span class="n">url_to_etag_cache</span><span class="o">=</span><span class="p">{},</span>
+            <span class="n">capacity</span><span class="p">,</span>
+            <span class="n">url_to_headers_cache</span><span class="o">=</span><span class="p">{},</span>
             <span class="n">etag_to_content_cache</span><span class="o">=</span><span class="p">{},</span>
-            <span class="n">sizes</span><span class="o">=</span><span class="p">{},</span>
             <span class="n">global_lock</span><span class="o">=</span><span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">(),</span>
             <span class="n">lock_factory</span><span class="o">=</span><span class="k">lambda</span> <span class="n">etag</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">(),</span>
-            <span class="n">error_if_full</span><span class="o">=</span><span class="n">error_if_full</span><span class="p">,</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">types</span><span class="o">.</span><span class="n">SimpleNamespace</span><span class="p">(),</span>
             <span class="n">scorer</span><span class="o">=</span><span class="n">scorer</span><span class="p">,</span>
         <span class="p">)</span></div>
 
@@ -268,10 +382,8 @@
     <span class="k">def</span> <span class="nf">on_disk</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">path</span><span class="p">,</span>
-        <span class="n">available_bytes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">capacity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">cull_on_startup</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">error_if_full</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">scorer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -289,102 +401,65 @@
 <span class="sd">            A directory will be created at this path if it does not yet exist.</span>
 <span class="sd">            It is safe to reuse an existing cache directory and to share a cache</span>
 <span class="sd">            directory between multiple processes.</span>
-<span class="sd">        available_bytes : integer, optional</span>
+<span class="sd">        capacity : integer, optional</span>
 <span class="sd">            e.g. 2e9 to use up to 2 GB of disk space. If None, this will consume</span>
 <span class="sd">            up to (X - 1 GB) where X is the free space remaining on the volume</span>
 <span class="sd">            containing `path`.</span>
-<span class="sd">        cull_on_startup : boolean, optional</span>
-<span class="sd">            If reusing an existing cache directory which is already larger than the</span>
-<span class="sd">            available_bytes, an error is raised. Set this to True to delete</span>
-<span class="sd">            items from the cache until it fits in available_bytes. False by default.</span>
-<span class="sd">        error_if_full : boolean, optional</span>
-<span class="sd">            By default, the cache starts evicting the least-used items when</span>
-<span class="sd">            it fills up. This is generally fine when working with a</span>
-<span class="sd">            connection to the server. But if the goal is to cache for</span>
-<span class="sd">            *offline* use, it is better to be notified by and error that the</span>
-<span class="sd">            cache is full. Then the user can respond by increasing</span>
-<span class="sd">            available_bytes, using a different storage volume for the cache,</span>
-<span class="sd">            or choosing to a different (smaller) set of entries to download.</span>
 <span class="sd">        scorer : Scorer</span>
 <span class="sd">            Determines which items to evict from the cache when it grows full.</span>
 <span class="sd">            See tiled.client.cache.Scorer for example.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">import</span> <span class="nn">shutil</span>
-
         <span class="kn">import</span> <span class="nn">locket</span>
 
         <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
         <span class="n">path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">available_bytes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">capacity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># By default, use (X - 1 GB) where X is the current free space</span>
             <span class="c1"># on the volume containing `path`.</span>
-            <span class="n">available_bytes</span> <span class="o">=</span> <span class="n">shutil</span><span class="o">.</span><span class="n">disk_usage</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">free</span> <span class="o">-</span> <span class="mf">1e9</span>
-        <span class="c1"># Get the nbytes for each object in the cache if it is not empty.</span>
-        <span class="c1"># The FileBasedCache provides a `sizes` property that computes this</span>
-        <span class="c1"># using stat(). That is, we do not actually read the content into</span>
-        <span class="c1"># memory at this point.</span>
+            <span class="kn">import</span> <span class="nn">shutil</span>
+
+            <span class="n">capacity</span> <span class="o">=</span> <span class="n">shutil</span><span class="o">.</span><span class="n">disk_usage</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">free</span> <span class="o">-</span> <span class="mf">1e9</span>
         <span class="n">etag_to_content_cache</span> <span class="o">=</span> <span class="n">FileBasedCache</span><span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;etag_to_content_cache&quot;</span><span class="p">)</span>
-        <span class="n">sizes</span> <span class="o">=</span> <span class="n">etag_to_content_cache</span><span class="o">.</span><span class="n">sizes</span>
-        <span class="n">total_size</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">sizes</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-        <span class="k">if</span> <span class="n">total_size</span> <span class="o">&gt;</span> <span class="n">available_bytes</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">cull_on_startup</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">AlreadyTooLarge</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;The cache directory is already </span><span class="si">{</span><span class="n">total_size</span><span class="si">}</span><span class="s2"> bytes which is greater &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;that the specified available_bytes </span><span class="si">{</span><span class="n">available_bytes</span><span class="si">}</span><span class="s2">. To delete items &quot;</span>
-                    <span class="s2">&quot;from the cache until it fits, set cull_on_startup=True.&quot;</span>
-                <span class="p">)</span>
         <span class="n">instance</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">available_bytes</span><span class="p">,</span>
-            <span class="n">url_to_etag_cache</span><span class="o">=</span><span class="n">FileBasedCache</span><span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;url_to_etag_cache&quot;</span><span class="p">),</span>
+            <span class="n">capacity</span><span class="p">,</span>
+            <span class="n">url_to_headers_cache</span><span class="o">=</span><span class="n">FileBasedUrlCache</span><span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;url_to_headers_cache&quot;</span><span class="p">),</span>
             <span class="n">etag_to_content_cache</span><span class="o">=</span><span class="n">etag_to_content_cache</span><span class="p">,</span>
-            <span class="n">sizes</span><span class="o">=</span><span class="n">sizes</span><span class="p">,</span>
             <span class="n">global_lock</span><span class="o">=</span><span class="n">locket</span><span class="o">.</span><span class="n">lock_file</span><span class="p">(</span><span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;global.lock&quot;</span><span class="p">),</span>
             <span class="n">lock_factory</span><span class="o">=</span><span class="k">lambda</span> <span class="n">etag</span><span class="p">:</span> <span class="n">locket</span><span class="o">.</span><span class="n">lock_file</span><span class="p">(</span>
                 <span class="n">path</span> <span class="o">/</span> <span class="s2">&quot;etag_to_content_cache&quot;</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">etag</span><span class="si">}</span><span class="s2">.lock&quot;</span>
             <span class="p">),</span>
-            <span class="n">error_if_full</span><span class="o">=</span><span class="n">error_if_full</span><span class="p">,</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">OnDiskState</span><span class="p">(</span><span class="n">path</span><span class="p">),</span>
             <span class="n">scorer</span><span class="o">=</span><span class="n">scorer</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="c1"># Ensure we fit in available_bytes.</span>
-        <span class="n">instance</span><span class="o">.</span><span class="n">shrink</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">instance</span></div>
 
 <div class="viewcode-block" id="Cache.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.html#tiled.client.cache.Cache.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">available_bytes</span><span class="p">,</span>
+        <span class="n">capacity</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">url_to_etag_cache</span><span class="p">,</span>
+        <span class="n">url_to_headers_cache</span><span class="p">,</span>
         <span class="n">etag_to_content_cache</span><span class="p">,</span>
-        <span class="n">sizes</span><span class="p">,</span>
         <span class="n">global_lock</span><span class="p">,</span>
         <span class="n">lock_factory</span><span class="p">,</span>
-        <span class="n">error_if_full</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">,</span>
         <span class="n">scorer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 
-<span class="sd">        available_bytes : int</span>
+<span class="sd">        capacity : int</span>
 <span class="sd">            The number of bytes of data to keep in the cache</span>
-<span class="sd">        url_to_etag_cache : MutableMapping</span>
+<span class="sd">        url_to_headers_cache : MutableMapping</span>
 <span class="sd">            Dict-like object to use for cache</span>
 <span class="sd">        etag_to_content_cache : MutableMapping</span>
 <span class="sd">            Dict-like object to use for cache</span>
-<span class="sd">        sizes : dict</span>
-<span class="sd">            Byte size of each item in the etag_to_content_cache.</span>
 <span class="sd">        global_lock : Lock</span>
-<span class="sd">            A lock used for the url_to_etag_cache</span>
+<span class="sd">            A lock used for the url_to_headers_cache</span>
 <span class="sd">        lock_factory : callable</span>
 <span class="sd">            Expected signature: ``f(etag) -&gt; Lock``</span>
-<span class="sd">        error_if_full : boolean, optional</span>
-<span class="sd">            By default, the cache starts evicting the least-used items when</span>
-<span class="sd">            it fills up. This is generally fine when working with a</span>
-<span class="sd">            connection to the server. But if the goal is to cache for</span>
-<span class="sd">            *offline* use, it is better to be notified by and error that the</span>
-<span class="sd">            cache is full. Then the user can respond by increasing</span>
-<span class="sd">            available_bytes, using a different storage volume for the cache,</span>
-<span class="sd">            or choosing to a different (smaller) set of entries to download.</span>
+<span class="sd">        state : object</span>
+<span class="sd">            Namespace used for storing general-purpose cache state</span>
 <span class="sd">        scorer: Scorer, optional</span>
 <span class="sd">            A Scorer object that controls how we decide what to retire when space</span>
 <span class="sd">            is low.</span>
@@ -393,74 +468,175 @@
         <span class="k">if</span> <span class="n">scorer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">scorer</span> <span class="o">=</span> <span class="n">Scorer</span><span class="p">(</span><span class="n">halflife</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span> <span class="o">=</span> <span class="n">scorer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">available_bytes</span> <span class="o">=</span> <span class="n">available_bytes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">state</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;when_full&quot;</span><span class="p">):</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">when_full</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;evict&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span> <span class="o">=</span> <span class="n">capacity</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">heap</span> <span class="o">=</span> <span class="n">heapdict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nbytes</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">url_to_etag_cache</span> <span class="o">=</span> <span class="n">url_to_etag_cache</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_cache</span> <span class="o">=</span> <span class="n">url_to_headers_cache</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">etag_to_content_cache</span> <span class="o">=</span> <span class="n">etag_to_content_cache</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">etag_refcount</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="mi">0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">etag_lock</span> <span class="o">=</span> <span class="n">LockDict</span><span class="o">.</span><span class="n">from_lock_factory</span><span class="p">(</span><span class="n">lock_factory</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">url_to_etag_lock</span> <span class="o">=</span> <span class="n">global_lock</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">error_if_full</span> <span class="o">=</span> <span class="n">error_if_full</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_lock</span> <span class="o">=</span> <span class="n">global_lock</span>
         <span class="c1"># If the cache has data in it, initialize the internal caches.</span>
         <span class="k">for</span> <span class="n">etag</span> <span class="ow">in</span> <span class="n">etag_to_content_cache</span><span class="p">:</span>
-            <span class="n">nbytes</span> <span class="o">=</span> <span class="n">sizes</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span>
+            <span class="c1"># This tells us the content size without actually reading in the data.</span>
+            <span class="n">nbytes</span> <span class="o">=</span> <span class="n">etag_to_content_cache</span><span class="o">.</span><span class="n">sizeof</span><span class="p">(</span><span class="n">etag</span><span class="p">)</span>
             <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span><span class="o">.</span><span class="n">touch</span><span class="p">(</span><span class="n">etag</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">heap</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">score</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">nbytes</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">nbytes</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">+=</span> <span class="n">nbytes</span></div>
 
-    <span class="k">def</span> <span class="nf">put_etag_for_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
-        <span class="n">key</span> <span class="o">=</span> <span class="n">tokenize_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-        <span class="n">previous_etag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_etag_cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">previous_etag</span><span class="p">:</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">when_full</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Controls what happens the cache is at capacity</span>
+
+<span class="sd">        * EVICT - Make a cost/benefit judgement about what (if anything) to evict to make room.</span>
+<span class="sd">        * ERROR - Raise an error.</span>
+<span class="sd">        * WARN - Leave the cache content alone and warn that nothing new will be cached.</span>
+<span class="sd">          This is not recommended.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">WhenFull</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">when_full</span><span class="o">.</span><span class="n">decode</span><span class="p">())</span>
+
+    <span class="nd">@when_full</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">when_full</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">when_full</span> <span class="o">=</span> <span class="n">WhenFull</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">renew</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">,</span> <span class="n">expires</span><span class="p">):</span>
+        <span class="n">cache_key</span> <span class="o">=</span> <span class="n">tokenize_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">expires</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Do not renew.</span>
+            <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_lock</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_cache</span><span class="p">[</span><span class="n">cache_key</span><span class="p">]</span>
+            <span class="k">assert</span> <span class="n">item</span><span class="o">.</span><span class="n">etag</span> <span class="o">==</span> <span class="n">etag</span>
+            <span class="c1"># TO DO We end up going str -&gt; datetime -&gt; str here.</span>
+            <span class="c1"># It may be worth adding a fast path.</span>
+            <span class="n">expires_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">expires</span><span class="p">,</span> <span class="n">HTTP_EXPIRES_HEADER_FORMAT</span><span class="p">)</span>
+            <span class="n">updated_item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">expires</span><span class="o">=</span><span class="n">expires_dt</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_cache</span><span class="p">[</span><span class="n">cache_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">updated_item</span>
+        <span class="k">if</span> <span class="n">__debug__</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s2">&quot;Cache renewed </span><span class="si">%s</span><span class="s2"> for </span><span class="si">%d</span><span class="s2"> secs.&quot;</span><span class="p">,</span>
+                <span class="n">url</span><span class="p">,</span>
+                <span class="n">_round_seconds</span><span class="p">(</span><span class="n">expires_dt</span> <span class="o">-</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()),</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
+        <span class="n">cache_key</span> <span class="o">=</span> <span class="n">tokenize_url</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cache_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cached</span><span class="p">:</span>
+            <span class="n">previous_etag</span> <span class="o">=</span> <span class="n">cached</span><span class="o">.</span><span class="n">etag</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">etag_refcount</span><span class="p">[</span><span class="n">previous_etag</span><span class="p">]</span> <span class="o">-=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">etag_refcount</span><span class="p">[</span><span class="n">previous_etag</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="c1"># All URLs that referred to this content have since</span>
                 <span class="c1"># changed their ETags, so we can forget about this content.</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">retire</span><span class="p">(</span><span class="n">previous_etag</span><span class="p">)</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_etag_lock</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">url_to_etag_cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">etag</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="n">UrlItem</span><span class="o">.</span><span class="n">from_headers</span><span class="p">(</span><span class="n">headers</span><span class="p">)</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_cache</span><span class="p">[</span><span class="n">cache_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span>
+        <span class="n">nbytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_put_content</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">etag</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span>
+        <span class="n">duration</span> <span class="o">=</span> <span class="mi">1000</span> <span class="o">*</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>  <span class="c1"># units: ms</span>
+        <span class="k">if</span> <span class="n">__debug__</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">nbytes</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">expires</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="s2">&quot;Cache stored (</span><span class="si">%s</span><span class="s2"> B in </span><span class="si">%.1f</span><span class="s2"> ms) </span><span class="si">%s</span><span class="s2">. Stale in </span><span class="si">%d</span><span class="s2"> secs.&quot;</span><span class="p">,</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">nbytes</span><span class="si">:</span><span class="s2">_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>  <span class="c1"># Use _ for thousands separator.</span>
+                        <span class="n">duration</span><span class="p">,</span>
+                        <span class="n">url</span><span class="p">,</span>
+                        <span class="n">_round_seconds</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">expires</span> <span class="o">-</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()),</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="s2">&quot;Cache stored (</span><span class="si">%s</span><span class="s2"> B in </span><span class="si">%.1f</span><span class="s2"> ms) </span><span class="si">%s</span><span class="s2">. Immediately stale.&quot;</span><span class="p">,</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">nbytes</span><span class="si">:</span><span class="s2">_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>  <span class="c1"># Use _ for thousands separator.</span>
+                        <span class="n">duration</span><span class="p">,</span>
+                        <span class="n">url</span><span class="p">,</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s2">&quot;Cache delined to store </span><span class="si">%s</span><span class="s2"> given its cost/benefit score.&quot;</span><span class="p">,</span> <span class="n">url</span>
+                <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">put_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">etag</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_put_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">etag</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
         <span class="n">nbytes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">nbytes</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">available_bytes</span><span class="p">:</span>
-            <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span><span class="o">.</span><span class="n">touch</span><span class="p">(</span><span class="n">etag</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">)</span>
-            <span class="k">if</span> <span class="p">(</span>
-                <span class="n">nbytes</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">available_bytes</span>
-                <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">heap</span>
-                <span class="ow">or</span> <span class="n">score</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">heap</span><span class="o">.</span><span class="n">peekitem</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
-            <span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">etag_to_content_cache</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">content</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">heap</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">score</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">nbytes</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">nbytes</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">+=</span> <span class="n">nbytes</span>
-                <span class="c1"># TODO We should actually shrink *first* to stay below the available_bytes.</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">shrink</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">nbytes</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;A single item of size </span><span class="si">{</span><span class="n">nbytes</span><span class="si">}</span><span class="s2"> is too large for the &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;cache of capacity </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">when_full</span> <span class="o">==</span> <span class="n">WhenFull</span><span class="o">.</span><span class="n">ERROR</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">TooLargeForCache</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">when_full</span> <span class="o">==</span> <span class="n">WhenFull</span><span class="o">.</span><span class="n">WARN</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="c1"># If we are set to EVICT, just do not bother storing items too large for the cache.</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">nbytes</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">when_full</span> <span class="o">==</span> <span class="n">WhenFull</span><span class="o">.</span><span class="n">ERROR</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">CacheIsFull</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;&quot;&quot;All </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="si">}</span><span class="s2"> bytes of the cache&#39;s capacity are used. Options:</span>
+<span class="s2">    1. Set larger capacity (and if necessary a different storage volume with more room).</span>
+<span class="s2">    2. Choose a smaller set of entries to cache.</span>
+<span class="s2">    3. Allow the cache to evict items that do not fit by setting cache.when_full = &quot;evict&quot;.</span>
+<span class="s2">    4. Let the cache sit as it is, keeping the items it has but not adding any more,</span>
+<span class="s2">       This is not recommended but it is doable by setting cache.when_full = &quot;warn&quot;.&quot;&quot;&quot;</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">when_full</span> <span class="o">==</span> <span class="n">WhenFull</span><span class="o">.</span><span class="n">WARN</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;&quot;&quot;All </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="si">}</span><span class="s2"> bytes of the cache&#39;s capacity are used. Options:</span>
+<span class="s2">    1. Set larger capacity (and if necessary a different storage volume with more room).</span>
+<span class="s2">    2. Choose a smaller set of entries to cache.</span>
+<span class="s2">    3. Allow the cache to evict items that do not fit by setting cache.when_full = &quot;evict&quot;.</span>
+<span class="s2">    4. Let the cache sit as it is, keeping the items it has but not adding any more,</span>
+<span class="s2">       This is not recommended but it is doable by setting cache.when_full = &quot;warn&quot;.&quot;&quot;&quot;</span>
+                <span class="p">)</span>
+                <span class="k">return</span>
+        <span class="c1"># If we reach here, either the data fits or we are going to</span>
+        <span class="c1"># make a cost/benefit assessment of whether to evict things to make room for it.</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span><span class="o">.</span><span class="n">touch</span><span class="p">(</span><span class="n">etag</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">nbytes</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">heap</span>
+            <span class="ow">or</span> <span class="n">score</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">heap</span><span class="o">.</span><span class="n">peekitem</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shrink</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">capacity</span> <span class="o">-</span> <span class="n">nbytes</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">etag_to_content_cache</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">content</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">heap</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">score</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nbytes</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">nbytes</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">+=</span> <span class="n">nbytes</span>
+            <span class="k">return</span> <span class="n">nbytes</span>
 
     <span class="k">def</span> <span class="nf">get_reservation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span>
         <span class="c1"># Hold the global lock.</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_etag_lock</span><span class="p">:</span>
-            <span class="n">etag_bytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_etag_cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">tokenize_url</span><span class="p">(</span><span class="n">url</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">etag_bytes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_lock</span><span class="p">:</span>
+            <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_to_headers_cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">tokenize_url</span><span class="p">(</span><span class="n">url</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="c1"># We have nothing for this URL.</span>
                 <span class="k">return</span> <span class="kc">None</span>
-            <span class="n">etag</span> <span class="o">=</span> <span class="n">etag_bytes</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
             <span class="c1"># Acquire a targeted lock, and then release and the global lock.</span>
-            <span class="n">lock</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">etag_lock</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span>
+            <span class="n">lock</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">etag_lock</span><span class="p">[</span><span class="n">cached</span><span class="o">.</span><span class="n">etag</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">Reservation</span><span class="p">(</span>
-            <span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">,</span> <span class="n">lock</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_content_for_etag</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
+            <span class="n">url</span><span class="p">,</span>
+            <span class="n">cached</span><span class="p">,</span>
+            <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">renew</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">cached</span><span class="o">.</span><span class="n">etag</span><span class="p">),</span>
+            <span class="n">lock</span><span class="p">,</span>
+            <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_content_for_etag</span><span class="p">,</span> <span class="n">cached</span><span class="o">.</span><span class="n">etag</span><span class="p">),</span>
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_get_content_for_etag</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">etag</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">etag_to_content_cache</span><span class="p">:</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">etag_to_content_cache</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">etag_to_content_cache</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span>
             <span class="c1"># Access this item increases its score.</span>
-            <span class="n">nbytes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span><span class="o">.</span><span class="n">touch</span><span class="p">(</span><span class="n">etag</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">)</span>
+            <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scorer</span><span class="o">.</span><span class="n">touch</span><span class="p">(</span><span class="n">etag</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">content</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">heap</span><span class="p">[</span><span class="n">etag</span><span class="p">]</span> <span class="o">=</span> <span class="n">score</span>
-            <span class="k">return</span> <span class="n">value</span>
+            <span class="k">return</span> <span class="n">content</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
 
     <span class="k">def</span> <span class="nf">retire</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">etag</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Retire/remove a etag from the cache</span>
@@ -483,39 +659,35 @@
                     <span class="k">try</span><span class="p">:</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">heap</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">etag</span><span class="p">)</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">etag_to_content_cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">etag</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nbytes</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">etag</span><span class="p">)</span>
+                        <span class="n">nbytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nbytes</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">etag</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">-=</span> <span class="n">nbytes</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">etag_lock</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">etag</span><span class="p">)</span>
                     <span class="k">finally</span><span class="p">:</span>
                         <span class="n">lock</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
                     <span class="k">break</span>
+            <span class="k">if</span> <span class="n">__debug__</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Cache evicted </span><span class="si">%s</span><span class="s2"> B with ETag </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">nbytes</span><span class="si">:</span><span class="s2">_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">resize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">available_bytes</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">resize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capacity</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Resize the cache.</span>
 
-<span class="sd">        Will fit the cache into available_bytes by calling `shrink()`.</span>
+<span class="sd">        Will fit the cache into capacity by calling `shrink()`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">available_bytes</span> <span class="o">=</span> <span class="n">available_bytes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span> <span class="o">=</span> <span class="n">capacity</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shrink</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">shrink</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">shrink</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Retire keys from the cache until we&#39;re under bytes budget</span>
 
 <span class="sd">        See Also:</span>
 <span class="sd">            retire</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">available_bytes</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">target</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">&lt;=</span> <span class="n">target</span><span class="p">:</span>
             <span class="k">return</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_error_if_full</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">CacheIsFull</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;&quot;&quot;All </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">available_bytes</span><span class="si">}</span><span class="s2"> are used. Options:</span>
-<span class="s2">1. Set larger available_bytes (and if necessary a different storage volume with more room).</span>
-<span class="s2">2. Choose a smaller set of entries to cache.</span>
-<span class="s2">3. Allow the cache to evict items that do not fit by setting error_if_full=False.</span>
-<span class="s2">&quot;&quot;&quot;</span>
-            <span class="p">)</span>
-
-        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">available_bytes</span><span class="p">:</span>
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_bytes</span> <span class="o">&gt;</span> <span class="n">target</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_shrink_one</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -583,11 +755,73 @@
 <span class="sd">    &gt;&gt;&gt; tokenize_url((b&quot;https&quot;, b&quot;localhost&quot;, 8000, b&quot;/metadata/&quot;))</span>
 <span class="sd">    &quot;some unique hash&quot;</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">url_as_tuple</span> <span class="o">=</span> <span class="n">url</span><span class="o">.</span><span class="n">raw</span>
     <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span>
         <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">url</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">url</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;:</span><span class="si">{</span><span class="n">url</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="o">*</span><span class="n">url</span><span class="p">[</span><span class="mi">3</span><span class="p">:]]</span>  <span class="c1"># e.g. 8000 -&gt; b&#39;8000&#39;</span>
+            <span class="p">[</span>
+                <span class="n">url_as_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">url_as_tuple</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="sa">f</span><span class="s2">&quot;:</span><span class="si">{</span><span class="n">url_as_tuple</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span>  <span class="c1"># e.g. 8000 -&gt; b&#39;8000&#39;</span>
+                <span class="o">*</span><span class="n">url_as_tuple</span><span class="p">[</span><span class="mi">3</span><span class="p">:],</span>
+            <span class="p">]</span>
         <span class="p">)</span>
     <span class="p">)</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+
+<span class="k">class</span> <span class="nc">OnDiskState</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ttl_cache</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="kn">import</span> <span class="nn">packaging.version</span>
+
+            <span class="n">version_filepath</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="s2">&quot;client_library_version&quot;</span>
+            <span class="k">if</span> <span class="n">version_filepath</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">version_filepath</span><span class="p">,</span> <span class="s2">&quot;rt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+                    <span class="c1"># Check to see if this cache has an internal layout that we</span>
+                    <span class="c1"># understand.</span>
+                    <span class="n">version</span> <span class="o">=</span> <span class="n">packaging</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+                    <span class="k">if</span> <span class="n">version</span> <span class="o">&lt;=</span> <span class="n">packaging</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">&quot;0.1.0a42&quot;</span><span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="s2">&quot;Cache directory </span><span class="si">{directory}</span><span class="s2"> was used by an older version of Tiled. &quot;</span>
+                            <span class="s2">&quot;It cannot be used by this version. Choose a different directory, &quot;</span>
+                            <span class="s2">&quot;or delete all the cached data in that directory. (In the future &quot;</span>
+                            <span class="s2">&quot;Tiled caching will be backward compatible, but not during alpha.)&quot;</span>
+                        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Record the version which may be useful to future code that needs</span>
+        <span class="c1"># to deal with a change in internal format or layout.</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="s2">&quot;client_library_version&quot;</span><span class="p">,</span> <span class="s2">&quot;wt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">tiled</span> <span class="kn">import</span> <span class="n">__version__</span>
+
+            <span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">__version__</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">deadline</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ttl_cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">deadline</span> <span class="o">&lt;</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">value</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="n">key</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">TIMEOUT</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># second</span>
+        <span class="n">deadline</span> <span class="o">=</span> <span class="n">TIMEOUT</span> <span class="o">+</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ttl_cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">deadline</span><span class="p">,</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="n">TIMEOUT</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># second</span>
+        <span class="n">deadline</span> <span class="o">=</span> <span class="n">TIMEOUT</span> <span class="o">+</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ttl_cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">deadline</span><span class="p">,</span> <span class="n">value</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="n">key</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">FileBasedCache</span><span class="p">(</span><span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">MutableMapping</span><span class="p">):</span>
@@ -596,13 +830,6 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;w&quot;</span><span class="p">:</span>
-            <span class="c1"># Record the version which may be useful to future code that needs</span>
-            <span class="c1"># to deal with a change in internal format or layout.</span>
-            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="s2">&quot;client_library_version&quot;</span><span class="p">,</span> <span class="s2">&quot;wt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-                <span class="kn">from</span> <span class="nn">tiled</span> <span class="kn">import</span> <span class="n">__version__</span>
-
-                <span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">__version__</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">repr</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
@@ -611,12 +838,10 @@
     <span class="k">def</span> <span class="nf">directory</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">)</span><span class="o">.</span><span class="n">parts</span><span class="p">:</span> <span class="n">path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span>
-            <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()</span>
-        <span class="p">}</span>
+    <span class="k">def</span> <span class="nf">sizeof</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="c1"># This is vestigial and can likely be removed.</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">,</span> <span class="o">*</span><span class="n">_normalize</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span>
 
     <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">,</span> <span class="o">*</span><span class="n">_normalize</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
@@ -640,17 +865,26 @@
 
     <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
-            <span class="k">yield</span> <span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">)</span><span class="o">.</span><span class="n">parts</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">)</span><span class="o">.</span><span class="n">parts</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="c1"># top-level metadata like &quot;client_library_version&quot;</span>
+                <span class="k">continue</span>
+            <span class="k">yield</span> <span class="n">_unnormalize</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="p">,</span> <span class="o">*</span><span class="n">_normalize</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span>
 
 
-<span class="k">def</span> <span class="nf">_normalize</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">key</span><span class="p">,)</span>
-    <span class="k">return</span> <span class="n">key</span>
+<span class="k">def</span> <span class="nf">_normalize</span><span class="p">(</span><span class="o">*</span><span class="n">key</span><span class="p">):</span>
+    <span class="c1"># To avoid an overly large directory (which leads to slow performance)</span>
+    <span class="c1"># divide into subdirectories beginning with the first two characters of</span>
+    <span class="c1"># the contents&#39; name.</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">][:</span><span class="mi">2</span><span class="p">],)</span> <span class="o">+</span> <span class="n">key</span>
+
+
+<span class="k">def</span> <span class="nf">_unnormalize</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
 
 
 <span class="k">class</span> <span class="nc">LockDict</span><span class="p">(</span><span class="nb">dict</span><span class="p">):</span>
@@ -666,12 +900,45 @@
         <span class="k">return</span> <span class="n">value</span>
 
 
+<span class="k">class</span> <span class="nc">FileBasedUrlCache</span><span class="p">(</span><span class="n">FileBasedCache</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">UrlItem</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">decode</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">to_text</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+
 <span class="k">class</span> <span class="nc">AlreadyTooLarge</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
     <span class="k">pass</span>
 
 
 <span class="k">class</span> <span class="nc">CacheIsFull</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
     <span class="k">pass</span>
+
+
+<span class="k">class</span> <span class="nc">TooLargeForCache</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">class</span> <span class="nc">NoCache</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">def</span> <span class="nf">verify_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">NoCache</span><span class="p">(</span>
+            <span class="sd">&quot;&quot;&quot;To download, the Tiled client needs to be configured</span>
+<span class="sd">with a cache, such as:</span>
+
+<span class="sd">from tiled.client import from_uri</span>
+<span class="sd">from tiled.client.cache import Cache</span>
+
+<span class="sd">c = from_uri(&quot;http://tiled-demo.blueskyproject.io&quot;, cache = Cache.on_disk(&quot;data&quot;))</span>
+
+<span class="sd">See https://blueskyproject.io/tiled/tutorials/caching.html for details.&quot;&quot;&quot;</span>
+        <span class="p">)</span>
 </pre></div>
 
            </div>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.node &mdash; tiled 0.1.0a42.post9+g271fb36 documentation</title>
+  <title>tiled.client.node &mdash; tiled 0.1.0a42.post48+gcadb8c6 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a42.post9+g271fb36
+                0.1.0a42.post48+gcadb8c6
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -128,6 +128,7 @@
 <span class="kn">from</span> <span class="nn">..trees.utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">IndexersMixin</span><span class="p">,</span> <span class="n">tree_repr</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">OneShotCachedMap</span><span class="p">,</span> <span class="n">Sentinel</span>
 <span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">BaseClient</span>
+<span class="kn">from</span> <span class="nn">.cache</span> <span class="kn">import</span> <span class="n">Revalidate</span><span class="p">,</span> <span class="n">verify_cache</span>
 
 
 <span class="k">class</span> <span class="nc">Node</span><span class="p">(</span><span class="n">BaseClient</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Mapping</span><span class="p">,</span> <span class="n">IndexersMixin</span><span class="p">):</span>
@@ -271,17 +272,35 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sorting</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Node.touch"><a class="viewcode-back" href="../../../reference/generated/tiled.client.node.Node.touch.html#tiled.client.node.Node.touch">[docs]</a>    <span class="k">def</span> <span class="nf">touch</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="Node.download"><a class="viewcode-back" href="../../../reference/generated/tiled.client.node.Node.download.html#tiled.client.node.Node.download">[docs]</a>    <span class="k">def</span> <span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Access all the data in this Node.</span>
 
 <span class="sd">        This causes it to be cached if the context is configured with a cache.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">verify_cache</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">)</span>
         <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
             <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">touch</span><span class="p">()</span></div>
+            <span class="n">entry</span><span class="o">.</span><span class="n">download</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Node.refresh"><a class="viewcode-back" href="../../../reference/generated/tiled.client.node.Node.refresh.html#tiled.client.node.Node.refresh">[docs]</a>    <span class="k">def</span> <span class="nf">refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Refresh cached data for this node.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        force: bool</span>
+<span class="sd">            If False, (default) refresh only expired cache entries.</span>
+<span class="sd">            If True, refresh all cache entries.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">force</span><span class="p">:</span>
+            <span class="n">revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">FORCE</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_EXPIRED</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">revalidation</span><span class="p">(</span><span class="n">revalidate</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">()</span></div>
 
     <span class="k">def</span> <span class="nf">_get_class</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
         <span class="c1"># The server can use specs to tell us that this is not just *any*</span>

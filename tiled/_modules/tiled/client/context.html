@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a42.post9+g271fb36 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a42.post48+gcadb8c6 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a42.post9+g271fb36
+                0.1.0a42.post48+gcadb8c6
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -113,7 +113,8 @@
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.client.context</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">getpass</span>
+<span></span><span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">getpass</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">secrets</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
@@ -124,6 +125,7 @@
 <span class="kn">import</span> <span class="nn">msgpack</span>
 
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span>
+<span class="kn">from</span> <span class="nn">.cache</span> <span class="kn">import</span> <span class="n">Revalidate</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ASYNC_EVENT_HOOKS</span><span class="p">,</span>
     <span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">,</span>
@@ -281,6 +283,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">client</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span> <span class="o">=</span> <span class="n">authentication_uri</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_WE_MUST</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="o">=</span> <span class="n">username</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache_or_root_directory</span> <span class="o">=</span> <span class="n">token_cache</span>
@@ -296,7 +299,12 @@
 
         <span class="c1"># Make an initial &quot;safe&quot; request to let the server set the CSRF cookie.</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">offline</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># We need a CSRF token.</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_cache</span><span class="p">(</span><span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">)</span>
 
         <span class="c1"># Ask the server what its root_path is.</span>
         <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">offline</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
@@ -330,16 +338,24 @@
         <span class="k">return</span> <span class="n">DictView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span>
+    <span class="k">def</span> <span class="nf">cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">app</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_app</span>
+    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span>
 
     <span class="nd">@offline</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
+            <span class="c1"># We need a CSRF token.</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_cache</span><span class="p">(</span><span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_authentication_uri</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">app</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_app</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">path_parts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -354,13 +370,67 @@
         <span class="s2">&quot;httpx.Client event hooks. This is exposed for testing.&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">event_hooks</span>
 
-<div class="viewcode-block" id="Context.get_content"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.get_content.html#tiled.client.context.Context.get_content">[docs]</a>    <span class="k">def</span> <span class="nf">get_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">revalidate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This controls how aggressively to check whether cache entries are out of date.</span>
+
+<span class="sd">        - FORCE: Always revalidate (generally too aggressive and expensive)</span>
+<span class="sd">        - IF_EXPIRED: Revalidate if the &quot;Expire&quot; date provided by the server has passed</span>
+<span class="sd">        - IF_WE_MUST: Only revalidate if the server indicated that is is a</span>
+<span class="sd">          particularly volatile entry, such as a search result to a dynamic query.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span>
+
+    <span class="nd">@revalidate</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">revalidate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span> <span class="nf">revalidation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">revalidate</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Temporarily change the &#39;revalidate&#39; property in a context.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        revalidate: string or tiled.client.cache.Revalidate enum member</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">member</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="p">(</span><span class="n">revalidate</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="c1"># This raises a more helpful error that lists the valid options.</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Revalidation </span><span class="si">{</span><span class="n">revalidate</span><span class="si">}</span><span class="s2"> not recognized. Must be one of </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">Revalidate</span><span class="o">.</span><span class="n">__members__</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+        <span class="n">original</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span> <span class="o">=</span> <span class="n">member</span>
+        <span class="k">yield</span>
+        <span class="c1"># Upon leaving context, set it back.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span> <span class="o">=</span> <span class="n">original</span>
+
+    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
+    <span class="k">def</span> <span class="nf">disable_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">allow_read</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_write</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">allow_write</span>
+        <span class="k">yield</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_write</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="Context.get_content"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.get_content.html#tiled.client.context.Context.get_content">[docs]</a>    <span class="k">def</span> <span class="nf">get_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">revalidate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">revalidate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback to context default.</span>
+            <span class="n">revalidate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span>
         <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">accept</span><span class="p">:</span>
             <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Accept&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">accept</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">raw</span>  <span class="c1"># URL as tuple</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
             <span class="c1"># We must rely on the cache alone.</span>
+            <span class="c1"># The role of a &#39;reservation&#39; is to ensure that the content</span>
+            <span class="c1"># of interest is not evicted from the cache between the moment</span>
+            <span class="c1"># that we start verifying its validity and the moment that</span>
+            <span class="c1"># we actually read the content. It is used more extensively</span>
+            <span class="c1"># below.</span>
             <span class="n">reservation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_reservation</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">NotAvailableOffline</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
@@ -379,35 +449,69 @@
                 <span class="k">return</span> <span class="n">blosc</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
         <span class="c1"># If we get this far, we have an online client and a cache.</span>
-        <span class="n">reservation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_reservation</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="c1"># Parse Cache-Control header directives.</span>
+        <span class="n">cache_control</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">directive</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">directive</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Cache-Control&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="s2">&quot;no-cache&quot;</span> <span class="ow">in</span> <span class="n">cache_control</span><span class="p">:</span>
+            <span class="n">reservation</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reservation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_reservation</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;If-None-Match&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">etag</span>
+                <span class="n">is_stale</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">is_stale</span><span class="p">()</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
+                    <span class="c1"># This condition means &quot;client user wants us to unconditionally revalidate&quot;</span>
+                    <span class="p">(</span><span class="n">revalidate</span> <span class="o">==</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">FORCE</span><span class="p">)</span>
+                    <span class="ow">or</span>
+                    <span class="c1"># This condition means &quot;client user wants us to revalidate if expired&quot;</span>
+                    <span class="p">(</span><span class="n">is_stale</span> <span class="ow">and</span> <span class="p">(</span><span class="n">revalidate</span> <span class="o">==</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_EXPIRED</span><span class="p">))</span>
+                    <span class="ow">or</span>
+                    <span class="c1"># This condition means &quot;server really wants us to revalidate&quot;</span>
+                    <span class="p">(</span><span class="n">is_stale</span> <span class="ow">and</span> <span class="n">reservation</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">must_revalidate</span><span class="p">)</span>
+                    <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span>
+                <span class="p">):</span>
+                    <span class="c1"># Short-circuit. Do not even bother consulting the server.</span>
+                    <span class="k">return</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span><span class="p">:</span>
+                    <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;If-None-Match&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">etag</span>
             <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
             <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">304</span><span class="p">:</span>  <span class="c1"># HTTP 304 Not Modified</span>
+                <span class="c1"># Update the expiration time.</span>
+                <span class="n">reservation</span><span class="o">.</span><span class="n">renew</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expires&quot;</span><span class="p">))</span>
                 <span class="c1"># Read from the cache</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
-            <span class="k">elif</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="n">response</span><span class="o">.</span><span class="n">is_error</span><span class="p">:</span>
                 <span class="n">etag</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ETag&quot;</span><span class="p">)</span>
+                <span class="n">encoding</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Content-Encoding&quot;</span><span class="p">)</span>
                 <span class="n">content</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
-                <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content-encoding&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;blosc&quot;</span><span class="p">:</span>
+                <span class="c1"># httpx handles standard HTTP encodings transparently, but we have to</span>
+                <span class="c1"># handle &quot;blosc&quot; manually.</span>
+                <span class="k">if</span> <span class="n">encoding</span> <span class="o">==</span> <span class="s2">&quot;blosc&quot;</span><span class="p">:</span>
                     <span class="kn">import</span> <span class="nn">blosc</span>
 
                     <span class="n">content</span> <span class="o">=</span> <span class="n">blosc</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
-                <span class="c1"># TODO Respect Cache-control headers (e.g. &quot;no-store&quot;)</span>
-                <span class="k">if</span> <span class="n">etag</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="p">(</span><span class="s2">&quot;no-store&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cache_control</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="p">(</span><span class="n">etag</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_write</span><span class="p">)</span>
+                <span class="p">):</span>
                     <span class="c1"># Write to cache.</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">put_etag_for_url</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">etag</span><span class="p">)</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">put_content</span><span class="p">(</span><span class="n">etag</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+                        <span class="n">url</span><span class="p">,</span>
+                        <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span>
+                        <span class="n">content</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">return</span> <span class="n">content</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Unexpected status_code </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">reservation</span><span class="o">.</span><span class="n">ensure_released</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">content</span></div>
+                <span class="n">reservation</span><span class="o">.</span><span class="n">ensure_released</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Context.get_json"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.get_json.html#tiled.client.context.Context.get_json">[docs]</a>    <span class="k">def</span> <span class="nf">get_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
