@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a44.post7+ga004de0 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a44.post8+g6bc5dfd documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a44.post7+ga004de0
+                0.1.0a44.post8+g6bc5dfd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -114,6 +114,7 @@
              
   <h1>Source code for tiled.client.context</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">enum</span>
 <span class="kn">import</span> <span class="nn">getpass</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">secrets</span>
@@ -263,6 +264,12 @@
     <span class="k">pass</span>
 
 
+<span class="k">class</span> <span class="nc">PromptForReauthentication</span><span class="p">(</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">AT_INIT</span> <span class="o">=</span> <span class="s2">&quot;at_init&quot;</span>
+    <span class="n">NEVER</span> <span class="o">=</span> <span class="s2">&quot;never&quot;</span>
+    <span class="n">ALWAYS</span> <span class="o">=</span> <span class="s2">&quot;always&quot;</span>
+
+
 <div class="viewcode-block" id="Context"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.html#tiled.client.context.Context">[docs]</a><span class="k">class</span> <span class="nc">Context</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Wrap an httpx.Client with an optional cache and authentication functionality.</span>
@@ -271,11 +278,13 @@
 <div class="viewcode-block" id="Context.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.html#tiled.client.context.Context.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">client</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
         <span class="n">authentication_uri</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
+        <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">AT_INIT</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">authentication_uri</span> <span class="o">=</span> <span class="n">authentication_uri</span> <span class="ow">or</span> <span class="s2">&quot;/&quot;</span>
@@ -288,6 +297,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="o">=</span> <span class="n">username</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache_or_root_directory</span> <span class="o">=</span> <span class="n">token_cache</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prompt_for_reauthentication</span> <span class="o">=</span> <span class="n">PromptForReauthentication</span><span class="p">(</span>
+            <span class="n">prompt_for_reauthentication</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_refresh_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
             <span class="n">directory</span> <span class="o">=</span> <span class="n">_token_directory</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">base_url</span><span class="o">.</span><span class="n">netloc</span><span class="p">)</span>
@@ -317,8 +329,13 @@
                 <span class="s2">&quot;external&quot;</span><span class="p">,</span>
             <span class="p">):</span>
                 <span class="c1"># Authenticate. If a valid refresh_token is available in the token_cache,</span>
-                <span class="c1"># it will be used. Otherwise, this will prompt for input from the stdin.</span>
-                <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reauthenticate</span><span class="p">()</span>
+                <span class="c1"># it will be used. Otherwise, this will prompt for input from the stdin</span>
+                <span class="c1"># or raise CannotRefreshAuthentication.</span>
+                <span class="n">prompt</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">prompt_for_reauthentication</span> <span class="o">==</span> <span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">AT_INIT</span>
+                    <span class="ow">or</span> <span class="n">prompt_for_reauthentication</span> <span class="o">==</span> <span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">ALWAYS</span>
+                <span class="p">)</span>
+                <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reauthenticate</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span>
                 <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
                 <span class="n">client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="n">base_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;root_path&quot;</span><span class="p">]</span>
@@ -612,12 +629,23 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">tokens</span></div>
 
-<div class="viewcode-block" id="Context.reauthenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.reauthenticate.html#tiled.client.context.Context.reauthenticate">[docs]</a>    <span class="k">def</span> <span class="nf">reauthenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="s2">&quot;Refresh authentication. Prompt if refresh fails.&quot;</span>
+<div class="viewcode-block" id="Context.reauthenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.reauthenticate.html#tiled.client.context.Context.reauthenticate">[docs]</a>    <span class="k">def</span> <span class="nf">reauthenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Refresh authentication.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        prompt : bool</span>
+<span class="sd">            If True, give interactive prompt for authentication when refreshing</span>
+<span class="sd">            tokens fails. If False raise an error. If None, fall back</span>
+<span class="sd">            to default `prompt_for_reauthentication` set in Context.__init__.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_refresh</span><span class="p">()</span>
         <span class="k">except</span> <span class="n">CannotRefreshAuthentication</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">prompt_on_failure</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">prompt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prompt_for_reauthentication</span>
+            <span class="k">if</span> <span class="n">prompt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">authenticate</span><span class="p">()</span>
             <span class="k">raise</span></div>
 
@@ -646,13 +674,19 @@
             <span class="k">if</span> <span class="n">refresh_token</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="c1"># We are not using a token cache.</span>
-                    <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span><span class="s2">&quot;No token cache was given&quot;</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
+                        <span class="s2">&quot;No token cache was given. &quot;</span>
+                        <span class="s2">&quot;Provide fresh credentials. &quot;</span>
+                        <span class="s2">&quot;For a given client c, use c.context.authenticate().&quot;</span>
+                    <span class="p">)</span>
                 <span class="c1"># We are using a token_cache.</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">refresh_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">]</span>
                 <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
-                        <span class="s2">&quot;No refresh token was found in token cache&quot;</span>
+                        <span class="s2">&quot;No refresh token was found in token cache. &quot;</span>
+                        <span class="s2">&quot;Provide fresh credentials. &quot;</span>
+                        <span class="s2">&quot;For a given client c, use c.context.authenticate().&quot;</span>
                     <span class="p">)</span>
             <span class="n">token_request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
                 <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
@@ -669,7 +703,9 @@
                 <span class="c1"># Discard the expired (or otherwise invalid) refresh_token file.</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                 <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
-                    <span class="s2">&quot;Server rejected attempt to refresh token&quot;</span>
+                    <span class="s2">&quot;Server rejected attempt to refresh token. &quot;</span>
+                    <span class="s2">&quot;Provide fresh credentials. &quot;</span>
+                    <span class="s2">&quot;For a given client c, use c.context.authenticate().&quot;</span>
                 <span class="p">)</span>
             <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
             <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
@@ -698,6 +734,7 @@
     <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
+    <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">AT_INIT</span><span class="p">,</span>
     <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
@@ -766,6 +803,7 @@
         <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
         <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span>
+        <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">prompt_for_reauthentication</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
     <span class="p">)</span>
 
