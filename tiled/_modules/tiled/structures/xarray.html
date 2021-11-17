@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.structures.xarray &mdash; tiled 0.1.0a45 documentation</title>
+  <title>tiled.structures.xarray &mdash; tiled 0.1.0a45.post4+g0341498 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a45
+                0.1.0a45.post4+g0341498
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -120,6 +120,7 @@
 <span class="kn">import</span> <span class="nn">xarray</span>
 
 <span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="n">deserialization_registry</span><span class="p">,</span> <span class="n">serialization_registry</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">modules_available</span>
 <span class="kn">from</span> <span class="nn">.array</span> <span class="kn">import</span> <span class="n">ArrayStructure</span>
 <span class="kn">from</span> <span class="nn">.dataframe</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
@@ -298,11 +299,20 @@
     <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span>
     <span class="k">lambda</span> <span class="n">ds</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">serialize_excel</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">(),</span> <span class="n">metadata</span><span class="p">),</span>
 <span class="p">)</span>
-<span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">&quot;dataset&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
-    <span class="k">lambda</span> <span class="n">ds</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">ds</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span><span class="o">.</span><span class="n">to_json</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span>
-<span class="p">)</span>
+<span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;orjson&quot;</span><span class="p">):</span>
+    <span class="kn">import</span> <span class="nn">orjson</span>
+
+    <span class="k">def</span> <span class="nf">serialize_json</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">orjson</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">column</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">df</span><span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+        <span class="s2">&quot;dataset&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+        <span class="n">serialize_json</span><span class="p">,</span>
+    <span class="p">)</span>
 
 <span class="n">deserialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
     <span class="s2">&quot;dataset&quot;</span><span class="p">,</span> <span class="s2">&quot;application/x-zarr&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">ds</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">xarray</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
