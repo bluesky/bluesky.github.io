@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+g81e37ef documentation</title>
+  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+gc79cd2c documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+g81e37ef
+                0.post1+gc79cd2c
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -382,6 +382,10 @@
     <span class="o">...</span>
 
 
+<span class="k">class</span> <span class="nc">ScriptLoadingError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="o">...</span>
+
+
 <span class="k">def</span> <span class="nf">load_startup_script</span><span class="p">(</span><span class="n">script_path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">enable_local_imports</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Populate namespace by import a module.</span>
@@ -491,6 +495,115 @@
         <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="k">return</span> <span class="n">nspace</span>
+
+
+<span class="k">def</span> <span class="nf">extract_script_root_path</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">startup_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">startup_module_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">startup_script_path</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The function returns path to the root directory for local imports based on the source of</span>
+<span class="sd">    startup files. The function returns ``None`` if root directory does not exist (e.g. when</span>
+<span class="sd">    startup scripts are imported from the module). The root directory is a parameter of</span>
+<span class="sd">    ``load_script_into_existing_nspace`` function. The startup code locations are checked</span>
+<span class="sd">    in the same order as in ``load_worker_startup_code`` function.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    startup_dir : str</span>
+<span class="sd">        Name of the directory that contains startup files.</span>
+<span class="sd">    startup_module_name : str</span>
+<span class="sd">        Name of the startup module.</span>
+<span class="sd">    startup_script_path : str</span>
+<span class="sd">        Path to startup script.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str or None</span>
+<span class="sd">        Path to the root directory of startup files.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">startup_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">startup_dir</span>
+    <span class="k">elif</span> <span class="n">startup_module_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">elif</span> <span class="n">startup_script_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">startup_script_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">load_script_into_existing_nspace</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span> <span class="n">script</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">enable_local_imports</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">script_root_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">update_re</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Execute the script into the existing namespace ``nspace``. The script is expected to be executable</span>
+<span class="sd">    in the current namespace. An exception is raised if execution of the script fails. The code</span>
+<span class="sd">    calling this function is responsible for capturing exceptions and displaying or storing the error</span>
+<span class="sd">    messages in the convenient form.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    script: str</span>
+<span class="sd">        Valid Python script, which is executable in the existing namespace.</span>
+<span class="sd">    nspace: dict</span>
+<span class="sd">        The existing namespace.</span>
+<span class="sd">    enable_local_imports: boolean</span>
+<span class="sd">        Enable/disable local imports when loading the script (``True/False``).</span>
+<span class="sd">    script_root_path: str or None</span>
+<span class="sd">        Root path (hypothetic location of the script) to use for local imports. The root directory</span>
+<span class="sd">        is returned by the ``extract_script_root_path`` function.</span>
+<span class="sd">    update_re: boolean</span>
+<span class="sd">        Update the ``RE`` and ``db`` in ``nspace`` if they are changed in the script if ``True``,</span>
+<span class="sd">        discard those objects otherwise.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    Exceptions may be raised by the ``exec`` function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">importlib</span><span class="o">.</span><span class="n">invalidate_caches</span><span class="p">()</span>
+
+    <span class="n">root_path_exists</span> <span class="o">=</span> <span class="n">script_root_path</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">script_root_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">enable_local_imports</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">root_path_exists</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The path </span><span class="si">{</span><span class="n">script_root_path</span><span class="si">!r}</span><span class="s2"> does not exist. Local imports will not work.&quot;</span><span class="p">)</span>
+
+    <span class="n">use_local_imports</span> <span class="o">=</span> <span class="n">enable_local_imports</span> <span class="ow">and</span> <span class="n">root_path_exists</span>
+
+    <span class="k">if</span> <span class="n">use_local_imports</span><span class="p">:</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">script_root_path</span><span class="p">)</span>  <span class="c1"># Needed to make local imports work.</span>
+        <span class="c1"># Save the list of available modules</span>
+        <span class="n">sm_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+    <span class="n">nspace_local</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">script</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace_local</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ScriptLoadingError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to load stript: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">update_re</span><span class="p">:</span>
+            <span class="c1"># Discard &#39;RE&#39; and &#39;db&#39;</span>
+            <span class="k">if</span> <span class="s2">&quot;RE&quot;</span> <span class="ow">in</span> <span class="n">nspace_local</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">nspace_local</span><span class="p">[</span><span class="s2">&quot;RE&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="s2">&quot;db&quot;</span> <span class="ow">in</span> <span class="n">nspace_local</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">nspace_local</span><span class="p">[</span><span class="s2">&quot;db&quot;</span><span class="p">]</span>
+
+        <span class="c1"># A script may be partially loaded into the environment in case it fails.</span>
+        <span class="c1">#   This is &#39;realistic&#39; behavior, similar to what happens in IPython.</span>
+        <span class="c1">#   So make sure that all components that were loaded successfully are properly</span>
+        <span class="c1">#   added to the environment.</span>
+        <span class="n">nspace</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">nspace_local</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">use_local_imports</span><span class="p">:</span>
+            <span class="c1"># Delete data on all modules that were loaded by the script.</span>
+            <span class="c1"># We don&#39;t need them anymore. Modules will be reloaded from disk if</span>
+            <span class="c1">#   the script is executed again.</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sm_keys</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Deleting the key &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+                    <span class="k">del</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+            <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">script_root_path</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">plans_from_nspace</span><span class="p">(</span><span class="n">nspace</span><span class="p">):</span>
