@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+gc79cd2c documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+g957fcbf documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gc79cd2c
+                0.post1+g957fcbf
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -108,6 +108,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#re-resume-re-stop-re-abort-re-halt"><strong>‘re_resume’, ‘re_stop’, ‘re_abort’, ‘re_halt’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#re-runs"><strong>‘re_runs’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#script-upload"><strong>‘script_upload’</strong></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#function-execute"><strong>‘function_execute’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#task-load-result"><strong>‘task_load_result’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#manager-stop"><strong>‘manager_stop’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#manager-kill"><strong>‘manager_kill’</strong></a></li>
@@ -270,6 +271,7 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <p>Run tasks in RE Worker namespace:</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="#method-script-upload"><span class="std std-ref">‘script_upload’</span></a></p></li>
+<li><p><a class="reference internal" href="#method-function-execute"><span class="std std-ref">‘function_execute’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-task-load-result"><span class="std std-ref">‘task_load_result’</span></a></p></li>
 </ul>
 <p>Stopping RE Manager (mostly used in testing):</p>
@@ -388,6 +390,13 @@ RE Worker environment does not exist (or closed).</p>
 Running background tasks does not influence the state (<em>‘executing_task’</em> is
 not set). The environment state is different from Run Engine state (<em>re_state</em>),
 e.g. the environment is considered <em>idle</em> when the current plan is paused.</p>
+</dd>
+<dt><strong>worker_background_tasks</strong>: <em>int</em></dt><dd><p>the number of background tasks, which are currently running in the worker environment.
+Excessive or growing number of background task may indicated serious issue with
+the environment. The parameter represents the number of background tasks executed
+in separate threads, such as tasks started by API requests <em>script_upload</em> and
+<em>function_execute</em> with <em>run_in_background=True</em>. Foreground tasks that block
+execution of plans and other tasks are not counted.</p>
 </dd>
 <dt><strong>plan_queue_mode</strong>: <em>dict</em></dt><dd><p>the dictionary of parameters that determine queue execution mode. The key/value pairs
 in the dictionary represent parameter names and values. Supported parameters:
@@ -1771,6 +1780,81 @@ in the background.</p>
 </dd>
 <dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>Task UID can be used to check status of the task and download results once the task
 is completed (see <em>task_load_result</em> API).</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>The method initiates the operation. Monitor <em>task_results_uid</em> status field and call
+<em>task_load_results</em> API to check for success.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="function-execute">
+<span id="method-function-execute"></span><h4><strong>‘function_execute’</strong><a class="headerlink" href="#function-execute" title="Permalink to this headline">¶</a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 88%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘function_execute’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Start execution of a function in RE Worker namespace. The function must be defined in the
+namespace (in startup code or a script uploaded using <em>script_upload</em> method. The function
+may be executed as a foreground task (only if RE Manager and RE Worker environment are idle)
+or as a background task. Background tasks are executed in separate threads and may
+consume processing or memory resources and interfere with running plans or other tasks.
+RE Manager does not guarantee thread safety of the user code running in the background.
+Developers of startup code are fully responsible for preventing threading issues.</p>
+<p>The method allows to pass parameters (<em>args</em> and <em>kwargs</em>) to the function. Once the task
+is completed, the results of the function execution, including the return value, can be
+loaded using <em>task_load_result</em> method. If the task fails, the return value is a string
+with full traceback of the raised exception. The data types of parameters and return
+values must be JSON serializable. The task fails if the return value can not be serialized.</p>
+<p>The method only <strong>initiates</strong> execution of the function. If the request is successful
+(<em>success=True</em>), the server starts the task, which attempts to execute the function
+with given name and parameters. The function may still fail start (e.g. if the user is
+permitted to execute function with the given name, but the function is not defined
+in the namespace). Use <em>‘task_load_result’</em> method with the returned <em>task_uid</em> to
+check the status of the taks and load the result upon completion.</p>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><dl class="simple">
+<dt><strong>item</strong>: <em>dict</em></dt><dd><p>the dictionary that contains function name and parameters. The structure of
+dictionary is identical to <em>item</em> representing a plan or an instruction,
+except that <em>item_type</em> is <em>‘function’</em>.</p>
+</dd>
+<dt><strong>user_group</strong>: <em>str</em></dt><dd><p>the name of the user group (e.g. ‘admin’).</p>
+</dd>
+<dt><strong>user</strong>: <em>str</em></dt><dd><p>the name of the user (e.g. ‘John Doe’). The name is included in the item metadata
+and may be used to identify the user who submitted the item.</p>
+</dd>
+<dt><strong>run_in_background</strong>: <em>boolean</em> (optional, default <em>False</em>)</dt><dd><p>Set this parameter <em>True</em> to start a background task. Background tasks can be
+started and executed while a plan or another foreground task is running.
+If workflow requires executing background tasks, user code should be analyzed
+for thread safety to ensure there are no potential threading issues.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
+</dd>
+<dt><strong>item</strong>: <em>dict</em> or <em>None</em> (optional)</dt><dd><p>the item with information on the function. The item contains the assigned item UID.
+In case of error the item may be returned without modification. <em>None</em> will be
+returned if request does not contain item parameters. In current implementation
+the assigned <em>item_uid</em> is equal to <em>task_uid</em>, but it may change in the future.</p>
+</dd>
+<dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>Task UID can be used to check status of the task and download results once the task
+is completed (see <em>task_load_result</em> API). <em>None</em> is returned if the request fails.</p>
 </dd>
 </dl>
 </td>

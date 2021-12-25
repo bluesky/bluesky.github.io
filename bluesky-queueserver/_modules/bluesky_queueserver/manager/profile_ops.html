@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+gc79cd2c documentation</title>
+  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+g957fcbf documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gc79cd2c
+                0.post1+g957fcbf
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -843,6 +843,74 @@
         <span class="s2">&quot;meta&quot;</span><span class="p">:</span> <span class="n">plan_meta</span><span class="p">,</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">plan_prepared</span>
+
+
+<span class="k">def</span> <span class="nf">prepare_function</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">func_info</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">user_group_permissions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare function for execution in the worker namespace. Returned dictionary</span>
+<span class="sd">    contains reference to the callable object in the namespace, list of args and</span>
+<span class="sd">    dictionary of kwargs. The function may check if the user is allowed to</span>
+<span class="sd">    execute the function if ``user_group_permissions`` is provided (not ``None``).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    func_info: dict</span>
+<span class="sd">        Dictionary which contains keys: ``name``, ``user_group``, ``args`` (optional)</span>
+<span class="sd">        and ``kwargs`` (optional).</span>
+<span class="sd">    nspace: dict</span>
+<span class="sd">        Reference to the RE Worker namespace.</span>
+<span class="sd">    user_group_permissions: dict or None</span>
+<span class="sd">        Dictionary that contains user group permissions. User permissions are not checked</span>
+<span class="sd">        if ``None``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Function data: ``callable`` is a reference to a callable object in RE Worker namespace,</span>
+<span class="sd">        ``args`` is list of args and ``kwargs`` is a dictionary of kwargs.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        Error while preparing the function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="s2">&quot;name&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">func_info</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No function name is specified: </span><span class="si">{</span><span class="n">func_info</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">&quot;user_group&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">func_info</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No user group is specified in parameters for the function: </span><span class="si">{</span><span class="n">func_info</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">func_name</span> <span class="o">=</span> <span class="n">func_info</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+    <span class="n">user_group</span> <span class="o">=</span> <span class="n">func_info</span><span class="p">[</span><span class="s2">&quot;user_group&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">user_group_permissions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">check_if_function_allowed</span><span class="p">(</span>
+            <span class="n">func_name</span><span class="p">,</span> <span class="n">group_name</span><span class="o">=</span><span class="n">user_group</span><span class="p">,</span> <span class="n">user_group_permissions</span><span class="o">=</span><span class="n">user_group_permissions</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Function </span><span class="si">{</span><span class="n">func_name</span><span class="si">!r}</span><span class="s2"> is not allowed for users from </span><span class="si">{</span><span class="n">user_group</span><span class="si">!r}</span><span class="s2"> user group&quot;</span><span class="p">)</span>
+
+    <span class="n">func_args</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">func_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+    <span class="n">func_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">func_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kwargs&quot;</span><span class="p">,</span> <span class="p">{}))</span>
+
+    <span class="k">if</span> <span class="n">func_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">nspace</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Function </span><span class="si">{</span><span class="n">func_name</span><span class="si">!r}</span><span class="s2"> is not found in the worker namespace&quot;</span><span class="p">)</span>
+
+    <span class="n">func_callable</span> <span class="o">=</span> <span class="n">nspace</span><span class="p">[</span><span class="n">func_name</span><span class="p">]</span>
+
+    <span class="c1"># Following are basic checks to avoid most common errors. The list of check can be expanded.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">func_callable</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Object </span><span class="si">{</span><span class="n">func_name</span><span class="si">!r}</span><span class="s2"> defined in worker namespace is not callable&quot;</span><span class="p">)</span>
+    <span class="c1"># Generator functions defined in the worker namespace are plans, which return generators</span>
+    <span class="c1">#   when called. There is no point in calling those functions directly.</span>
+    <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isgeneratorfunction</span><span class="p">(</span><span class="n">func_callable</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Object </span><span class="si">{</span><span class="n">func_name</span><span class="si">!r}</span><span class="s2"> defined in worker namespace is a generator function&quot;</span><span class="p">)</span>
+
+    <span class="n">func_prepared</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;callable&quot;</span><span class="p">:</span> <span class="n">func_callable</span><span class="p">,</span>
+        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">func_args</span><span class="p">,</span>
+        <span class="s2">&quot;kwargs&quot;</span><span class="p">:</span> <span class="n">func_kwargs</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">func_prepared</span>
 
 
 <span class="c1"># ===============================================================================</span>
@@ -2407,7 +2475,6 @@
             <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
             <span class="s2">&quot;additionalProperties&quot;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;allowed_plans&quot;</span><span class="p">,</span> <span class="s2">&quot;forbidden_plans&quot;</span><span class="p">,</span> <span class="s2">&quot;allowed_devices&quot;</span><span class="p">,</span> <span class="s2">&quot;forbidden_devices&quot;</span><span class="p">],</span>
                 <span class="s2">&quot;additionalProperties&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
                 <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
                     <span class="s2">&quot;allowed_plans&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -2426,6 +2493,14 @@
                         <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
                         <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;null&quot;</span><span class="p">]},</span>
                     <span class="p">},</span>
+                    <span class="s2">&quot;allowed_functions&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;null&quot;</span><span class="p">]},</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;forbidden_functions&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;null&quot;</span><span class="p">]},</span>
+                    <span class="p">},</span>
                 <span class="p">},</span>
             <span class="p">},</span>
         <span class="p">},</span>
@@ -2433,9 +2508,22 @@
 <span class="p">}</span>
 
 
+<span class="k">def</span> <span class="nf">validate_user_group_permissions_schema</span><span class="p">(</span><span class="n">user_group_permissions</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate user group permissions schema. Raises exception if validation fails.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    user_group_permissions: dict</span>
+<span class="sd">        A dictionary with user group permissions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">user_group_permissions</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">_user_group_permission_schema</span><span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">load_user_group_permissions</span><span class="p">(</span><span class="n">path_to_file</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Load the data on allowed plans and devices for user groups.</span>
+<span class="sd">    Load the data on allowed plans and devices for user groups. User group &#39;root&#39;</span>
+<span class="sd">    is required. Exception is raised in user group &#39;root&#39; is missing.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -2445,7 +2533,7 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict</span>
-<span class="sd">        Data structure with user permissions. Returns ``{}`` if path is empty string</span>
+<span class="sd">        Data structure with user permissions. Returns ``{}`` if path is an empty string</span>
 <span class="sd">        or None.</span>
 
 <span class="sd">    Raises</span>
@@ -2458,27 +2546,120 @@
         <span class="k">return</span> <span class="p">{}</span>
 
     <span class="k">try</span><span class="p">:</span>
-
         <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">path_to_file</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File &#39;</span><span class="si">{</span><span class="n">path_to_file</span><span class="si">}</span><span class="s2">&#39; does not exist.&quot;</span><span class="p">)</span>
 
         <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path_to_file</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
             <span class="n">user_group_permissions</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
 
-        <span class="c1"># if &quot;user_groups&quot; not in user_group_permissions:</span>
-        <span class="c1">#    raise IOError(f&quot;Incorrect format of user group permissions: key &#39;user_groups&#39; is missing.&quot;)</span>
-        <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">user_group_permissions</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">_user_group_permission_schema</span><span class="p">)</span>
+        <span class="n">validate_user_group_permissions_schema</span><span class="p">(</span><span class="n">user_group_permissions</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="s2">&quot;root&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">user_group_permissions</span><span class="p">[</span><span class="s2">&quot;user_groups&quot;</span><span class="p">]:</span>
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Missing required user group: &#39;root&#39;&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="s2">&quot;admin&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">user_group_permissions</span><span class="p">[</span><span class="s2">&quot;user_groups&quot;</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Missing required user group: &#39;admin&#39;&quot;</span><span class="p">)</span>
 
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error while loading user group permissions from file &#39;</span><span class="si">{</span><span class="n">path_to_file</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">user_group_permissions</span>
+
+
+<span class="k">def</span> <span class="nf">_check_if_item_allowed</span><span class="p">(</span><span class="n">item_name</span><span class="p">,</span> <span class="n">allow_patterns</span><span class="p">,</span> <span class="n">disallow_patterns</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if an item with ``item_name`` is allowed based on ``allow_patterns``</span>
+<span class="sd">    and ``disallow_patterns``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    item_name: str</span>
+<span class="sd">        Name of the item.</span>
+<span class="sd">    allow_patterns: list(str)</span>
+<span class="sd">        Selected item should match at least one of the re patterns. If the value is ``[None]``</span>
+<span class="sd">        then all items are selected. If ``[]``, then no items are selected.</span>
+<span class="sd">    disallow_patterns: list(str)</span>
+<span class="sd">        Items are deselected based on re patterns in the list: if an item matches at least one</span>
+<span class="sd">        of the patterns, it is deselected. If the value is ``[None]`` or ``[]`` then no items</span>
+<span class="sd">        are deselected.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    boolean</span>
+<span class="sd">        Indicates if the item is permitted based on ``allow_patterns`` and ``disallow_patterns``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">item_is_allowed</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">if</span> <span class="n">allow_patterns</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">allow_patterns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">item_is_allowed</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">allow_patterns</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">item_name</span><span class="p">):</span>
+                    <span class="n">item_is_allowed</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">break</span>
+
+    <span class="k">if</span> <span class="n">item_is_allowed</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">disallow_patterns</span> <span class="ow">and</span> <span class="p">(</span><span class="n">disallow_patterns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">disallow_patterns</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">item_name</span><span class="p">):</span>
+                    <span class="n">item_is_allowed</span> <span class="o">=</span> <span class="kc">False</span>
+                    <span class="k">break</span>
+
+    <span class="k">return</span> <span class="n">item_is_allowed</span>
+
+
+<span class="k">def</span> <span class="nf">check_if_function_allowed</span><span class="p">(</span><span class="n">function_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">user_group_permissions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if the function with name ``function_name`` is allowed for users of ``group_name`` group.</span>
+<span class="sd">    The function first checks if the functio name passes root permissions and then permissions</span>
+<span class="sd">    for the specific group.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    function_name: str</span>
+<span class="sd">        Function name to check</span>
+<span class="sd">    group_name: str</span>
+<span class="sd">        User group name. Permissions must be defined for this group.</span>
+<span class="sd">    user_group_permissions: dict or None</span>
+<span class="sd">        Reference to a dictionary, which contains the defined user group permissions.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    boolean</span>
+<span class="sd">        Indicates if the user that belong to ``user_group`` are allowed to run the function.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    KeyError</span>
+<span class="sd">        ``user_group_permissions`` do not contain ``user_groups`` key or permissions for</span>
+<span class="sd">        ``group_name`` group are not defined.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">user_group_permissions</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">if</span> <span class="s2">&quot;user_groups&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">user_group_permissions</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;User group permissions dictionary does not contain &#39;user_groups&#39; key&quot;</span><span class="p">)</span>
+
+    <span class="n">user_groups</span> <span class="o">=</span> <span class="n">user_group_permissions</span><span class="p">[</span><span class="s2">&quot;user_groups&quot;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="s2">&quot;root&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">user_groups</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;No permissions are defined for user group &#39;root&#39;&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">group_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">user_groups</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No permissions are defined for user group </span><span class="si">{</span><span class="n">group_name</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">root_allow_patterns</span> <span class="o">=</span> <span class="n">user_groups</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allowed_functions&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="n">root_disallow_patterns</span> <span class="o">=</span> <span class="n">user_groups</span><span class="p">[</span><span class="s2">&quot;root&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forbidden_functions&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="n">group_allow_patterns</span> <span class="o">=</span> <span class="n">user_groups</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allowed_functions&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="n">group_disallow_patterns</span> <span class="o">=</span> <span class="n">user_groups</span><span class="p">[</span><span class="n">group_name</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forbidden_functions&quot;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="k">return</span> <span class="n">_check_if_item_allowed</span><span class="p">(</span>
+        <span class="n">function_name</span><span class="p">,</span>
+        <span class="n">root_allow_patterns</span><span class="p">,</span>
+        <span class="n">root_disallow_patterns</span><span class="p">,</span>
+    <span class="p">)</span> <span class="ow">and</span> <span class="n">_check_if_item_allowed</span><span class="p">(</span>
+        <span class="n">function_name</span><span class="p">,</span>
+        <span class="n">group_allow_patterns</span><span class="p">,</span>
+        <span class="n">group_disallow_patterns</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_select_allowed_items</span><span class="p">(</span><span class="n">item_dict</span><span class="p">,</span> <span class="n">allow_patterns</span><span class="p">,</span> <span class="n">disallow_patterns</span><span class="p">):</span>
@@ -2497,8 +2678,9 @@
 <span class="sd">        Selected item should match at least one of the re patterns. If the value is ``[None]``</span>
 <span class="sd">        then all items are selected. If ``[]``, then no items are selected.</span>
 <span class="sd">    disallow_patterns: list(str)</span>
-<span class="sd">        Selected item should not match any of the re patterns. If the value is ``[None]``</span>
-<span class="sd">        or ``[]`` then no items are deselected.</span>
+<span class="sd">        Items are deselected based on re patterns in the list: if an item matches at least one</span>
+<span class="sd">        of the patterns, it is deselected. If the value is ``[None]`` or ``[]`` then no items</span>
+<span class="sd">        are deselected.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -2506,24 +2688,9 @@
 <span class="sd">        Dictionary of the selected items.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">items_selected</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">item_dict</span><span class="p">:</span>
-        <span class="n">select_item</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="n">allow_patterns</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">allow_patterns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">select_item</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">allow_patterns</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
-                        <span class="n">select_item</span> <span class="o">=</span> <span class="kc">True</span>
-                        <span class="k">break</span>
-        <span class="k">if</span> <span class="n">select_item</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">disallow_patterns</span> <span class="ow">and</span> <span class="p">(</span><span class="n">disallow_patterns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
-                <span class="k">for</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="n">disallow_patterns</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
-                        <span class="n">select_item</span> <span class="o">=</span> <span class="kc">False</span>
-                        <span class="k">break</span>
-        <span class="k">if</span> <span class="n">select_item</span><span class="p">:</span>
-            <span class="n">items_selected</span><span class="p">[</span><span class="n">item</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">item_dict</span><span class="p">[</span><span class="n">item</span><span class="p">])</span>
+    <span class="k">for</span> <span class="n">item_name</span> <span class="ow">in</span> <span class="n">item_dict</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_check_if_item_allowed</span><span class="p">(</span><span class="n">item_name</span><span class="p">,</span> <span class="n">allow_patterns</span><span class="p">,</span> <span class="n">disallow_patterns</span><span class="p">):</span>
+            <span class="n">items_selected</span><span class="p">[</span><span class="n">item_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">item_dict</span><span class="p">[</span><span class="n">item_name</span><span class="p">])</span>
 
     <span class="k">return</span> <span class="n">items_selected</span>
 
@@ -2566,7 +2733,7 @@
 <span class="sd">        List (dict) of the existing devices. If ``None``, then the list is loaded from</span>
 <span class="sd">        the file ``path_existing_plans_and_devices``.</span>
 <span class="sd">    user_group_permissions: str or None</span>
-<span class="sd">        Dictionary with user group permissions. If ``None``, then permissionas are loaded</span>
+<span class="sd">        Dictionary with user group permissions. If ``None``, then permissions are loaded</span>
 <span class="sd">        from the file ``path_user_group_permissions``. If ``{}``, then dictionaries of allowed</span>
 <span class="sd">        plans and devices will contain one group &#39;root&#39; with all existing devices and plans</span>
 <span class="sd">        set as allowed.</span>
@@ -2617,14 +2784,14 @@
             <span class="k">if</span> <span class="n">existing_devices</span><span class="p">:</span>
                 <span class="n">devices_root</span> <span class="o">=</span> <span class="n">_select_allowed_items</span><span class="p">(</span>
                     <span class="n">existing_devices</span><span class="p">,</span>
-                    <span class="n">group_permissions_root</span><span class="p">[</span><span class="s2">&quot;allowed_devices&quot;</span><span class="p">],</span>
-                    <span class="n">group_permissions_root</span><span class="p">[</span><span class="s2">&quot;forbidden_devices&quot;</span><span class="p">],</span>
+                    <span class="n">group_permissions_root</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allowed_devices&quot;</span><span class="p">,</span> <span class="p">[]),</span>
+                    <span class="n">group_permissions_root</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forbidden_devices&quot;</span><span class="p">,</span> <span class="p">[]),</span>
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">existing_plans</span><span class="p">:</span>
                 <span class="n">plans_root</span> <span class="o">=</span> <span class="n">_select_allowed_items</span><span class="p">(</span>
                     <span class="n">existing_plans</span><span class="p">,</span>
-                    <span class="n">group_permissions_root</span><span class="p">[</span><span class="s2">&quot;allowed_plans&quot;</span><span class="p">],</span>
-                    <span class="n">group_permissions_root</span><span class="p">[</span><span class="s2">&quot;forbidden_plans&quot;</span><span class="p">],</span>
+                    <span class="n">group_permissions_root</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allowed_plans&quot;</span><span class="p">,</span> <span class="p">[]),</span>
+                    <span class="n">group_permissions_root</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forbidden_plans&quot;</span><span class="p">,</span> <span class="p">[]),</span>
                 <span class="p">)</span>
 
         <span class="c1"># Now create lists of allowed devices and plans based on the lists for the &#39;root&#39; user group</span>
@@ -2638,12 +2805,16 @@
 
                 <span class="k">if</span> <span class="n">existing_devices</span><span class="p">:</span>
                     <span class="n">selected_devices</span> <span class="o">=</span> <span class="n">_select_allowed_items</span><span class="p">(</span>
-                        <span class="n">devices_root</span><span class="p">,</span> <span class="n">group_permissions</span><span class="p">[</span><span class="s2">&quot;allowed_devices&quot;</span><span class="p">],</span> <span class="n">group_permissions</span><span class="p">[</span><span class="s2">&quot;forbidden_devices&quot;</span><span class="p">]</span>
+                        <span class="n">devices_root</span><span class="p">,</span>
+                        <span class="n">group_permissions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allowed_devices&quot;</span><span class="p">,</span> <span class="p">[]),</span>
+                        <span class="n">group_permissions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forbidden_devices&quot;</span><span class="p">,</span> <span class="p">[]),</span>
                     <span class="p">)</span>
 
                 <span class="k">if</span> <span class="n">existing_plans</span><span class="p">:</span>
                     <span class="n">selected_plans</span> <span class="o">=</span> <span class="n">_select_allowed_items</span><span class="p">(</span>
-                        <span class="n">plans_root</span><span class="p">,</span> <span class="n">group_permissions</span><span class="p">[</span><span class="s2">&quot;allowed_plans&quot;</span><span class="p">],</span> <span class="n">group_permissions</span><span class="p">[</span><span class="s2">&quot;forbidden_plans&quot;</span><span class="p">]</span>
+                        <span class="n">plans_root</span><span class="p">,</span>
+                        <span class="n">group_permissions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allowed_plans&quot;</span><span class="p">,</span> <span class="p">[]),</span>
+                        <span class="n">group_permissions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;forbidden_plans&quot;</span><span class="p">,</span> <span class="p">[]),</span>
                     <span class="p">)</span>
 
             <span class="n">selected_plans</span> <span class="o">=</span> <span class="n">_filter_allowed_plans</span><span class="p">(</span><span class="n">allowed_plans</span><span class="o">=</span><span class="n">selected_plans</span><span class="p">,</span> <span class="n">allowed_devices</span><span class="o">=</span><span class="n">selected_devices</span><span class="p">)</span>
