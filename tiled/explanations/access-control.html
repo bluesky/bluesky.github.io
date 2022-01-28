@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Access Control &mdash; tiled 0.1.0a48.post12+gbe462b2 documentation</title>
+  <title>Access Control &mdash; tiled 0.1.0a48.post99+gb1e4070 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             <a href="../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a48.post12+gbe462b2
+                0.1.0a48.post99+gb1e4070
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -158,23 +158,29 @@ Trees backed by databases or other external services.</p>
 <div class="literal-block-wrapper docutils container" id="id2">
 <div class="code-block-caption"><span class="caption-text">example_configs/toy_authentication.py</span><a class="headerlink" href="#id2" title="Permalink to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
+  providers:
+  - provider: toy
     authenticator: tiled.authenticators:DictionaryAuthenticator
     args:
-        users_to_passwords:
-            alice: ${ALICE_PASSWORD}
-            bob: ${BOB_PASSWORD}
-            cara: ${CARA_PASSWORD}
+      users_to_passwords:
+        alice: ${ALICE_PASSWORD}
+        bob: ${BOB_PASSWORD}
+        cara: ${CARA_PASSWORD}
+  tiled_admins:
+    - provider: toy
+      id: alice
 access_control:
-    access_policy: tiled.adapters.mapping:SimpleAccessPolicy
-    args:
-        access_lists:
-            alice: [&quot;A&quot;, &quot;B&quot;]
-            bob: [&quot;A&quot;, &quot;C&quot;]
-            cara: tiled.adapters.mapping:SimpleAccessPolicy.ALL
-        public: [&quot;D&quot;]
+  access_policy: tiled.adapters.mapping:SimpleAccessPolicy
+  args:
+    provider: toy  # matches provider above
+    access_lists:
+      alice: [&quot;A&quot;, &quot;B&quot;]
+      bob: [&quot;A&quot;, &quot;C&quot;]
+      cara: tiled.adapters.mapping:SimpleAccessPolicy.ALL
+    public: [&quot;D&quot;]
 trees:
-    - path: /
-      tree: tiled.examples.toy_authentication:tree
+  - path: /
+    tree: tiled.examples.toy_authentication:tree
 </pre></div>
 </div>
 </div>
@@ -226,15 +232,15 @@ used by NSLS-II to integrate with our proposal system and MongoDB database of me
     <span class="k">def</span> <span class="nf">check_compatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">catalog</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">catalog</span><span class="p">,</span> <span class="n">Tree</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">modify_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queries</span><span class="p">,</span> <span class="n">authenticated_identity</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">modify_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queries</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="n">response_cache</span><span class="p">[</span><span class="n">authenticated_identity</span><span class="p">]</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">response_cache</span><span class="p">[</span><span class="n">principal</span><span class="p">]</span>
         <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Cache miss&quot;</span><span class="p">,</span> <span class="n">authenticated_identity</span><span class="p">)</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/data_session/</span><span class="si">{</span><span class="n">authenticated_identity</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="n">response_cache</span><span class="p">[</span><span class="n">authenticated_identity</span><span class="p">]</span> <span class="o">=</span> <span class="n">response</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Cache miss&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/data_session/</span><span class="si">{</span><span class="n">principal</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">response_cache</span><span class="p">[</span><span class="n">principal</span><span class="p">]</span> <span class="o">=</span> <span class="n">response</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Cache hit&quot;</span><span class="p">,</span> <span class="n">authenticated_identity</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Cache hit&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
             <span class="c1"># TODO Fast-path for access policy to say &quot;no access&quot;</span>
             <span class="n">modified_queries</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span>
@@ -242,19 +248,19 @@ used by NSLS-II to integrate with our proposal system and MongoDB database of me
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
             <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Failure&quot;</span><span class="p">,</span> <span class="n">authenticated_identity</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Failure&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">modified_queries</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="k">if</span> <span class="p">(</span><span class="s2">&quot;nsls2&quot;</span> <span class="ow">in</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;facility_all_access&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[]))</span> <span class="ow">or</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_beamline</span> <span class="ow">in</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;beamline_all_access&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[])</span>
         <span class="p">):</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: all access&quot;</span><span class="p">,</span> <span class="n">authenticated_identity</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: all access&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">queries</span>
         <span class="n">modified_queries</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span>
         <span class="n">modified_queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="p">{</span><span class="s2">&quot;data_session&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$in&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data_sessions&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[])}}</span>
         <span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: access to </span><span class="si">%d</span><span class="s2"> data sessions&quot;</span><span class="p">,</span> <span class="n">authenticated_identity</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data_sessions&quot;</span><span class="p">]))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: access to </span><span class="si">%d</span><span class="s2"> data sessions&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data_sessions&quot;</span><span class="p">]))</span>
         <span class="k">return</span> <span class="n">modified_queries</span>
 </pre></div>
 </div>

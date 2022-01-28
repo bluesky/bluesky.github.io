@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Authentication Details &mdash; tiled 0.1.0a48.post12+gbe462b2 documentation</title>
+  <title>Authentication Details &mdash; tiled 0.1.0a48.post99+gb1e4070 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             <a href="../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a48.post12+gbe462b2
+                0.1.0a48.post99+gb1e4070
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -151,23 +151,29 @@ is included with the tiled source code, and start a server like so.</p>
 <div class="literal-block-wrapper docutils container" id="id1">
 <div class="code-block-caption"><span class="caption-text">example_configs/toy_authentication.py</span><a class="headerlink" href="#id1" title="Permalink to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
+  providers:
+  - provider: toy
     authenticator: tiled.authenticators:DictionaryAuthenticator
     args:
-        users_to_passwords:
-            alice: ${ALICE_PASSWORD}
-            bob: ${BOB_PASSWORD}
-            cara: ${CARA_PASSWORD}
+      users_to_passwords:
+        alice: ${ALICE_PASSWORD}
+        bob: ${BOB_PASSWORD}
+        cara: ${CARA_PASSWORD}
+  tiled_admins:
+    - provider: toy
+      id: alice
 access_control:
-    access_policy: tiled.adapters.mapping:SimpleAccessPolicy
-    args:
-        access_lists:
-            alice: [&quot;A&quot;, &quot;B&quot;]
-            bob: [&quot;A&quot;, &quot;C&quot;]
-            cara: tiled.adapters.mapping:SimpleAccessPolicy.ALL
-        public: [&quot;D&quot;]
+  access_policy: tiled.adapters.mapping:SimpleAccessPolicy
+  args:
+    provider: toy  # matches provider above
+    access_lists:
+      alice: [&quot;A&quot;, &quot;B&quot;]
+      bob: [&quot;A&quot;, &quot;C&quot;]
+      cara: tiled.adapters.mapping:SimpleAccessPolicy.ALL
+    public: [&quot;D&quot;]
 trees:
-    - path: /
-      tree: tiled.examples.toy_authentication:tree
+  - path: /
+    tree: tiled.examples.toy_authentication:tree
 </pre></div>
 </div>
 </div>
@@ -185,7 +191,7 @@ is configured to use <a class="reference external" href="https://orcid.org/">ORC
 </pre></div>
 </div>
 <p>Exchange username/password credentials for “access” and “refresh” tokens.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --form POST :8000/auth/token username=alice password=secret1 &gt; tokens.json
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http --form POST :8000/auth/provider/toy/token username=alice password=secret1 &gt; tokens.json
 </pre></div>
 </div>
 <p>The content of <code class="docutils literal notranslate"><span class="pre">tokens.json</span></code> looks like</p>
@@ -247,7 +253,7 @@ set-cookie: tiled_csrf=6sPHOrjBRzZOiSuXOXNtaDNyNNeqQj86nPIXf7X3C1M; HttpOnly; Pa
 </pre></div>
 </div>
 <p>Exchange the refresh token for a fresh pair of access and refresh tokens.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST :8000/auth/token/refresh refresh_token=`jq -r .refresh_token tokens.json` &gt; tokens.json
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST :8000/auth/session/refresh refresh_token=`jq -r .refresh_token tokens.json` &gt; tokens.json
 </pre></div>
 </div>
 <p>And resume making requests with the new access token.</p>
@@ -274,7 +280,7 @@ Tiled when prompted.  You will be redirected to a page at
 <code class="docutils literal notranslate"><span class="pre">https://tiled-demo.blueskyproject.io/auth/code?code=[redacted]</span></code> and shown
 a valid refresh token from Tiled that encodes your ORCID username. Exchange the
 refresh token for an access token and a fresh refresh token like so.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST https://tiled-demo.blueskyproject.io/token/refresh refresh_token=&quot;TOKEN PASTED FROM WEB BROWSER&quot; &gt; tokens.json
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http POST https://tiled-demo.blueskyproject.io/auth/session/refresh refresh_token=&quot;TOKEN PASTED FROM WEB BROWSER&quot; &gt; tokens.json
 </pre></div>
 </div>
 <p>From here, everything follows the same as in Scenario 1, above.</p>
@@ -288,8 +294,7 @@ refresh token for an access token and a fresh refresh token like so.</p>
 <li><p>Maximum inactive session age — Time after which inactive sessions
 (sessions that have not refreshed tokens) will time out.</p></li>
 <li><p>Maximum session age — Even <em>active</em> sessions are timed out after this
-limit, and the user is required to resubmit credentials. By default,
-this is unset and active session are never shut down.</p></li>
+limit, and the user is required to resubmit credentials.</p></li>
 <li><p>Access token max age — This controls how often fresh access token have to be
 re-issued. The process is transparent to the user and just affects performance.
 An <em>access</em> token cannot be revoked, so its lifetime should be short. The
@@ -299,7 +304,7 @@ default is 15 minutes.</p></li>
 given in units of seconds. The default values are shown.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">authentication</span><span class="p">:</span><span class="w"></span>
 <span class="w">    </span><span class="nt">refresh_token_max_age</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">604800</span><span class="w">  </span><span class="c1"># one week</span><span class="w"></span>
-<span class="w">    </span><span class="nt">session_max_age</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">None</span><span class="w">  </span><span class="c1"># unlimited</span><span class="w"></span>
+<span class="w">    </span><span class="nt">session_max_age</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">31536000</span><span class="w">  </span><span class="c1"># 365 days</span><span class="w"></span>
 <span class="w">    </span><span class="nt">access_token_max_age</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">900</span><span class="w">  </span><span class="c1"># 15 minutes</span><span class="w"></span>
 </pre></div>
 </div>
