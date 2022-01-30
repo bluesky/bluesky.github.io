@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.mapping &mdash; tiled 0.1.0a48.post101+g1bcdd0d documentation</title>
+  <title>tiled.adapters.mapping &mdash; tiled 0.1.0a48.post109+g5762a4a documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a48.post101+g1bcdd0d
+                0.1.0a48.post109+g5762a4a
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -114,7 +114,9 @@
              
   <h1>Source code for tiled.adapters.mapping</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">collections.abc</span>
+<span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 
 <span class="kn">from</span> <span class="nn">..queries</span> <span class="kn">import</span> <span class="n">FullText</span>
@@ -133,6 +135,7 @@
         <span class="s2">&quot;_principal&quot;</span><span class="p">,</span>
         <span class="s2">&quot;_mapping&quot;</span><span class="p">,</span>
         <span class="s2">&quot;_metadata&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;_sorting&quot;</span><span class="p">,</span>
         <span class="s2">&quot;_must_revalidate&quot;</span><span class="p">,</span>
         <span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span>
         <span class="s2">&quot;entries_stale_after&quot;</span><span class="p">,</span>
@@ -151,6 +154,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">mapping</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">sorting</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">principal</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">entries_stale_after</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -164,6 +168,7 @@
 <span class="sd">        ----------</span>
 <span class="sd">        mapping : dict-like</span>
 <span class="sd">        metadata : dict, optional</span>
+<span class="sd">        sorting : List[Tuple[str, int]], optional</span>
 <span class="sd">        access_policy : AccessPolicy, optional</span>
 <span class="sd">        principal : str, optional</span>
 <span class="sd">        entries_stale_after: timedelta</span>
@@ -176,6 +181,7 @@
 <span class="sd">            Whether the client should strictly refresh stale cache items.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_mapping</span> <span class="o">=</span> <span class="n">mapping</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sorting</span> <span class="o">=</span> <span class="n">sorting</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="p">(</span><span class="n">access_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
             <span class="ow">not</span> <span class="n">access_policy</span><span class="o">.</span><span class="n">check_compatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
@@ -258,6 +264,7 @@
         <span class="o">*</span><span class="n">args</span><span class="p">,</span>
         <span class="n">mapping</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
+        <span class="n">sorting</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">principal</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">must_revalidate</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -266,6 +273,8 @@
             <span class="n">mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mapping</span>
         <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
             <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span>
+        <span class="k">if</span> <span class="n">sorting</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
+            <span class="n">sorting</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sorting</span>
         <span class="k">if</span> <span class="n">principal</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
             <span class="n">principal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_principal</span>
         <span class="k">if</span> <span class="n">must_revalidate</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
@@ -273,6 +282,7 @@
         <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span>
             <span class="o">*</span><span class="n">args</span><span class="p">,</span>
             <span class="n">mapping</span><span class="o">=</span><span class="n">mapping</span><span class="p">,</span>
+            <span class="n">sorting</span><span class="o">=</span><span class="n">sorting</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">,</span>
             <span class="n">access_policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span>
             <span class="n">principal</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">principal</span><span class="p">,</span>
@@ -292,6 +302,26 @@
 <span class="sd">        Return a Adapter with a subset of the mapping.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_registry</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">sort</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sorting</span><span class="p">):</span>
+        <span class="n">mapping</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mapping</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">direction</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">sorting</span><span class="p">):</span>
+            <span class="n">mapping</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+                <span class="nb">sorted</span><span class="p">(</span>
+                    <span class="n">mapping</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                    <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">_HIGH_SORTER</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">direction</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">):</span>
+                    <span class="c1"># Prior to Python 3.8 dicts are not reversible.</span>
+                    <span class="n">to_reverse</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">mapping</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">to_reverse</span> <span class="o">=</span> <span class="n">mapping</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+
+                <span class="n">mapping</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">to_reverse</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">mapping</span><span class="o">=</span><span class="n">mapping</span><span class="p">,</span> <span class="n">sorting</span><span class="o">=</span><span class="n">sorting</span><span class="p">)</span>
 
     <span class="c1"># The following three methods are used by IndexersMixin</span>
     <span class="c1"># to define keys_indexer, items_indexer, and values_indexer.</span>
@@ -452,6 +482,21 @@
             <span class="n">access_policy</span><span class="o">=</span><span class="n">tree</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span>
             <span class="n">principal</span><span class="o">=</span><span class="n">principal</span><span class="p">,</span>
         <span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">_HIGH_SORTER_CLASS</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Enables sort to work when metadata is sparse</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="n">_HIGH_SORTER</span> <span class="o">=</span> <span class="n">_HIGH_SORTER_CLASS</span><span class="p">()</span>
 </pre></div>
 
            </div>
