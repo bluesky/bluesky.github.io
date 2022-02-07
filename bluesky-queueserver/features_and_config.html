@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Features and Configuration &mdash; bluesky-queueserver 0.post1+gd9471b9 documentation</title>
+  <title>Features and Configuration &mdash; bluesky-queueserver 0.post1+gc0c968d documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gd9471b9
+                0.post1+gc0c968d
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="introduction_for_users.html">Introduction</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Features and Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#managing-user-group-permissions">Managing User Group Permissions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-user-group-permissions">Configuring User Group Permissions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#remote-monitoring-of-console-output">Remote Monitoring of Console Output</a></li>
 </ul>
 </li>
@@ -107,8 +108,8 @@ allowed plans and devices for each user group. Plans from the allowed list could
 the queue using API calls such as <a class="reference internal" href="re_manager_api.html#method-queue-item-add"><span class="std std-ref">‘queue_item_add’</span></a> and the names of allowed devices could
 be passed as plan parameters and then automatically converted to actual device objects before plans
 are executed. Additional filters could be defined for each user group that allow/forbid execution of
-functions (see <a class="reference internal" href="re_manager_api.html#method-function-execute"><span class="std std-ref">‘function_execute’</span></a>).</p>
-<p>TODO: GUIDE/TUTORIAL FOR WRITING <code class="docutils literal notranslate"><span class="pre">user_group_permissions.yaml</span></code>.</p>
+functions (see <a class="reference internal" href="re_manager_api.html#method-function-execute"><span class="std std-ref">‘function_execute’</span></a>). The basic principles of configuring user group
+permissions are outlined in the section <a class="reference internal" href="#configuring-user-group-permissions"><span class="std std-ref">Configuring User Group Permissions</span></a>.</p>
 <p>Simple workflows could be implemented using static permissions defined in a YAML file and loaded
 at startup of RE Manager. If the YAML file is changed while RE Manager is running, the permissions
 may be reloaded by stopping and restarting RE Manager or sending <a class="reference internal" href="re_manager_api.html#method-permissions-reload"><span class="std std-ref">‘permissions_reload’</span></a> API
@@ -141,6 +142,91 @@ This option is the most appropriate for workflows, where permissions are managed
 uploaded to RE Manager when changed. In this case the disk file may contain some default, simple
 and very restrictive set of permissions used for initialization during the first startup of RE Manager.</p></li>
 </ul>
+</section>
+<section id="configuring-user-group-permissions">
+<span id="id1"></span><h2>Configuring User Group Permissions<a class="headerlink" href="#configuring-user-group-permissions" title="Permalink to this headline">¶</a></h2>
+<p>Each user group is assigned a set of permissions, which restrict the plans that users
+are allowed to execute and devices users may submit to plans as parameters.
+The permissions do not influence the code running in RE Worker environment, therefore
+any existing plans and devices could be used from within plans. Optionally, permissions
+may be configured to allow users to execute Python functions defined in RE Worker namespace
+(see <a class="reference internal" href="re_manager_api.html#method-function-execute"><span class="std std-ref">‘function_execute’</span></a> API).</p>
+<p>User groups names are defined in user permissions dictionary, which could be saved in
+<code class="docutils literal notranslate"><span class="pre">user_group_permissions.yaml</span></code> file and loaded on startup or uploaded by the client application
+(see <a class="reference internal" href="re_manager_api.html#method-permissions-set"><span class="std std-ref">‘permissions_set’</span></a> API). The dictionary must define at least one required user group
+named <code class="docutils literal notranslate"><span class="pre">root</span></code>. Restrictions defined for <code class="docutils literal notranslate"><span class="pre">root</span></code> are applied to plans and devices accessible
+by any other defined group (consider it as a root of the tree of permissions). Internally,
+the lists of existing plans and devices are initially filtered using <code class="docutils literal notranslate"><span class="pre">root</span></code> permissions
+before the permissions for the other defined groups are applied to create lists of allowed
+plans and devices. Putting common restrictions in the permissions for the <code class="docutils literal notranslate"><span class="pre">root</span></code> group
+may reduce time of processing permissions. It is not recommended to assign users to
+the <code class="docutils literal notranslate"><span class="pre">root</span></code> group or submit plans as <code class="docutils literal notranslate"><span class="pre">root</span></code>, but currently there are no restrictions
+that would prevent from doing it.</p>
+<p>Permission for each group include lists of allowed and forbidden plans, devices and functions.
+Each lists contains names and/or patterns for filtering names of device, plan or function
+objects. In order for a device, plan or function to be accessible to users of a group,
+the name of the object must match one of the names or patterns from the ‘allowed’ list and
+not match any of the names or patterns from the ‘forbidden’ list. The guidelines for
+composing lists of names and patterns for devices may be found in <a class="reference internal" href="plan_annotation.html#lists-of-device-names"><span class="std std-ref">Lists of Device Names</span></a>
+and for plans and functions in <a class="reference internal" href="plan_annotation.html#lists-of-plan-names"><span class="std std-ref">Lists of Plan Names</span></a>.</p>
+<p>All the lists are optional. If ‘allowed’ list is not defined for a given type of objects
+(plans, devices or functions), then no objects of this type are allowed. The most efficient
+method to allow all objects is to set the first element of the ‘allowed’ list <code class="docutils literal notranslate"><span class="pre">None</span></code>
+(it could be the only element of the list, all other elements are ignored). If ‘forbidden’
+list is missing or if the first element of the list is <code class="docutils literal notranslate"><span class="pre">None</span></code>, then no objects are forbidden,
+i.e. all the objects matching the ‘allowed’ patterns will appear in the list of allowed objects.
+Typically, permissions for a group would contain at least <code class="docutils literal notranslate"><span class="pre">allowed_plans</span></code> section to allow
+users to submit some plans to the queue, but it may not be necessary in some workflows.
+Missing <code class="docutils literal notranslate"><span class="pre">allowed_devices</span></code> section means that no devices could be passed to plans as parameters.</p>
+<p>Following is an example of a trivial user permission dictionary (in YAML format), which
+allows all plans and devices for <code class="docutils literal notranslate"><span class="pre">admin</span></code> user group (‘admin’ is an arbitrarily chosen name).
+Restrictions for the <code class="docutils literal notranslate"><span class="pre">root</span></code> group forbid access to all plans and devices starting with local
+names (starting with ‘_’). Note, that those plans and devices can still be used in plans.
+The <code class="docutils literal notranslate"><span class="pre">root</span></code> permissions are applied to all other groups, which means that no group
+could be configured to access objects with local names. Additional user group <code class="docutils literal notranslate"><span class="pre">test_user</span></code>
+is created with the sole purpose of demonstrating different types of name patterns.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">user_groups</span><span class="p">:</span>
+  <span class="n">root</span><span class="p">:</span>  <span class="c1"># The group includes all available plan and devices</span>
+    <span class="n">allowed_plans</span><span class="p">:</span>
+      <span class="o">-</span> <span class="n">null</span>  <span class="c1"># Allow all</span>
+    <span class="n">forbidden_plans</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:^_&quot;</span>  <span class="c1"># All plans with names starting with &#39;_&#39;</span>
+    <span class="n">allowed_devices</span><span class="p">:</span>
+      <span class="o">-</span> <span class="n">null</span>  <span class="c1"># Allow all</span>
+    <span class="n">forbidden_devices</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:^_:?.*&quot;</span>  <span class="c1"># All devices with names starting with &#39;_&#39; and their subdevices</span>
+    <span class="n">allowed_functions</span><span class="p">:</span>
+      <span class="o">-</span> <span class="n">null</span>  <span class="c1"># Allow all</span>
+    <span class="n">forbidden_functions</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:^_&quot;</span>  <span class="c1"># All functions with names starting with &#39;_&#39;</span>
+  <span class="n">admin</span><span class="p">:</span>  <span class="c1"># The group includes beamline staff, includes all or most of the plans and devices</span>
+    <span class="n">allowed_plans</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:.*&quot;</span>  <span class="c1"># Different way to allow all plans.</span>
+    <span class="n">allowed_devices</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:?.*:depth=5&quot;</span>  <span class="c1"># Allow all device and subdevices. Maximum deepth for subdevices is 5.</span>
+    <span class="n">allowed_functions</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;function_sleep&quot;</span>  <span class="c1"># Explicitly listed name</span>
+  <span class="n">test_user</span><span class="p">:</span>  <span class="c1"># Some examples of patterns that could be used in lists</span>
+    <span class="n">allowed_plans</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:^count&quot;</span>  <span class="c1"># Allow all plan names starting with &#39;count&#39;</span>
+      <span class="o">-</span> <span class="s2">&quot;:scan$&quot;</span>  <span class="c1"># Allow all plan names ending with &#39;scan&#39;</span>
+      <span class="o">-</span> <span class="s2">&quot;:product&quot;</span>  <span class="c1"># Allow all plans names containing the word &#39;product&#39;</span>
+    <span class="n">forbidden_plans</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;adaptive_scan&quot;</span>  <span class="c1"># Do not allow the plan &#39;adaptive_scan&#39;</span>
+      <span class="o">-</span> <span class="s2">&quot;:^inner_product&quot;</span>  <span class="c1"># Do not allow all plan names starting with &#39;inner_product&#39;</span>
+    <span class="n">allowed_devices</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:^det:?.*&quot;</span>  <span class="c1"># Allow all devices starting with &#39;det&#39; and their subdevices</span>
+      <span class="o">-</span> <span class="s2">&quot;:^motor:?.*&quot;</span>  <span class="c1"># Allow allow all devices starting with &#39;motor&#39; and their subdevices</span>
+      <span class="o">-</span> <span class="s2">&quot;:^sim_bundle_A:?.*&quot;</span>  <span class="c1"># Same for devices starting with &#39;sim_bundle_A&#39;</span>
+    <span class="n">forbidden_devices</span><span class="p">:</span>
+      <span class="o">-</span> <span class="s2">&quot;:^det[3-5]$:?.*&quot;</span>  <span class="c1"># Do not allow devices &#39;det3&#39;, &#39;det4&#39; and &#39;det5&#39; and all subdevices</span>
+      <span class="o">-</span> <span class="s2">&quot;:^motor</span><span class="se">\\</span><span class="s2">d+$:?.*&quot;</span>  <span class="c1"># Same for all numbered motors, such as &#39;motor2&#39; or &#39;motor256&#39;</span>
+</pre></div>
+</div>
+<p>It is recommended that new projects are started using the sample file
+<a class="reference external" href="https://github.com/bluesky/bluesky-queueserver/blob/main/bluesky_queueserver/profile_collection_sim/user_group_permissions.yaml">user_group_permissions.yaml</a>,
+which could be copied to the directory containing startup files and then modified according
+to the project needs.</p>
 </section>
 <section id="remote-monitoring-of-console-output">
 <h2>Remote Monitoring of Console Output<a class="headerlink" href="#remote-monitoring-of-console-output" title="Permalink to this headline">¶</a></h2>

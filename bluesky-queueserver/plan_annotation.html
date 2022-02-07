@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Annotating Bluesky Plans &mdash; bluesky-queueserver 0.post1+gd9471b9 documentation</title>
+  <title>Annotating Bluesky Plans &mdash; bluesky-queueserver 0.post1+gc0c968d documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gd9471b9
+                0.post1+gc0c968d
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -798,17 +798,23 @@ by Queue Server in the following cases:</p>
 <section id="lists-of-device-and-plan-names">
 <span id="id3"></span><h3>Lists of Device and Plan Names<a class="headerlink" href="#lists-of-device-and-plan-names" title="Permalink to this headline">¶</a></h3>
 <p>Annotation of a parameter may contain optional <code class="docutils literal notranslate"><span class="pre">devices</span></code> and/or <code class="docutils literal notranslate"><span class="pre">plans</span></code>
-section, which contains definitions of lists of device or plan names accepted
-by the parameter. The names are converted to objects from Run Engine Worker
-namespace and passed to the plan. In the following example, two lists (<code class="docutils literal notranslate"><span class="pre">Type1</span></code>
-and <code class="docutils literal notranslate"><span class="pre">Type2</span></code>) are defined in the <code class="docutils literal notranslate"><span class="pre">devices</span></code> section:</p>
+sections, which contains lists of device or plan names that could be passed
+with the parameter or patterns based on regular expressions used to pick
+matching devices or plans from the list of existing devices or plans.
+The listed or automatically picked names are converted to objects exisiting
+in Run Engine Worker namespace before being passed to the plan. In the
+following example there are two lists (<code class="docutils literal notranslate"><span class="pre">Type1</span></code> and <code class="docutils literal notranslate"><span class="pre">Type2</span></code>) defined in
+the <code class="docutils literal notranslate"><span class="pre">devices</span></code> section. Names (keys) of the lists are used as types in
+the string that defines the parameter type:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@parameter_annotation_decorator</span><span class="p">({</span>
     <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
         <span class="s2">&quot;dets&quot;</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">&quot;annotation&quot;</span><span class="p">:</span> <span class="s2">&quot;typing.Union[typing.List[Type1]&quot;</span> \
                           <span class="s2">&quot;typing.List[Type2]]&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;devices&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;Type1&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;det1&quot;</span><span class="p">,</span> <span class="s2">&quot;det2&quot;</span><span class="p">,</span> <span class="s2">&quot;det3&quot;</span><span class="p">],</span>
-                        <span class="s2">&quot;Type2&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;det1&quot;</span><span class="p">,</span> <span class="s2">&quot;det4&quot;</span><span class="p">,</span> <span class="s2">&quot;det5&quot;</span><span class="p">]},</span>
+            <span class="c1"># &quot;det1&quot;, &quot;det2&quot;, &quot;det4&quot; are explicitly stated names</span>
+            <span class="c1"># &quot;:det3:?val$&quot;, &quot;:^det5$&quot; are patterns</span>
+            <span class="s2">&quot;devices&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;Type1&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;det1&quot;</span><span class="p">,</span> <span class="s2">&quot;det2&quot;</span><span class="p">,</span> <span class="s2">&quot;:det3:?val$&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;Type2&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;det1&quot;</span><span class="p">,</span> <span class="s2">&quot;det4&quot;</span><span class="p">,</span> <span class="s2">&quot;:^det5$&quot;</span><span class="p">]},</span>
         <span class="p">}</span>
     <span class="p">}</span>
 <span class="p">})</span>
@@ -816,11 +822,16 @@ and <code class="docutils literal notranslate"><span class="pre">Type2</span></c
     <span class="o">&lt;</span><span class="n">code</span> <span class="n">implementing</span> <span class="n">the</span> <span class="n">plan</span><span class="o">&gt;</span>
 </pre></div>
 </div>
-<p>The parameters that accept plan names may have similar <code class="docutils literal notranslate"><span class="pre">plans</span></code> sections that
-define lists of plans. List names may be used in <code class="docutils literal notranslate"><span class="pre">annotation</span></code> section as part
-of parameter type definition.</p>
+<p>If a plan accepts reference to other plans defined in the worker
+namespace, one of the plan parameters may have a similar section
+<code class="docutils literal notranslate"><span class="pre">plans</span></code> with lists of plan names.</p>
+<p>Each list may contain a mix of device name and patterns. The processing
+algorithm is searching for names of existing plans and devices based
+on the patterns and adds them to the lists. After removing Duplicate
+names, the lists are sorted in alphabetical order and saved as part
+of plan representation in the list of existing plans.</p>
 <section id="lists-of-device-names">
-<h4>Lists of Device Names<a class="headerlink" href="#lists-of-device-names" title="Permalink to this headline">¶</a></h4>
+<span id="id4"></span><h4>Lists of Device Names<a class="headerlink" href="#lists-of-device-names" title="Permalink to this headline">¶</a></h4>
 <p>The elements of lists of device names may include:</p>
 <blockquote>
 <div><ul class="simple">
@@ -828,13 +839,15 @@ of parameter type definition.</p>
 e.g. <code class="docutils literal notranslate"><span class="pre">&quot;det1&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">sim_stage_A</span></code>, etc.</p></li>
 <li><p>names of subdevices of devices defined in the global scope of startup script,
 e.g. <code class="docutils literal notranslate"><span class="pre">det1.val</span></code>, <code class="docutils literal notranslate"><span class="pre">sim_stageA.mtrs.y</span></code>, etc.</p></li>
-<li><p>regular expressions that define a set of existing devices and subdevices
-to be added to the list.</p></li>
+<li><p>patterns based on regular expressions for picking devices and subdevices
+from the list of existing devices.</p></li>
 </ul>
 </div></blockquote>
-<p>The explicitly listed device and subdevice names are always included in the list.
-Regular expressions are used to pick devices and subdevices from the list of
-existing devices:</p>
+<p>The explicitly listed device and subdevice names are added to the parameter
+annotation in the list of existing plans even if such device or plan does
+not exist in the worker environment. When plan represenations are preprocessed
+before being added to a list of allowed plans, the devices/subdevices/plans
+that are not in the list of allowed devices/plans are removed.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># The following devices will be added to the list:</span>
 <span class="c1">#   &#39;det1&#39;</span>
 <span class="c1">#   &#39;det1.val&#39;</span>
@@ -842,61 +855,70 @@ existing devices:</p>
 <span class="s2">&quot;Type3&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;det1&quot;</span><span class="p">,</span> <span class="s2">&quot;det1.val&quot;</span><span class="p">,</span> <span class="s2">&quot;:d.*3&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Note, that the semicolon <code class="docutils literal notranslate"><span class="pre">:</span></code> is not part of regular expressions. It is used to
-distinguish explicitly listed names and regular expressions. For example, <code class="docutils literal notranslate"><span class="pre">&quot;det&quot;</span></code>
-is an explicitly listed name of the detector <code class="docutils literal notranslate"><span class="pre">det</span></code>, while <code class="docutils literal notranslate"><span class="pre">&quot;:det&quot;</span></code> is
-a regular expression that matches any device name that contains the sequence of
-characters <code class="docutils literal notranslate"><span class="pre">&quot;d&quot;,</span> <span class="pre">&quot;e&quot;,</span> <span class="pre">&quot;t&quot;</span></code>, e.g. <code class="docutils literal notranslate"><span class="pre">mydetector</span></code>.</p>
-<p>One list item may contain multiple regular expressions separated by <code class="docutils literal notranslate"><span class="pre">:</span></code>.
-Those expressions are used to select subdevices of a device defined in global
-scope. Looking from left to right, the regular expressions are applied to
-global device names, subdevices of the matching devices, subdevices of matching
-subdevices of matching devices etc. The depth of lookup is defined by the number
-of combined regular expressions:</p>
+<p>Note, that the semicolon <code class="docutils literal notranslate"><span class="pre">:</span></code> is not part of regular expressions and used to
+tell the processing algorithm that the string contains a pattern as opposed to
+a device or subdevice name. For example, <code class="docutils literal notranslate"><span class="pre">&quot;det&quot;</span></code> is an explicitly listed name
+of the detector <code class="docutils literal notranslate"><span class="pre">det</span></code>, while <code class="docutils literal notranslate"><span class="pre">&quot;:det&quot;</span></code> is a regular expression that matches
+any device name that contains the sequence of characters <code class="docutils literal notranslate"><span class="pre">&quot;d&quot;,</span> <span class="pre">&quot;e&quot;,</span> <span class="pre">&quot;t&quot;</span></code>,
+such as <code class="docutils literal notranslate"><span class="pre">mydetector</span></code>.</p>
+<p>A device name pattern may consist of multiple regular expressions separated by
+<code class="docutils literal notranslate"><span class="pre">:</span></code>. The expressions are processed from left to right. The leftmost expression
+is applied to the name of each device in global worker namespace. If the device
+name matches the expression, the device name is added to the list and each
+subdevice is checked using the second expression and matching name is added to
+the list. The process continues until the end of the pattern or ‘leaf’ devices
+(that have no subdevices) are reached. On each step only the subdevices of
+matching devices are searched. The maximum depth of search is defined by
+the number of expressions in the pattern.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># The item contains three regular expressions: &#39;^sim&#39; is applied to device</span>
 <span class="c1">#   names (selects all devices starting with &#39;sim&#39;), &#39;^mt&#39; applies to</span>
 <span class="c1">#   subdevices of matching devices (all subdevices starting with &#39;mt&#39;)</span>
 <span class="c1">#   and &#39;^x$&#39; is applied to subdevices of matching subdevices (all subdevices</span>
 <span class="c1">#   named &#39;x&#39;). As a result, the list may contain the following</span>
 <span class="c1">#   devices:</span>
+<span class="c1">#     &#39;sim_stage_A&#39;</span>
+<span class="c1">#     &#39;sim_stage_A.mtrs&#39;,</span>
 <span class="c1">#     &#39;sim_stage_A.mtrs.x&#39;,</span>
+<span class="c1">#     &#39;sim_stage_B&#39;.</span>
+<span class="c1">#     &#39;sim_stage_B.mtrs&#39;.</span>
 <span class="c1">#     &#39;sim_stage_B.mtrs.x&#39;.</span>
-<span class="c1">#   The list will not contain &#39;sim_stage_A&#39;, &#39;sim_stage_A.mtrs&#39;, &#39;sim_stage_B&#39;</span>
-<span class="c1">#      or &#39;sim_stage_B.mtrs&#39;.</span>
 <span class="s2">&quot;Type3&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:^sim:^mt:^x$&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Devices found at a given depth may be selected by putting <code class="docutils literal notranslate"><span class="pre">+</span></code> before the regular
-expressions (<code class="docutils literal notranslate"><span class="pre">+</span></code> is not part of the regular expression):</p>
+<p>The default behavior of the list generation algorithm is to include in the list
+all matching devices and subdevices found at each level. The algorithm can be
+explicitly instructed to do so by inserting <code class="docutils literal notranslate"><span class="pre">+</span></code> (plus sign) before the regular
+expression, i.e. the patterns <code class="docutils literal notranslate"><span class="pre">&quot;:^det.val$</span></code>” and <code class="docutils literal notranslate"><span class="pre">&quot;&quot;:+^det.val$&quot;</span></code> would
+produce identical results. The default behavior is not always desirable. In order
+to skip adding to the list matching devices found at a given depth, add <code class="docutils literal notranslate"><span class="pre">-</span></code>
+(minus sign) before the regular expression (<code class="docutils literal notranslate"><span class="pre">:-</span></code>):</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># The list will contain devices such as</span>
 <span class="c1">#   &#39;sim_stage_A.mtrs&#39;,</span>
 <span class="c1">#   &#39;sim_stage_A.mtrs.x&#39;,</span>
 <span class="c1">#   &#39;sim_stage_B.mtrs&#39;,</span>
 <span class="c1">#   &#39;sim_stage_B.mtrs.x&#39;.</span>
-<span class="c1">#   The list will not contain &#39;sim_stage_A&#39; or &#39;sim_stage_B&#39;.</span>
-<span class="s2">&quot;Type4&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:^sim:+^mt:^x$&quot;</span><span class="p">]</span>
+<span class="s2">&quot;Type4&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:-^sim:^mt:^x$&quot;</span><span class="p">]</span>
 
 <span class="c1"># The list will contain devices such as</span>
-<span class="c1">#   &#39;sim_stage_A&#39;,</span>
-<span class="c1">#   &#39;sim_stage_A.det1&#39;,</span>
-<span class="c1">#   &#39;sim_stage_A.det1.val&#39;,</span>
-<span class="c1">#   &#39;sim_stage_B&#39;,</span>
-<span class="c1">#   &#39;sim_stage_B.det2&#39;,</span>
-<span class="c1">#   &#39;sim_stage_B.det2.val&#39;.</span>
-<span class="s2">&quot;Type5&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:+^sim:+^mt:^x$&quot;</span><span class="p">]</span>
+<span class="c1">#   &#39;sim_stage_A.mtrs.x&#39;,</span>
+<span class="c1">#   &#39;sim_stage_B.mtrs.x&#39;.</span>
+<span class="s2">&quot;Type5&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:-^sim:-^mt:-^x$&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Regular expressions could be applied to the full subdevice name or the remaining
-part of the subdevice name by putting <code class="docutils literal notranslate"><span class="pre">?</span></code> before the regular expression (<code class="docutils literal notranslate"><span class="pre">?</span></code>
-is not part of the regular expression). The full name regular expression may only
-be the last component of the combined expressions and <code class="docutils literal notranslate"><span class="pre">+</span></code> can not be used in
-conjunction with <code class="docutils literal notranslate"><span class="pre">?</span></code>:</p>
+<p>Note, that even though <code class="docutils literal notranslate"><span class="pre">-</span></code> is allowed in the last expression of the pattern,
+it does not influence processing of the pattern. The devices matching the last
+expression in the pattern are always inserted in the list.</p>
+<p>Regular expressions could be applied to the full device name (such as
+<code class="docutils literal notranslate"><span class="pre">&quot;sim_stage_A.mtrs.x&quot;</span></code>) or right part a full device name (such as <code class="docutils literal notranslate"><span class="pre">&quot;mtrs.x&quot;</span></code>).
+An expression may be labelled as a full-name expression by putting <code class="docutils literal notranslate"><span class="pre">?</span></code>
+(question mark) before the regular expression. The full name regular expression
+may only be the last component of the pattern. :</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># The list may contain devices with names such as</span>
 <span class="c1">#   &#39;simval&#39;,</span>
 <span class="c1">#   &#39;sim_stage_A.val&#39;,</span>
 <span class="c1">#   &#39;sim_stage_A.det1.val&#39;,</span>
 <span class="c1">#   &#39;sim_stage_A.detectors.det1.val&#39;,</span>
-<span class="s2">&quot;Type6&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:^sim.*val$&quot;</span><span class="p">]</span>
+<span class="s2">&quot;Type6&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:?^sim.*val$&quot;</span><span class="p">]</span>
 
 <span class="c1"># The list will contain devices such as</span>
 <span class="c1">#   &#39;sim_stage_A&#39;,</span>
@@ -904,12 +926,14 @@ conjunction with <code class="docutils literal notranslate"><span class="pre">?<
 <span class="c1">#   &#39;sim_stage_A.det1_val&#39;,</span>
 <span class="c1">#   &#39;sim_stage_A.det1.val&#39;,</span>
 <span class="c1">#   &#39;sim_stage_A.detectors.det1.val&#39;,</span>
-<span class="s2">&quot;Type7&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:+^sim_stage_A$:?.*val$&quot;</span><span class="p">]</span>
+<span class="s2">&quot;Type7&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:^sim_stage_A$:?.*val$&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Using full name regular expressions is less efficient, since it requires
-searching the full tree of subdevices for matching names. The depth of search
-may be limited by adding <code class="docutils literal notranslate"><span class="pre">depth</span></code> parameter (<code class="docutils literal notranslate"><span class="pre">:?&lt;regex&gt;:depth=N</span></code>):</p>
+<p>Note, that <code class="docutils literal notranslate"><span class="pre">+</span></code> and <code class="docutils literal notranslate"><span class="pre">-</span></code> can not be used in conjunction with <code class="docutils literal notranslate"><span class="pre">?</span></code>.
+Using full-name expressions is less efficient, since it the algorithm
+is forced to searching the full tree of subdevices for matching names.
+The depth of search may be explicitly limited by adding <code class="docutils literal notranslate"><span class="pre">depth</span></code>
+parameter (<code class="docutils literal notranslate"><span class="pre">:?&lt;regex&gt;:depth=N</span></code>):</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># The list will contain devices such as</span>
 <span class="c1">#   &#39;sim_stage_A&#39;,</span>
 <span class="c1">#   &#39;sim_stage_A.val&#39;,</span>
@@ -920,40 +944,41 @@ may be limited by adding <code class="docutils literal notranslate"><span class=
 <span class="s2">&quot;Type8&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;:+^sim_stage_A$:?.*val$:depth=2&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>A set of devices selected using regular expression may be restricted to
-certain device types by placing one of the following keywords <code class="docutils literal notranslate"><span class="pre">__DETECTOR__</span></code>
-(readable, not movable), <code class="docutils literal notranslate"><span class="pre">__MOTOR__</span></code> (readable and movable),
-<code class="docutils literal notranslate"><span class="pre">__READABLE__</span></code>, <code class="docutils literal notranslate"><span class="pre">__FLYABLE__</span></code> before the expression:</p>
+<p>A set of devices matching a pattern may be restricted to devices of certain
+types by placing one of the type keywords before the patter. The supported
+keywords are <code class="docutils literal notranslate"><span class="pre">__DETECTOR__</span></code> (readable, not movable), <code class="docutils literal notranslate"><span class="pre">__MOTOR__</span></code>
+(readable and movable), <code class="docutils literal notranslate"><span class="pre">__READABLE__</span></code>, <code class="docutils literal notranslate"><span class="pre">__FLYABLE__</span></code> before the expression:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Select only detectors with names matching the regular expression:</span>
-<span class="s2">&quot;Type9&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;__DETECTORS__:+^sim_stage_A$:?.*:depth=3&quot;</span><span class="p">]</span>
+<span class="s2">&quot;Type9&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;__DETECTORS__:^sim_stage_A$:?.*:depth=3&quot;</span><span class="p">]</span>
 
 <span class="c1"># Select only motors:</span>
-<span class="s2">&quot;Type10&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;__MOTORS__:+^sim_stage_A$:?.*:depth=3&quot;</span><span class="p">]</span>
+<span class="s2">&quot;Type10&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;__MOTORS__:^sim_stage_A$:?.*:depth=3&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>A list may contain multiple items with regular expressions and explicitly
-listed device names. Duplicate items that are listed or selected by the
-expressions are removed from the generated list, which is then sorted in
-alphabetical order.</p>
 </section>
 <section id="lists-of-plan-names">
-<h4>Lists of Plan Names<a class="headerlink" href="#lists-of-plan-names" title="Permalink to this headline">¶</a></h4>
+<span id="id5"></span><h4>Lists of Plan Names<a class="headerlink" href="#lists-of-plan-names" title="Permalink to this headline">¶</a></h4>
 <p>Similarly to lists of device names, the lists of plan names may include
-regular expressions used to pick matching names of the existing plans:</p>
+patterns used to pick matching names of the existing plans:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># The list contains the following names: explicitly listed name of the plan</span>
 <span class="c1">#   ``count`` and regular expression that selects all the plans ending</span>
 <span class="c1">#   with ``_count``, such as ``_count``, ``my_count`` etc.</span>
 <span class="s2">&quot;Type11&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">,</span> <span class="s2">&quot;:_count$&quot;</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Plan name lists may contain only single regular expressions. The separators
-<code class="docutils literal notranslate"><span class="pre">:+</span></code> and <code class="docutils literal notranslate"><span class="pre">:?</span></code> have no meaning in plan name lists and can not be used
-in the expressions.</p>
+<p>A plan name pattern may contain only a single regular expression (i.e.
+a pattern may contain only one <code class="docutils literal notranslate"><span class="pre">:</span></code> character). The modifiers <code class="docutils literal notranslate"><span class="pre">+</span></code>, <code class="docutils literal notranslate"><span class="pre">-</span></code>
+and <code class="docutils literal notranslate"><span class="pre">?</span></code> may still be used, but the do not influence processing
+of the plan name patterns (they are allowed to make patterns for plans
+and devices look uniform, but since plan patterns contain only one component
+and this component is the last, the matching plan names are always added
+to the list and the regular expression is always applied to the full name).
+<strong>Device type keywords can not be used in plan name patterns.</strong></p>
 </section>
 </section>
 </section>
 <section id="plan-annotation-api">
-<span id="id4"></span><h2>Plan Annotation API<a class="headerlink" href="#plan-annotation-api" title="Permalink to this headline">¶</a></h2>
+<span id="id6"></span><h2>Plan Annotation API<a class="headerlink" href="#plan-annotation-api" title="Permalink to this headline">¶</a></h2>
 <table class="longtable docutils align-default">
 <colgroup>
 <col style="width: 10%" />
