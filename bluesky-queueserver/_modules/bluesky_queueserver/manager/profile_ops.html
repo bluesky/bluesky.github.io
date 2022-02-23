@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+gd9c3103 documentation</title>
+  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+g554113b documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gd9c3103
+                0.post1+g554113b
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -2883,12 +2883,33 @@
     <span class="p">}</span>
 
 
-<span class="k">def</span> <span class="nf">_prepare_devices</span><span class="p">(</span><span class="n">devices</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">50</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_prepare_devices</span><span class="p">(</span><span class="n">devices</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">ignore_all_subdevices_if_one_fails</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Prepare dictionary of existing devices for saving to YAML file.</span>
 <span class="sd">    ``max_depth`` is the maximum depth for the components. The default value (50)</span>
 <span class="sd">    is a very large number.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    devices: dict</span>
+<span class="sd">        Dictionary of devices from the namespace (key - device name, value - reference</span>
+<span class="sd">        to the device object).</span>
+<span class="sd">    max_depth: int</span>
+<span class="sd">        Maximum depth for the device search: 0 - infinite depth, 1 - only top level</span>
+<span class="sd">        devices, 2 - device and subdevices etc.</span>
+<span class="sd">    ignore_all_subdevices_if_one_fails: bool</span>
+<span class="sd">        Ignore all components of devices if at least one component (PVs) can not</span>
+<span class="sd">        be accessed. It saves a lot of time to ignore all components, since</span>
+<span class="sd">        stale code may contain devices with many components with non-existing PVs</span>
+<span class="sd">        and respective timeout may amount to substantial waiting time.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        List of existing devices (tree of devices and subdevices).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">max_depth</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">)</span>  <span class="c1"># must be &gt;= 0</span>
+
     <span class="k">try</span><span class="p">:</span>
         <span class="kn">from</span> <span class="nn">bluesky</span> <span class="kn">import</span> <span class="n">protocols</span>
     <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
@@ -2912,21 +2933,32 @@
             <span class="n">component_names</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="n">component_names</span>
 
-    <span class="k">def</span> <span class="nf">create_device_description</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">create_device_description</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
         <span class="n">description</span> <span class="o">=</span> <span class="n">get_device_params</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="n">comps</span> <span class="o">=</span> <span class="n">get_device_component_names</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="n">components</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="n">depth</span> <span class="o">&lt;=</span> <span class="n">max_depth</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">max_depth</span> <span class="ow">or</span> <span class="p">(</span><span class="n">depth</span> <span class="o">&lt;</span> <span class="n">max_depth</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">ignore_subdevices</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">for</span> <span class="n">comp_name</span> <span class="ow">in</span> <span class="n">comps</span><span class="p">:</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">comp_name</span><span class="p">):</span>
-                    <span class="n">c</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">comp_name</span><span class="p">)</span>
-                    <span class="n">desc</span> <span class="o">=</span> <span class="n">create_device_description</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-                    <span class="n">components</span><span class="p">[</span><span class="n">comp_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">desc</span>
-        <span class="k">if</span> <span class="n">components</span><span class="p">:</span>
-            <span class="n">description</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">components</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">comp_name</span><span class="p">):</span>
+                        <span class="n">c</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">comp_name</span><span class="p">)</span>
+                        <span class="n">desc</span> <span class="o">=</span> <span class="n">create_device_description</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">device_name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">comp_name</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                        <span class="n">components</span><span class="p">[</span><span class="n">comp_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">desc</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+                    <span class="n">ignore_subdevices</span> <span class="o">=</span> <span class="n">ignore_all_subdevices_if_one_fails</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Device &#39;%s&#39;: component </span><span class="si">{</span><span class="n">comp_name</span><span class="si">!r}</span><span class="s2"> can not be processed: %s&quot;</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="n">ex</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">ignore_subdevices</span><span class="p">:</span>
+                    <span class="n">components</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># Ignore all components of the subdevice</span>
+                    <span class="k">break</span>
+            <span class="k">if</span> <span class="n">components</span><span class="p">:</span>
+                <span class="n">description</span><span class="p">[</span><span class="s2">&quot;components&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">components</span>
+
         <span class="k">return</span> <span class="n">description</span>
 
-    <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">create_device_description</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">devices</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">create_device_description</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">devices</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
 
 
 <span class="k">def</span> <span class="nf">existing_plans_and_devices_from_nspace</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
