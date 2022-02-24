@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bluesky_queueserver_api.api_base &mdash; Bluesky Queue Server API 0.post1+g7dbe5ef documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> Bluesky Queue Server API
+          </a>
+              <div class="version">
+                0.post1+g7dbe5ef
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api-reference.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../release-history.html">Release History</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Bluesky Queue Server API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>bluesky_queueserver_api.api_base</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bluesky_queueserver_api.api_base</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">.item</span> <span class="kn">import</span> <span class="n">BItem</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span>
+
+
+<span class="k">class</span> <span class="nc">WaitTimeoutError</span><span class="p">(</span><span class="ne">TimeoutError</span><span class="p">):</span>
+    <span class="o">...</span>
+
+
+<span class="k">class</span> <span class="nc">WaitCancelError</span><span class="p">(</span><span class="ne">TimeoutError</span><span class="p">):</span>
+    <span class="o">...</span>
+
+
+<div class="viewcode-block" id="WaitMonitor"><a class="viewcode-back" href="../../generated/bluesky_queueserver_api.WaitMonitor.html#bluesky_queueserver_api.WaitMonitor">[docs]</a><span class="k">class</span> <span class="nc">WaitMonitor</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates ``monitor`` object for &#39;wait&#39; operations, such as ``wait_for_idle``.</span>
+<span class="sd">    The object may be used to stop the operation from another thread or</span>
+<span class="sd">    asynchronous task.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    The examples illustrate how to use ``WaitMonitor`` object to cancel</span>
+<span class="sd">    wait operations. Synchronous code (0MQ or HTTP):</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        # Synchronous code</span>
+<span class="sd">        from bluesky_queueserver_api import Wait Monitor</span>
+<span class="sd">        from bluesky_queueserver_api.zmq import REManagerAPI()  # Same for HTTP</span>
+<span class="sd">        import time</span>
+<span class="sd">        import threading</span>
+
+<span class="sd">        RM = REManagerAPI()</span>
+<span class="sd">        monitor = WaitMonitor()</span>
+
+<span class="sd">        def wait_re_manager_idle():</span>
+<span class="sd">            try:</span>
+<span class="sd">                print(&quot;Waiting ...&quot;)</span>
+<span class="sd">                RM.wait_for_idle(monitor=monitor)</span>
+<span class="sd">            except RM.WaitCancelError:</span>
+<span class="sd">                print(&quot;Cancelled.&quot;)</span>
+<span class="sd">            except RM.WaitTimeoutError:</span>
+<span class="sd">                print(&quot;Timeout.&quot;)</span>
+<span class="sd">            print(&quot;RE Manager is idle&quot;)</span>
+
+<span class="sd">        # Wait until RE Manager is in &#39;idle&#39; state in a background thread</span>
+<span class="sd">        thread = threading.Thread(target=wait_re_manager_idle)</span>
+<span class="sd">        thread.start()</span>
+<span class="sd">        # Cancel wait after 2 seconds from main thread</span>
+<span class="sd">        time.sleep(2)</span>
+<span class="sd">        monitor.cancel()</span>
+
+<span class="sd">        thread.join()</span>
+<span class="sd">        RM.close()</span>
+
+<span class="sd">    Asynchronous code example (0MQ or HTTP):</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        # Asynchronous code</span>
+<span class="sd">        import asyncio</span>
+<span class="sd">        from bluesky_queueserver_api import Wait Monitor</span>
+<span class="sd">        from bluesky_queueserver_api.zmq.aio import REManagerAPI()  # Same for HTTP</span>
+<span class="sd">        import time</span>
+
+<span class="sd">        async def testing():</span>
+
+<span class="sd">            RM = REManagerAPI()</span>
+<span class="sd">            monitor = WaitMonitor()</span>
+
+<span class="sd">            async def wait_re_manager_idle():</span>
+<span class="sd">                try:</span>
+<span class="sd">                    print(&quot;Waiting ...&quot;)</span>
+<span class="sd">                    await RM.wait_for_idle(monitor=monitor)</span>
+<span class="sd">                except RM.WaitCancelError:</span>
+<span class="sd">                    print(&quot;Cancelled.&quot;)</span>
+<span class="sd">                except RM.WaitTimeoutError:</span>
+<span class="sd">                    print(&quot;Timeout.&quot;)</span>
+<span class="sd">                print(&quot;RE Manager is idle&quot;)</span>
+
+<span class="sd">            # Wait until RE Manager is in &#39;idle&#39; state in a background task</span>
+<span class="sd">            asyncio.create_task(wait_re_manager_idle())</span>
+<span class="sd">            # Cancel wait after 2 seconds from main thread</span>
+<span class="sd">            await asyncio.sleep(2)</span>
+<span class="sd">            monitor.cancel()</span>
+<span class="sd">            await asyncio.sleep(0.5)  # Let the task to complete</span>
+<span class="sd">            await RM.close()</span>
+
+<span class="sd">        asyncio.run(testing())</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="WaitMonitor.__init__"><a class="viewcode-back" href="../../generated/bluesky_queueserver_api.WaitMonitor.html#bluesky_queueserver_api.WaitMonitor.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_time_start</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_time_elapsed</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cancel_callbacks</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wait_cancelled</span> <span class="o">=</span> <span class="kc">False</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Time when the operation started (seconds).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_start</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time_elapsed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Time since the operation started (seconds).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_elapsed</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">timeout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Timeout (seconds).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span>
+
+<div class="viewcode-block" id="WaitMonitor.set_timeout"><a class="viewcode-back" href="../../generated/bluesky_queueserver_api.WaitMonitor.set_timeout.html#bluesky_queueserver_api.WaitMonitor.set_timeout">[docs]</a>    <span class="k">def</span> <span class="nf">set_timeout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Modify timeout for the current operation (seconds).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span></div>
+
+<div class="viewcode-block" id="WaitMonitor.add_cancel_callback"><a class="viewcode-back" href="../../generated/bluesky_queueserver_api.WaitMonitor.add_cancel_callback.html#bluesky_queueserver_api.WaitMonitor.add_cancel_callback">[docs]</a>    <span class="k">def</span> <span class="nf">add_cancel_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cancel_callback</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Each callbacks is called only once before the operation is cancelled.</span>
+<span class="sd">        Callback function should accept no parameters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cancel_callbacks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cancel_callback</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="WaitMonitor.cancel"><a class="viewcode-back" href="../../generated/bluesky_queueserver_api.WaitMonitor.cancel.html#bluesky_queueserver_api.WaitMonitor.cancel">[docs]</a>    <span class="k">def</span> <span class="nf">cancel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cancel the currently running operation. A monitor may be cancelled</span>
+<span class="sd">        only once per lifecycle.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">cb</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cancel_callbacks</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cb</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cancel_callbacks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_wait_cancelled</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_cancelled</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Checks if the monitor was cancelled. The operation is either completed</span>
+<span class="sd">        or about to be completed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wait_cancelled</span></div>
+
+
+<span class="k">class</span> <span class="nc">API_Base</span><span class="p">:</span>
+    <span class="n">WaitTimeoutError</span> <span class="o">=</span> <span class="n">WaitTimeoutError</span>
+    <span class="n">WaitCancelError</span> <span class="o">=</span> <span class="n">WaitCancelError</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">status_expiration_period</span><span class="p">,</span> <span class="n">status_polling_period</span><span class="p">):</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_status_expiration_period</span> <span class="o">=</span> <span class="n">status_expiration_period</span>  <span class="c1"># seconds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_status_polling_period</span> <span class="o">=</span> <span class="n">status_polling_period</span>  <span class="c1"># seconds</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_status_timestamp</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_status_current</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_status_exception</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_user</span> <span class="o">=</span> <span class="s2">&quot;Python API User&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span> <span class="o">=</span> <span class="s2">&quot;admin&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_queue</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_queue_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_history</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_history_uid</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_clear_status_timestamp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Clearing status timestamp causes status to be reloaded from the server next time it is requested.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_status_timestamp</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_item_add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_add`` operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect item type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. Expected type: &#39;BItem&#39; or &#39;dict&#39;&quot;</span><span class="p">)</span>
+
+        <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="n">item</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">pos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;pos&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span>
+        <span class="k">if</span> <span class="n">before_uid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;before_uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">before_uid</span>
+        <span class="k">if</span> <span class="n">after_uid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;after_uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">after_uid</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pass_user_info</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span>
+
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_item_get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_get`` operation</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">pos</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;pos&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span>
+        <span class="k">if</span> <span class="n">uid</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">uid</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Brookhaven National Laboratory.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
