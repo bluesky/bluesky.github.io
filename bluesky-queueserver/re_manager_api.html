@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+g554113b documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.post1+gd2a934b documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+g554113b
+                0.post1+gd2a934b
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -111,6 +111,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#re-runs"><strong>‘re_runs’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#script-upload"><strong>‘script_upload’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#function-execute"><strong>‘function_execute’</strong></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#task-status"><strong>‘task_status’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#task-result"><strong>‘task_result’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#manager-stop"><strong>‘manager_stop’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#manager-kill"><strong>‘manager_kill’</strong></a></li>
@@ -276,6 +277,7 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="#method-script-upload"><span class="std std-ref">‘script_upload’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-function-execute"><span class="std std-ref">‘function_execute’</span></a></p></li>
+<li><p><a class="reference internal" href="#method-task-status"><span class="std std-ref">‘task_status’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-task-result"><span class="std std-ref">‘task_result’</span></a></p></li>
 </ul>
 <p>Stopping RE Manager (mostly used in testing):</p>
@@ -337,7 +339,7 @@ Use ‘status’ method to request status information from RE Manager.</p>
 </tr>
 <tr class="row-even"><td><p>Returns</p></td>
 <td><dl class="simple">
-<dt><strong>msg</strong>: <em>str</em></dt><dd><p>always returns ‘RE Manager’</p>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>application name and version, e.g. ‘RE Manager v0.0.10’</p>
 </dd>
 <dt><strong>items_in_queue</strong>: <em>int</em></dt><dd><p>the number of items in the plan queue</p>
 </dd>
@@ -376,6 +378,7 @@ if RE Manager is not in the idle state.</p></li>
 <li><p><strong>‘paused’</strong> - a plan was paused and Run Engine is in the paused state.
 The plan needs to be resumed, stopped, halted or aborted.</p></li>
 <li><p><strong>‘creating_environment’</strong> - RE Worker environment is in the process of being created.</p></li>
+<li><p><strong>‘starting_queue’</strong> - preparing to execute the queue.</p></li>
 <li><p><strong>‘executing_queue’</strong> - queue is being executed.</p></li>
 <li><p><strong>‘closing_environment’</strong> - RE Worker environment is in the process of being
 closed (safe).</p></li>
@@ -1829,7 +1832,8 @@ of the worker namespace may be used to implement more flexible workflows. The AP
 updates the lists of existing and allowed plans and devices if necessary. Changes in
 the lists will be indicated by changed list UIDs. Use <em>‘task_result’</em> API to check
 if the script was loaded correctly. Note, that if the task fails, the script is
-still executed to the point where the exception is raised, changing the environment.</p></td>
+still executed to the point where the exception is raised and the respective changes
+to the environment are applied.</p></td>
 </tr>
 <tr class="row-odd"><td><p>Parameters</p></td>
 <td><dl class="simple">
@@ -1848,7 +1852,8 @@ no effect if the script is not creating new instances of <em>RE</em> and/or <em>
 (while a plan or another foreground task is running). Generally, it is not
 recommended to update RE Worker namespace in the background. Background tasks
 are executed in separate threads and only thread-safe scripts should be uploaded
-in the background.</p>
+in the background. <strong>Developers of data acquisition workflows and/or user
+specific code are responsible for thread safety.</strong></p>
 </dd>
 </dl>
 </td>
@@ -1901,7 +1906,7 @@ values must be JSON serializable. The task fails if the return value can not be 
 with given name and parameters. The function may still fail start (e.g. if the user is
 permitted to execute function with the given name, but the function is not defined
 in the namespace). Use <em>‘task_result’</em> method with the returned <em>task_uid</em> to
-check the status of the taks and load the result upon completion.</p>
+check the status of the tasks and load the result upon completion.</p>
 </td>
 </tr>
 <tr class="row-odd"><td><p>Parameters</p></td>
@@ -1918,7 +1923,9 @@ and may be used to identify the user who submitted the item.</p>
 <dt><strong>run_in_background</strong>: <em>boolean</em> (optional, default <em>False</em>)</dt><dd><p>Set this parameter <em>True</em> to start a background task. Background tasks can be
 started and executed while a plan or another foreground task is running.
 If workflow requires executing background tasks, user code should be analyzed
-for thread safety to ensure there are no potential threading issues.</p>
+for thread safety to ensure there are no potential threading issues.
+<strong>Developers of data acquisition workflows and/or user specific code are
+responsible for thread safety.</strong></p>
 </dd>
 </dl>
 </td>
@@ -1934,7 +1941,7 @@ In case of error the item may be returned without modification. <em>None</em> wi
 returned if request does not contain item parameters. In current implementation
 the assigned <em>item_uid</em> is equal to <em>task_uid</em>, but it may change in the future.</p>
 </dd>
-<dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>Task UID can be used to check status of the task and download results once the task
+<dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>task UID can be used to check status of the task and download results once the task
 is completed (see <em>task_result</em> API). <em>None</em> is returned if the request fails.</p>
 </dd>
 </dl>
@@ -1943,6 +1950,58 @@ is completed (see <em>task_result</em> API). <em>None</em> is returned if the re
 <tr class="row-odd"><td><p>Execution</p></td>
 <td><p>The method initiates the operation. Monitor <em>task_results_uid</em> status field and call
 <em>task_result</em> API to check for success.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="task-status">
+<span id="method-task-status"></span><h4><strong>‘task_status’</strong><a class="headerlink" href="#task-status" title="Permalink to this headline">¶</a></h4>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 88%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘task_status’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Returns the status of one or more tasks executed by the worker process. The request
+must contain one or more valid task UIDs, returned by one of APIs that starts tasks.
+A single UID may be passed as a string, multiple UIDs must be passed as as a list of
+strings. If a UID is passed as a string, then the returned status is also a string,
+if a list of one or more UIDs is passed, then the status is a dictionary that maps
+task UIDs and their status. The completed tasks are stored at the server at least
+for the period determined by retention time (currently 120 seconds after completion
+of the task). The expired results could be automatically deleted at any time and
+the method will return the task status as <em>‘not_found’</em>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><dl class="simple">
+<dt><strong>task_uid</strong>: <em>str</em> or <em>list(str)</em></dt><dd><p>Task UID.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
+</dd>
+<dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>task UID (expected to be the same as the input parameter) or <em>None</em> if
+the request failed.</p>
+</dd>
+<dt><strong>status</strong>: <em>str</em> or <em>dict</em></dt><dd><p>status of the task(s) or <em>None</em> if the request (not task) failed. If <strong>task_uid</strong>
+is a string representing single UID, then <strong>status</strong> is a string that may be one
+of <em>‘running’</em>, <em>‘completed’</em> or <em>‘not_found’</em>. If <strong>task_uid</strong> is a list of strings,
+then <em>‘status’</em> is a dictionary that maps task UIDs to status of the respective tasks.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>Immediate: no follow-up requests are required.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1977,10 +2036,10 @@ at any time and the method will return the task status as <em>‘not_found’</e
 </dd>
 <dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
 </dd>
-<dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>Task UID (expected to be the same as the input parameter) or <em>None</em> if
+<dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>task UID (expected to be the same as the input parameter) or <em>None</em> if
 the request failed.</p>
 </dd>
-<dt><strong>status</strong>: <em>‘running’</em>, <em>‘completed’</em>, <em>‘not_found’</em> or <em>None</em></dt><dd><p>Status of the task or <em>None</em> if the request (not task) failed.</p>
+<dt><strong>status</strong>: <em>‘running’</em>, <em>‘completed’</em>, <em>‘not_found’</em> or <em>None</em></dt><dd><p>status of the task or <em>None</em> if the request (not task) failed.</p>
 </dd>
 <dt><strong>result</strong>: <em>dict</em> or <em>None</em></dt><dd><p>Dictionary containing the information on a running task, results of the completed
 task or <em>None</em> if the request failed. The contents of the dictionary depends on the returned
