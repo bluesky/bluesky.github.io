@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a53.post1+g3d269d4 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a53.post2+g4ff2f61 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a53.post1+g3d269d4
+                0.1.0a53.post2+g4ff2f61
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -127,9 +127,14 @@
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
-<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span>
+<span class="kn">import</span> <span class="nn">anyio</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span>
 <span class="kn">from</span> <span class="nn">fastapi.middleware.cors</span> <span class="kn">import</span> <span class="n">CORSMiddleware</span>
 <span class="kn">from</span> <span class="nn">fastapi.openapi.utils</span> <span class="kn">import</span> <span class="n">get_openapi</span>
+<span class="kn">from</span> <span class="nn">fastapi.responses</span> <span class="kn">import</span> <span class="n">HTMLResponse</span>
+<span class="kn">from</span> <span class="nn">fastapi.staticfiles</span> <span class="kn">import</span> <span class="n">StaticFiles</span>
+<span class="kn">from</span> <span class="nn">fastapi.templating</span> <span class="kn">import</span> <span class="n">Jinja2Templates</span>
+<span class="kn">from</span> <span class="nn">starlette.responses</span> <span class="kn">import</span> <span class="n">FileResponse</span>
 
 <span class="kn">from</span> <span class="nn">tiled.database.core</span> <span class="kn">import</span> <span class="n">purge_expired</span>
 
@@ -137,6 +142,7 @@
 <span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">SHARE_TILED_PATH</span>
 <span class="kn">from</span> <span class="nn">.compression</span> <span class="kn">import</span> <span class="n">CompressionMiddleware</span>
 <span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">PatchedStreamingResponse</span>
 <span class="kn">from</span> <span class="nn">.dependencies</span> <span class="kn">import</span> <span class="n">get_query_registry</span><span class="p">,</span> <span class="n">get_root_tree</span><span class="p">,</span> <span class="n">get_serialization_registry</span>
@@ -149,6 +155,7 @@
     <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
     <span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span>
     <span class="n">get_authenticators</span><span class="p">,</span>
+    <span class="n">get_base_url</span><span class="p">,</span>
     <span class="n">record_timing</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -225,15 +232,71 @@
     <span class="n">compression_registry</span> <span class="o">=</span> <span class="n">compression_registry</span> <span class="ow">or</span> <span class="n">default_compression_registry</span>
 
     <span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">SHARE_TILED_PATH</span><span class="p">:</span>
+        <span class="c1"># If the distribution includes static assets, serve UI routes.</span>
+
+        <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/ui/{path:path}&quot;</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">ui</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lookup_file</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span>
+
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">lookup_file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="p">:</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="s2">&quot;index.html&quot;</span>
+            <span class="n">full_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">&quot;ui&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">stat_result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">anyio</span><span class="o">.</span><span class="n">to_thread</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">,</span> <span class="n">full_path</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">PermissionError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="mi">401</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+                <span class="c1"># This may be a URL that has meaning to the client-side application,</span>
+                <span class="c1"># such as /ui/node/metadata/a/b/c.</span>
+                <span class="c1"># Serve index.html and let the client-side application sort it out.</span>
+                <span class="k">if</span> <span class="n">try_app</span><span class="p">:</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lookup_file</span><span class="p">(</span><span class="s2">&quot;index.html&quot;</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">response</span>
+                <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="mi">404</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="k">return</span> <span class="n">FileResponse</span><span class="p">(</span>
+                <span class="n">full_path</span><span class="p">,</span>
+                <span class="n">stat_result</span><span class="o">=</span><span class="n">stat_result</span><span class="p">,</span>
+                <span class="n">method</span><span class="o">=</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span>
+                <span class="n">status_code</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">app</span><span class="o">.</span><span class="n">mount</span><span class="p">(</span>
+            <span class="s2">&quot;/static&quot;</span><span class="p">,</span>
+            <span class="n">StaticFiles</span><span class="p">(</span><span class="n">directory</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">&quot;static&quot;</span><span class="p">)),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;ui&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">templates</span> <span class="o">=</span> <span class="n">Jinja2Templates</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">))</span>
+
+        <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">response_class</span><span class="o">=</span><span class="n">HTMLResponse</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">index</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;user-agent&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;python-tiled&quot;</span><span class="p">):</span>
+                <span class="c1"># This results in an error message like</span>
+                <span class="c1"># ClientError: 400: To connect from a Python client, use</span>
+                <span class="c1"># http://localhost:8000/api not http://localhost:8000/?root_path=true</span>
+                <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span>
+                    <span class="n">status_code</span><span class="o">=</span><span class="mi">400</span><span class="p">,</span>
+                    <span class="n">detail</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;To connect from a Python client, use </span><span class="si">{</span><span class="n">get_base_url</span><span class="p">(</span><span class="n">request</span><span class="p">)</span><span class="si">}</span><span class="s2"> not&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">templates</span><span class="o">.</span><span class="n">TemplateResponse</span><span class="p">(</span>
+                <span class="s2">&quot;index.html&quot;</span><span class="p">,</span>
+                <span class="p">{</span><span class="s2">&quot;request&quot;</span><span class="p">:</span> <span class="n">request</span><span class="p">,</span> <span class="s2">&quot;api_url&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">get_base_url</span><span class="p">(</span><span class="n">request</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">},</span>
+            <span class="p">)</span>
+
     <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">allow_origins</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">router</span><span class="p">)</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api&quot;</span><span class="p">)</span>
 
     <span class="c1"># The Tree and Authenticator have the opportunity to add custom routes to</span>
     <span class="c1"># the server here. (Just for example, a Tree of BlueskyRuns uses this</span>
     <span class="c1"># hook to add a /documents route.) This has to be done before dependency_overrides</span>
     <span class="c1"># are processed, so we cannot just inject this configuration via Depends.</span>
     <span class="k">for</span> <span class="n">custom_router</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;include_routers&quot;</span><span class="p">,</span> <span class="p">[]):</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">custom_router</span><span class="p">)</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">custom_router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api&quot;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;providers&quot;</span><span class="p">,</span> <span class="p">[]):</span>
         <span class="c1"># Delay this imports to avoid delaying startup with the SQL and cryptography</span>
@@ -278,7 +341,7 @@
                     <span class="n">custom_router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
         <span class="c1"># And add this authentication_router itself to the app.</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">authentication_router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/auth&quot;</span><span class="p">)</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">authentication_router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api/auth&quot;</span><span class="p">)</span>
 
     <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">override_get_authenticators</span><span class="p">():</span>
@@ -301,7 +364,7 @@
         <span class="p">]:</span>
             <span class="k">if</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="nb">setattr</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">authentication</span><span class="p">[</span><span class="n">item</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;allow_origins&quot;</span><span class="p">,</span> <span class="s2">&quot;database_uri&quot;</span><span class="p">]:</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;allow_origins&quot;</span><span class="p">,</span> <span class="s2">&quot;response_bytesize_limit&quot;</span><span class="p">,</span> <span class="s2">&quot;database_uri&quot;</span><span class="p">]:</span>
             <span class="k">if</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="nb">setattr</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">server_settings</span><span class="p">[</span><span class="n">item</span><span class="p">])</span>
         <span class="n">pool_size</span> <span class="o">=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;database_settings&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pool_size&quot;</span><span class="p">)</span>
@@ -357,7 +420,7 @@
 
         <span class="c1"># The /search route is defined at server startup so that the user has the</span>
         <span class="c1"># opporunity to register custom query types before startup.</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">declare_search_router</span><span class="p">(</span><span class="n">query_registry</span><span class="p">))</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">declare_search_router</span><span class="p">(</span><span class="n">query_registry</span><span class="p">),</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api&quot;</span><span class="p">)</span>
 
         <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">allow_origins</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">allow_origins</span><span class="p">)</span>
         <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
@@ -577,7 +640,7 @@
     <span class="k">if</span> <span class="n">metrics_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prometheus&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
         <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">metrics</span>
 
-        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">metrics</span><span class="o">.</span><span class="n">router</span><span class="p">)</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">metrics</span><span class="o">.</span><span class="n">router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api&quot;</span><span class="p">)</span>
 
         <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
         <span class="k">async</span> <span class="k">def</span> <span class="nf">capture_metrics_prometheus</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
