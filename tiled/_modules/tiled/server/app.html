@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a55 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a55.post1+g01c054f documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a55
+                0.1.0a55.post1+g01c054f
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -128,7 +128,7 @@
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">import</span> <span class="nn">anyio</span>
-<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span><span class="p">,</span> <span class="n">Security</span>
 <span class="kn">from</span> <span class="nn">fastapi.middleware.cors</span> <span class="kn">import</span> <span class="n">CORSMiddleware</span>
 <span class="kn">from</span> <span class="nn">fastapi.openapi.utils</span> <span class="kn">import</span> <span class="n">get_openapi</span>
 <span class="kn">from</span> <span class="nn">fastapi.responses</span> <span class="kn">import</span> <span class="n">HTMLResponse</span>
@@ -143,6 +143,7 @@
     <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">SHARE_TILED_PATH</span>
+<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">get_current_principal</span>
 <span class="kn">from</span> <span class="nn">.compression</span> <span class="kn">import</span> <span class="n">CompressionMiddleware</span>
 <span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">PatchedStreamingResponse</span>
 <span class="kn">from</span> <span class="nn">.dependencies</span> <span class="kn">import</span> <span class="n">get_query_registry</span><span class="p">,</span> <span class="n">get_root_tree</span><span class="p">,</span> <span class="n">get_serialization_registry</span>
@@ -275,7 +276,12 @@
         <span class="n">templates</span> <span class="o">=</span> <span class="n">Jinja2Templates</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">))</span>
 
         <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">response_class</span><span class="o">=</span><span class="n">HTMLResponse</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">def</span> <span class="nf">index</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">index</span><span class="p">(</span>
+            <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
+            <span class="c1"># This dependency is here because it runs the code that moves</span>
+            <span class="c1"># API key from the query parameter to a cookie (if it is valid).</span>
+            <span class="n">principal</span><span class="o">=</span><span class="n">Security</span><span class="p">(</span><span class="n">get_current_principal</span><span class="p">,</span> <span class="n">scopes</span><span class="o">=</span><span class="p">[]),</span>
+        <span class="p">):</span>
             <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;user-agent&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;python-tiled&quot;</span><span class="p">):</span>
                 <span class="c1"># This results in an error message like</span>
                 <span class="c1"># ClientError: 400: To connect from a Python client, use</span>
@@ -714,9 +720,14 @@
     <span class="k">elif</span> <span class="p">(</span><span class="ow">not</span> <span class="n">authenticators</span><span class="p">)</span> <span class="ow">and</span> <span class="n">settings</span><span class="o">.</span><span class="n">single_user_api_key_generated</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">    Use the following URL to connect to Tiled:</span>
+<span class="s2">    Navigate a web browser to:</span>
+
+<span class="s2">    http://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">?api_key=</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">single_user_api_key</span><span class="si">}</span><span class="s2"></span>
+
+<span class="s2">    or connect a Tiled client to:</span>
 
 <span class="s2">    http://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">/api?api_key=</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">single_user_api_key</span><span class="si">}</span><span class="s2"></span>
+
 <span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
             <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
         <span class="p">)</span>
