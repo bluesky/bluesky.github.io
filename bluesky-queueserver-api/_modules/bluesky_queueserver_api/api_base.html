@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver_api.api_base &mdash; Bluesky Queue Server API 0.post1+gbbd3863 documentation</title>
+  <title>bluesky_queueserver_api.api_base &mdash; Bluesky Queue Server API 0.post1+gee85724 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -28,7 +28,7 @@
             <a href="../../index.html" class="icon icon-home"> Bluesky Queue Server API
           </a>
               <div class="version">
-                0.post1+gbbd3863
+                0.post1+gee85724
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -71,7 +71,8 @@
              
   <h1>Source code for bluesky_queueserver_api.api_base</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">.item</span> <span class="kn">import</span> <span class="n">BItem</span>
-<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Iterable</span>
+<span class="kn">import</span> <span class="nn">copy</span>
 
 
 <span class="k">class</span> <span class="nc">WaitTimeoutError</span><span class="p">(</span><span class="ne">TimeoutError</span><span class="p">):</span>
@@ -242,16 +243,39 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_user</span> <span class="o">=</span> <span class="s2">&quot;Python API User&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span> <span class="o">=</span> <span class="s2">&quot;admin&quot;</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_current_queue</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_current_queue_uid</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_current_history</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_current_history_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_queue</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_running_item</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_queue_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_history</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_history_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list_uid</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span> <span class="nf">_clear_status_timestamp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Clearing status timestamp causes status to be reloaded from the server next time it is requested.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_status_timestamp</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_request_params_add_user_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_params</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pass_user_info</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span>
+
+    <span class="k">def</span> <span class="nf">_add_request_param</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_params</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add parameter to dictionary ``request_params`` if value is not ``None``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="k">def</span> <span class="nf">_prepare_item_add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -260,31 +284,347 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect item type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. Expected type: &#39;BItem&#39; or &#39;dict&#39;&quot;</span><span class="p">)</span>
 
-        <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="n">item</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
         <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
-        <span class="k">if</span> <span class="n">pos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;pos&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span>
-        <span class="k">if</span> <span class="n">before_uid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;before_uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">before_uid</span>
-        <span class="k">if</span> <span class="n">after_uid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;after_uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">after_uid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;before_uid&quot;</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;after_uid&quot;</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pass_user_info</span><span class="p">:</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span>
+    <span class="k">def</span> <span class="nf">_prepare_item_add_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_add_batch`` operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Parameter ``items`` must be iterable: type(items)=</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">items</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">items</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Incorrect type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> if item #</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">item</span><span class="si">!r}</span><span class="s2">). Expected type: &#39;BItem&#39; or &#39;dict&#39;&quot;</span>
+                <span class="p">)</span>
+
+        <span class="n">items</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">_</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">items</span><span class="p">]</span>
+
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="n">items</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;before_uid&quot;</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;after_uid&quot;</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_item_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">replace</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_update`` operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect item type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. Expected type: &#39;BItem&#39; or &#39;dict&#39;&quot;</span><span class="p">)</span>
+
+        <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;replace&quot;</span><span class="p">,</span> <span class="n">replace</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_item_move</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">pos_dest</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_add`` operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;uid&quot;</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos_dest&quot;</span><span class="p">,</span> <span class="n">pos_dest</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;before_uid&quot;</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;after_uid&quot;</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">request_params</span>
 
-    <span class="k">def</span> <span class="nf">_prepare_item_get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_item_move_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">uids</span><span class="p">,</span> <span class="n">pos_dest</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">,</span> <span class="n">reorder</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Prepare parameters for ``item_get`` operation</span>
+<span class="sd">        Prepare parameters for ``item_add`` operation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="n">pos</span><span class="p">:</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;pos&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span>
-        <span class="k">if</span> <span class="n">uid</span><span class="p">:</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">uid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;uids&quot;</span><span class="p">,</span> <span class="n">uids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos_dest&quot;</span><span class="p">,</span> <span class="n">pos_dest</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;before_uid&quot;</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;after_uid&quot;</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;reorder&quot;</span><span class="p">,</span> <span class="n">reorder</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_item_get_remove</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_get`` and ``item_remove`` operation</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;uid&quot;</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_item_remove_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">uids</span><span class="p">,</span> <span class="n">ignore_missing</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_remove_batch`` operation</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;uids&quot;</span><span class="p">:</span> <span class="n">uids</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;ignore_missing&quot;</span><span class="p">,</span> <span class="n">ignore_missing</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_item_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``item_execute`` operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect item type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. Expected type: &#39;BItem&#39; or &#39;dict&#39;&quot;</span><span class="p">)</span>
+
+        <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_queue_mode_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``queue_mode_set`` operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="s2">&quot;mode&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;mode&quot;</span><span class="p">]}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_queue_get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``queue_get``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_queue</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;items&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_running_item</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;running_item&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_queue_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plan_queue_uid&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_queue_get</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``queue_get``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;plan_queue_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_queue_uid</span><span class="p">,</span>
+            <span class="s2">&quot;running_item&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_running_item</span><span class="p">),</span>
+            <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_queue</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_history_get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``history_get``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_history</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;items&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_history_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plan_history_uid&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_history_get</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``history_get``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;plan_history_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_history_uid</span><span class="p">,</span>
+            <span class="s2">&quot;items&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_history</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_plans_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``plans_allowed`` and ``devices_allowed`` operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+
+        <span class="c1"># User name should not be includedin the request</span>
+        <span class="k">if</span> <span class="s2">&quot;user&quot;</span> <span class="ow">in</span> <span class="n">request_params</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_plans_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``plans_allowed``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_allowed&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_allowed_uid&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_plans_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``plans_allowed``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;plans_allowed_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed_uid</span><span class="p">,</span>
+            <span class="s2">&quot;plans_allowed&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``devices_allowed``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_allowed&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_allowed_uid&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``devices_allowed``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;devices_allowed_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed_uid</span><span class="p">,</span>
+            <span class="s2">&quot;devices_allowed&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_plans_existing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``plans_existing``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_existing&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_existing_uid&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_plans_existing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``plans_existing``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;plans_existing_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing_uid</span><span class="p">,</span>
+            <span class="s2">&quot;plans_existing&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_devices_existing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``devices_existing``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_existing&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_existing_uid&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_devices_existing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``devices_existing``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;devices_existing_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing_uid</span><span class="p">,</span>
+            <span class="s2">&quot;devices_existing&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_permissions_reload</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">reload_plans_devices</span><span class="p">,</span> <span class="n">reload_permissions</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``permissions_reload``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;reload_plans_devices&quot;</span><span class="p">,</span> <span class="n">reload_plans_devices</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;reload_permissions&quot;</span><span class="p">,</span> <span class="n">reload_permissions</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_permissions_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_group_permissions</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``permissions_set``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;user_group_permissions&quot;</span><span class="p">:</span> <span class="n">user_group_permissions</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_script_upload</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">script</span><span class="p">,</span> <span class="n">update_re</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``script_upload``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;script&quot;</span><span class="p">:</span> <span class="n">script</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;update_re&quot;</span><span class="p">,</span> <span class="n">update_re</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;run_in_background&quot;</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_function_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``script_upload``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Incorrect item type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">!r}</span><span class="s2">. Expected type: &#39;BItem&#39; or &#39;dict&#39;&quot;</span><span class="p">)</span>
+
+        <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;run_in_background&quot;</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_task_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">task_uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``task_result`` and ``task_status``</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;task_uid&quot;</span><span class="p">:</span> <span class="n">task_uid</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_verify_options_re_runs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">option</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Options for ``re_runs`` API is processed locally, so verify that the option</span>
+<span class="sd">        value is supported.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">allowed_options</span> <span class="o">=</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">,</span> <span class="s2">&quot;open&quot;</span><span class="p">,</span> <span class="s2">&quot;closed&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">option</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">allowed_options</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported option </span><span class="si">{</span><span class="n">option</span><span class="si">!r}</span><span class="s2">. Supported options: </span><span class="si">{</span><span class="n">allowed_options</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_re_runs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">option</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``re_runs``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;run_list&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list_uid</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;run_list_uid&quot;</span><span class="p">]</span>
+            <span class="n">response</span><span class="p">[</span><span class="s2">&quot;run_list&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_re_runs_items</span><span class="p">(</span><span class="n">option</span><span class="o">=</span><span class="n">option</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_select_re_runs_items</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">option</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``re_runs``: select runs from the full list based on the option.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">option</span> <span class="o">==</span> <span class="s2">&quot;open&quot;</span><span class="p">:</span>
+            <span class="n">run_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list</span> <span class="k">if</span> <span class="n">_</span><span class="p">[</span><span class="s2">&quot;is_open&quot;</span><span class="p">]]</span>
+        <span class="k">elif</span> <span class="n">option</span> <span class="o">==</span> <span class="s2">&quot;closed&quot;</span><span class="p">:</span>
+            <span class="n">run_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">_</span><span class="p">[</span><span class="s2">&quot;is_open&quot;</span><span class="p">]]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">run_list</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">run_list</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_re_runs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">option</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``re_runs``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;run_list_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list_uid</span><span class="p">,</span>
+            <span class="s2">&quot;run_list&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_re_runs_items</span><span class="p">(</span><span class="n">option</span><span class="o">=</span><span class="n">option</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_re_pause</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">option</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepare parameters for ``re_pause`` operation</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;option&quot;</span><span class="p">,</span> <span class="n">option</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 </pre></div>
 
