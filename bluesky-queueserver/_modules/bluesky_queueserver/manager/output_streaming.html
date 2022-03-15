@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.post1+gaeb3fcb documentation</title>
+  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.post1+g06b81b3 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gaeb3fcb
+                0.post1+g06b81b3
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -281,10 +281,14 @@
 <span class="sd">    The class allows to subscribe to published 0MQ messages and read the messages one by</span>
 <span class="sd">    one as they arrive. Subscription is performed using the remote 0MQ address and topic.</span>
 
-<span class="sd">    The class provides blocking (with timeout) ``recv`` method that waits for the next</span>
+<span class="sd">    The class provides blocking (with timeout) ``recv()`` method that waits for the next</span>
 <span class="sd">    published message. The following example contains the code illustrating using the class.</span>
 <span class="sd">    In real-world  application the loop will be running in a separate thread and generating</span>
 <span class="sd">    callbacks on each received message.</span>
+
+<span class="sd">    The ``subscribe()`` and ``unsubscribe()`` methods allow to explicitly subscribe and</span>
+<span class="sd">    unsubscribe the socket to the topic. The messages published while the socket is unsubscribed</span>
+<span class="sd">    are discarded. First call to ``recv()`` method automatically subscribes the socket.</span>
 
 <span class="sd">    .. code-block:: python</span>
 
@@ -333,16 +337,37 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span> <span class="o">=</span> <span class="n">zmq_topic</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">:</span>
             <span class="n">context</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUB</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ReceiveConsoleOutput.subscribe"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.subscribe.html#bluesky_queueserver.ReceiveConsoleOutput.subscribe">[docs]</a>    <span class="k">def</span> <span class="nf">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Subscribe 0MQ socket to the console output topic. Once the socket is subscribed,</span>
+<span class="sd">        the published messages are cached by 0MQ and could be loaded with ``recv()`` method.</span>
+<span class="sd">        The function does nothing if the socket is already subscribed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="ReceiveConsoleOutput.unsubscribe"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.unsubscribe.html#bluesky_queueserver.ReceiveConsoleOutput.unsubscribe">[docs]</a>    <span class="k">def</span> <span class="nf">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Unsubscribe 0MQ socket from the console output topic. Once the socket is unsubscribed,</span>
+<span class="sd">        all published messages are discarded.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 <div class="viewcode-block" id="ReceiveConsoleOutput.recv"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.recv.html#bluesky_queueserver.ReceiveConsoleOutput.recv">[docs]</a>    <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Get the next published message. If timeout expires then</span>
-<span class="sd">        ``TimeoutError`` is raised.</span>
+<span class="sd">        Get the next published message. The function subscribes the socket to 0MQ topic</span>
+<span class="sd">        if the socket is not already subscribed. If timeout expires then ``TimeoutError``</span>
+<span class="sd">        is raised.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -366,6 +391,9 @@
         <span class="k">if</span> <span class="p">(</span><span class="n">timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">timeout</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>
             <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span>
 
+        <span class="c1"># Subscribe the socket to the topic if it is not already subscribed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
+
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;No message received during timeout period </span><span class="si">{timeout}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
 
@@ -383,6 +411,11 @@
 <span class="sd">    Async version of ``ReceiveConsoleOutput`` class. There are two ways to use the class:</span>
 <span class="sd">    explicitly awaiting for the ``recv`` function (same as in ``ReceiveConsoleOutput``)</span>
 <span class="sd">    or setting up a callback function (plain function or coroutine).</span>
+
+<span class="sd">    The ``subscribe()`` and ``unsubscribe()`` methods allow to explicitly subscribe and</span>
+<span class="sd">    unsubscribe the socket to the topic. The messages published while the socket is unsubscribed</span>
+<span class="sd">    are discarded. Calls to ``recv()`` and ``start()`` methods always subscribe the socket,</span>
+<span class="sd">    ``stop()`` method unsubscribes the socket unless called with ``unsubscribe=False``.</span>
 
 <span class="sd">    Explicitly awaiting ``recv`` function:</span>
 
@@ -409,7 +442,14 @@
 <span class="sd">                #   message or after timeout (e.g. check a condition and exit</span>
 <span class="sd">                #   the loop once the condition is satisfied).</span>
 
+<span class="sd">        # Subscribe to start caching messages. Calling &#39;recv()&#39; also subscribes the socket.</span>
+<span class="sd">        rco.subscribe()</span>
+
 <span class="sd">        asyncio.run(run_acquisition())</span>
+
+<span class="sd">        # Unsubscribe to discard all new messages</span>
+<span class="sd">        rco.unsubscribe()</span>
+
 
 <span class="sd">    Setting up callback function or coroutine (awaitable function):</span>
 
@@ -476,10 +516,32 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span> <span class="o">=</span> <span class="n">zmq_topic</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unsubscribe_when_stopping</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">:</span>
             <span class="n">context</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUB</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ReceiveConsoleOutputAsync.subscribe"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.subscribe.html#bluesky_queueserver.ReceiveConsoleOutputAsync.subscribe">[docs]</a>    <span class="k">def</span> <span class="nf">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Subscribe 0MQ socket to the console output topic. Once the socket is subscribed,</span>
+<span class="sd">        the published messages are cached by 0MQ and could be loaded with ``recv()`` method.</span>
+<span class="sd">        The function does nothing if the socket is already subscribed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="ReceiveConsoleOutputAsync.unsubscribe"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.unsubscribe.html#bluesky_queueserver.ReceiveConsoleOutputAsync.unsubscribe">[docs]</a>    <span class="k">def</span> <span class="nf">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Unsubscribe 0MQ socket from the console output topic. Once the socket is unsubscribed,</span>
+<span class="sd">        all published messages are discarded.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 <div class="viewcode-block" id="ReceiveConsoleOutputAsync.set_callback"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.set_callback.html#bluesky_queueserver.ReceiveConsoleOutputAsync.set_callback">[docs]</a>    <span class="k">def</span> <span class="nf">set_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cb</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -502,6 +564,7 @@
 <div class="viewcode-block" id="ReceiveConsoleOutputAsync.recv"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.recv.html#bluesky_queueserver.ReceiveConsoleOutputAsync.recv">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Get the next published message. If timeout expires then ``TimeoutError`` is raised.</span>
+<span class="sd">        If the socket is not subscribed to to topic, then subscribes the socket.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -524,6 +587,9 @@
 
         <span class="k">if</span> <span class="p">(</span><span class="n">timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">timeout</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>
             <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span>
+
+        <span class="c1"># Subscribe the socket to the topic if it is not already subscribed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;No message received during timeout period </span><span class="si">{timeout}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
@@ -550,27 +616,34 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exit</span><span class="p">:</span>
             <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_next_message</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unsubscribe_when_stopping</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">False</span>
 
 <div class="viewcode-block" id="ReceiveConsoleOutputAsync.start"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.start.html#bluesky_queueserver.ReceiveConsoleOutputAsync.start">[docs]</a>    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Start collection of messages published by RE Manager. Collection may be started and stopped</span>
 <span class="sd">        multiple times during a session. Repeated calls to the ``start`` method are ignored.</span>
-<span class="sd">        The function MUST be called from the event loop.</span>
+<span class="sd">        The function MUST be called from the event loop. The method always subscribes the socket.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exit</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
             <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_next_message</span><span class="p">())</span></div>
 
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.stop"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.stop.html#bluesky_queueserver.ReceiveConsoleOutputAsync.stop">[docs]</a>    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ReceiveConsoleOutputAsync.stop"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.stop.html#bluesky_queueserver.ReceiveConsoleOutputAsync.stop">[docs]</a>    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">unsubscribe</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Stop collection of messages published by RE Manager. Call to ``stop`` method unsubscribes</span>
 <span class="sd">        the client from 0MQ topic, therefore all the messages published until collection is started</span>
 <span class="sd">        are ignored. The function MUST be called from the event loop.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        unsubscribe: boolean (optional)</span>
+<span class="sd">            Unsubscribe the socket if ``True`` (default), otherwise leave the socket subscribed.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unsubscribe_when_stopping</span> <span class="o">=</span> <span class="n">unsubscribe</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exit</span> <span class="o">=</span> <span class="kc">True</span></div>
 
     <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -610,6 +683,7 @@
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">rco</span> <span class="o">=</span> <span class="n">ReceiveConsoleOutput</span><span class="p">(</span><span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_subscribe_addr</span><span class="p">)</span>
+        <span class="n">rco</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">payload</span> <span class="o">=</span> <span class="n">rco</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
