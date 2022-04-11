@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver_api.console_monitor &mdash; Bluesky Queue Server API 0.post1+g650100f documentation</title>
+  <title>bluesky_queueserver_api.console_monitor &mdash; Bluesky Queue Server API 0.post1+g319e6f4 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -28,7 +28,7 @@
             <a href="../../index.html" class="icon icon-home"> Bluesky Queue Server API
           </a>
               <div class="version">
-                0.post1+g650100f
+                0.post1+g319e6f4
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -74,6 +74,7 @@
 <span class="kn">import</span> <span class="nn">queue</span>
 <span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">import</span> <span class="nn">time</span> <span class="k">as</span> <span class="nn">ttime</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
 
 <span class="kn">from</span> <span class="nn">bluesky_queueserver</span> <span class="kn">import</span> <span class="n">ReceiveConsoleOutput</span><span class="p">,</span> <span class="n">ReceiveConsoleOutputAsync</span>
 
@@ -288,12 +289,10 @@
 <span class="s2">        await RM.close()</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
-<span class="n">_doc_ConsoleMonitor_text_updated</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">    Indicates if console text was updated. The property returns ``True`` if</span>
-<span class="s2">    the text buffer with console output contains new data and updated text</span>
-<span class="s2">    could be loaded using ``text()`` API. Otherwise ``text()`` API returns</span>
-<span class="s2">    &#39;old&#39; unchanged console output. Calling ``text()`` API resets the property</span>
-<span class="s2">    to ``False``.</span>
+<span class="n">_doc_ConsoleMonitor_text_uid</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Returns UID of the current text buffer. UID is changed whenever the contents</span>
+<span class="s2">    of the buffer is changed. Monitor UID to minimize the number of data reloads</span>
+<span class="s2">    (if necessary).</span>
 
 <span class="s2">    Examples</span>
 <span class="s2">    --------</span>
@@ -303,9 +302,11 @@
 
 <span class="s2">        RM.console_monitor.enable()</span>
 
+<span class="s2">        uid = RM.console_monitor.text_uid</span>
 <span class="s2">        while True:</span>
-<span class="s2">            # Polling for updated text (console output)</span>
-<span class="s2">            if RM.console_monitor.text_updated:</span>
+<span class="s2">            uid_new = RM.console_monitor.text_uid</span>
+<span class="s2">            if uid_new != uid:</span>
+<span class="s2">                uid = uid_new</span>
 <span class="s2">                text = RM.console_monitor.text()</span>
 <span class="s2">                # Use &#39;text&#39;</span>
 <span class="s2">            ttime.sleep(0.1)</span>
@@ -316,9 +317,11 @@
 
 <span class="s2">        RM.console_monitor.enable()</span>
 
+<span class="s2">        uid = RM.console_monitor.text_uid</span>
 <span class="s2">        while True:</span>
-<span class="s2">            # Polling for updated text (console output)</span>
-<span class="s2">            if RM.console_monitor.text_updated:</span>
+<span class="s2">            uid_new = RM.console_monitor.text_uid</span>
+<span class="s2">            if uid_new != uid:</span>
+<span class="s2">                uid = uid_new</span>
 <span class="s2">                text = await RM.console_monitor.text()</span>
 <span class="s2">                # Use &#39;text&#39;</span>
 <span class="s2">            asyncio.sleep(0.1)</span>
@@ -342,9 +345,16 @@
 <span class="s2">&quot;&quot;&quot;</span>
 
 <span class="n">_doc_ConsoleMonitor_text</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">    Returns text representation of console output. Monitor ``text_updated``</span>
-<span class="s2">    property to check if text buffer was modified since the last call to</span>
-<span class="s2">    ``text()`` API.</span>
+<span class="s2">    Returns text representation of console output. Monitor ``text_uid``</span>
+<span class="s2">    property to check if text buffer was modified. The parameter ``nlines``</span>
+<span class="s2">    determines the maximum number of lines of text returned by the function.</span>
+
+<span class="s2">    Parameters</span>
+<span class="s2">    ----------</span>
+<span class="s2">    nlines: int</span>
+<span class="s2">        Number of lines to return. The value determines the maximum number of lines</span>
+<span class="s2">        of text returned by the function. The function returns ``&quot;&quot;`` (empty string)</span>
+<span class="s2">        if the value is ``0`` or negative.</span>
 
 <span class="s2">    Returns</span>
 <span class="s2">    -------</span>
@@ -367,6 +377,10 @@
 <span class="s2">        text = RM.console_monitor.text()</span>
 <span class="s2">        print(text)</span>
 
+<span class="s2">        # Return the last 10 lines</span>
+<span class="s2">        text = RM.console_monitor.text(10)</span>
+<span class="s2">        print(text)</span>
+
 <span class="s2">        RM.console_monitor.disable()</span>
 
 <span class="s2">    Asynchronous API</span>
@@ -382,8 +396,11 @@
 <span class="s2">        text = await RM.console_monitor.text()</span>
 <span class="s2">        print(text)</span>
 
-<span class="s2">        RM.console_monitor.disable()</span>
+<span class="s2">        # Return the last 10 lines</span>
+<span class="s2">        text = await RM.console_monitor.text(10)</span>
+<span class="s2">        print(text)</span>
 
+<span class="s2">        RM.console_monitor.disable()</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
 
@@ -394,23 +411,43 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_buffers_modified_event</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">_text</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_new_text_uid</span><span class="p">()</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_text_clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_text_max_lines</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_lines</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_text_generate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_text_generate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nlines</span><span class="p">):</span>
+        <span class="n">n_text_buffer</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="p">)</span>
+        <span class="n">nlines</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="p">(</span><span class="n">nlines</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="k">else</span> <span class="n">n_text_buffer</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_text</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">nlines</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">n_text_buffer</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">nlines</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text</span><span class="p">:</span>
+                <span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="p">[</span><span class="o">-</span><span class="n">nlines</span> <span class="o">-</span> <span class="mi">1</span> <span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_text</span><span class="p">[</span><span class="n">nlines</span><span class="p">]</span> <span class="o">=</span> <span class="n">text</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">text</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text</span><span class="p">[</span><span class="n">nlines</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_text</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_text_updated</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">nlines</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">nlines</span><span class="p">,</span> <span class="n">n_text_buffer</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">nlines</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text</span><span class="p">:</span>
+                <span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="p">[</span><span class="o">-</span><span class="n">nlines</span><span class="p">:])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_text</span><span class="p">[</span><span class="n">nlines</span><span class="p">]</span> <span class="o">=</span> <span class="n">text</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">text</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text</span><span class="p">[</span><span class="n">nlines</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">text</span>
+
+    <span class="k">def</span> <span class="nf">_set_new_text_uid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_text_uid</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
 
     <span class="k">def</span> <span class="nf">_text_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_text</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_text</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_new_text_uid</span><span class="p">()</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_text_line</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_text_pos</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_text_updated</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="k">def</span> <span class="nf">_add_msg_to_text_buffer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
         <span class="c1"># Setting max number of lines to 0 disables text processing</span>
@@ -468,7 +505,7 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_text_line</span> <span class="o">-=</span> <span class="mi">1</span>
                 <span class="n">msg</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">patterns</span><span class="p">[</span><span class="s2">&quot;one_line_up&quot;</span><span class="p">])</span> <span class="p">:]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_text_updated</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_new_text_uid</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_adjust_text_buffer_size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
@@ -485,7 +522,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_text_line</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_line</span> <span class="o">-</span> <span class="n">n_remove</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_text_updated</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_new_text_uid</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_monitor_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
@@ -497,9 +534,9 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">text_updated</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">text_uid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Docstring is maintained separately</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_updated</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_uid</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">text_max_lines</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -575,12 +612,11 @@
         <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">RequestTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No message was received (timeout=</span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="p">{})</span>
 
-    <span class="k">def</span> <span class="nf">text</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nlines</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="c1"># Docstring is maintained separately</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_updated</span><span class="p">:</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer_lock</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_text_generate</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer_lock</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_generate</span><span class="p">(</span><span class="n">nlines</span><span class="o">=</span><span class="n">nlines</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">text</span>
 
 
 <div class="viewcode-block" id="ConsoleMonitor_ZMQ_Threads"><a class="viewcode-back" href="../../generated/bluesky_queueserver_api.console_monitor.ConsoleMonitor_ZMQ_Threads.html#bluesky_queueserver_api.console_monitor.ConsoleMonitor_ZMQ_Threads">[docs]</a><span class="k">class</span> <span class="nc">ConsoleMonitor_ZMQ_Threads</span><span class="p">(</span><span class="n">_ConsoleMonitor_Threads</span><span class="p">):</span>
@@ -726,12 +762,11 @@
         <span class="k">except</span> <span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">QueueEmpty</span><span class="p">,</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">):</span>
             <span class="k">raise</span> <span class="n">RequestTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No message was received (timeout=</span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="p">{})</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">text</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nlines</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="c1"># Docstring is maintained separately</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_updated</span><span class="p">:</span>
-            <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer_lock</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_text_generate</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_buffer_lock</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_generate</span><span class="p">(</span><span class="n">nlines</span><span class="o">=</span><span class="n">nlines</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">text</span>
 
 
 <div class="viewcode-block" id="ConsoleMonitor_ZMQ_Async"><a class="viewcode-back" href="../../generated/bluesky_queueserver_api.console_monitor.ConsoleMonitor_ZMQ_Async.html#bluesky_queueserver_api.console_monitor.ConsoleMonitor_ZMQ_Async">[docs]</a><span class="k">class</span> <span class="nc">ConsoleMonitor_ZMQ_Async</span><span class="p">(</span><span class="n">_ConsoleMonitor_Async</span><span class="p">):</span>
@@ -854,7 +889,7 @@
 <span class="n">_ConsoleMonitor</span><span class="o">.</span><span class="n">enable</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_ConsoleMonitor_enable</span>
 <span class="n">_ConsoleMonitor</span><span class="o">.</span><span class="n">disable</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_ConsoleMonitor_disable</span>
 <span class="n">_ConsoleMonitor</span><span class="o">.</span><span class="n">clear</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_ConsoleMonitor_clear</span>
-<span class="n">_ConsoleMonitor</span><span class="o">.</span><span class="n">text_updated</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_ConsoleMonitor_text_updated</span>
+<span class="n">_ConsoleMonitor</span><span class="o">.</span><span class="n">text_uid</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_ConsoleMonitor_text_uid</span>
 <span class="n">_ConsoleMonitor</span><span class="o">.</span><span class="n">text_max_lines</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_ConsoleMonitor_text_max_lines</span>
 
 <span class="n">_ConsoleMonitor_Threads</span><span class="o">.</span><span class="n">disable_wait</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_ConsoleMonitor_disable_wait</span>
