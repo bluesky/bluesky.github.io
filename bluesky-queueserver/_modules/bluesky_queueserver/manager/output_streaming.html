@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.post1+gac13800 documentation</title>
+  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.post1+g530fe49 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gac13800
+                0.post1+g530fe49
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -91,6 +91,7 @@
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">time</span> <span class="k">as</span> <span class="nn">ttime</span>
 <span class="kn">import</span> <span class="nn">threading</span>
@@ -102,6 +103,10 @@
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 <span class="n">qserver_version</span> <span class="o">=</span> <span class="n">bluesky_queueserver</span><span class="o">.</span><span class="n">__version__</span>
+
+
+<span class="n">default_zmq_info_address_for_server</span> <span class="o">=</span> <span class="s2">&quot;tcp://*:60625&quot;</span>
+<span class="n">default_zmq_info_address</span> <span class="o">=</span> <span class="s2">&quot;tcp://localhost:60625&quot;</span>
 
 
 <span class="k">class</span> <span class="nc">ConsoleOutputStream</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">TextIOBase</span><span class="p">):</span>
@@ -221,7 +226,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_console_output_on</span> <span class="o">=</span> <span class="n">console_output_on</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_publish_on</span> <span class="o">=</span> <span class="n">zmq_publish_on</span>
 
-        <span class="n">zmq_publish_addr</span> <span class="o">=</span> <span class="n">zmq_publish_addr</span> <span class="ow">or</span> <span class="s2">&quot;tcp://*:60625&quot;</span>
+        <span class="n">zmq_publish_addr</span> <span class="o">=</span> <span class="n">zmq_publish_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address_for_server</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_publish_addr</span> <span class="o">=</span> <span class="n">zmq_publish_addr</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span> <span class="o">=</span> <span class="n">zmq_topic</span>
@@ -343,7 +348,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
 
-        <span class="n">zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span> <span class="ow">or</span> <span class="s2">&quot;tcp://localhost:60625&quot;</span>
+        <span class="n">zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address</span>
 
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Subscribing to console output stream from 0MQ address: </span><span class="si">{</span><span class="n">zmq_subscribe_addr</span><span class="si">}</span><span class="s2"> ...&quot;</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Subscribing to 0MQ topic: &#39;</span><span class="si">{</span><span class="n">zmq_topic</span><span class="si">}</span><span class="s2">&#39; ...&quot;</span><span class="p">)</span>
@@ -685,18 +690,36 @@
         <span class="n">formatter_class</span><span class="o">=</span><span class="n">formatter</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">&quot;--zmq-info-addr&quot;</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="s2">&quot;zmq_info_addr&quot;</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;The address of RE Manager socket used for publishing console output. The parameter overrides &quot;</span>
+        <span class="s2">&quot;the address set using QSERVER_ZMQ_INFO_ADDRESS environment variable. The default value is used &quot;</span>
+        <span class="s2">&quot;if the address is not set using the parameter or the environment variable. Address format: &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;&#39;tcp://127.0.0.1:60625&#39; (default: </span><span class="si">{</span><span class="n">default_zmq_info_address</span><span class="si">}</span><span class="s2">).&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">&quot;--zmq-subscribe-addr&quot;</span><span class="p">,</span>
         <span class="n">dest</span><span class="o">=</span><span class="s2">&quot;zmq_subscribe_addr&quot;</span><span class="p">,</span>
         <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
-        <span class="n">default</span><span class="o">=</span><span class="s2">&quot;tcp://localhost:60625&quot;</span><span class="p">,</span>
-        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;The address of ZMQ server to subscribe, e.g. &#39;tcp://127.0.0.1:60625&#39; (default: </span><span class="si">%(default)s</span><span class="s2">).&quot;</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;The parameter is deprecated and will be removed. Use --zmq-info-addr instead.&quot;</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
-    <span class="n">zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">zmq_subscribe_addr</span>
+
+    <span class="n">zmq_info_addr</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">zmq_info_addr</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">zmq_subscribe_addr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;The parameter --zmq-subscribe-addr is deprecated and will be removed. Use --zmq-info-addr instead.&quot;</span>
+        <span class="p">)</span>
+    <span class="n">zmq_info_addr</span> <span class="o">=</span> <span class="n">zmq_info_addr</span> <span class="ow">or</span> <span class="n">args</span><span class="o">.</span><span class="n">zmq_subscribe_addr</span>
+    <span class="n">zmq_info_addr</span> <span class="o">=</span> <span class="n">zmq_info_addr</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;QSERVER_ZMQ_INFO_ADDRESS&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">zmq_info_addr</span> <span class="o">=</span> <span class="n">zmq_info_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address</span>
 
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">rco</span> <span class="o">=</span> <span class="n">ReceiveConsoleOutput</span><span class="p">(</span><span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_subscribe_addr</span><span class="p">)</span>
+        <span class="n">rco</span> <span class="o">=</span> <span class="n">ReceiveConsoleOutput</span><span class="p">(</span><span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_info_addr</span><span class="p">)</span>
         <span class="n">rco</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
