@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver_api.api_base &mdash; Bluesky Queue Server API 0.post1+g42c9ec3 documentation</title>
+  <title>bluesky_queueserver_api.api_base &mdash; Bluesky Queue Server API 0.post1+g288a26f documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -28,7 +28,7 @@
             <a href="../../index.html" class="icon icon-home"> Bluesky Queue Server API
           </a>
               <div class="version">
-                0.post1+g42c9ec3
+                0.post1+g288a26f
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -70,9 +70,11 @@
            <div itemprop="articleBody">
              
   <h1>Source code for bluesky_queueserver_api.api_base</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">.item</span> <span class="kn">import</span> <span class="n">BItem</span>
-<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Iterable</span>
+<span></span><span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Iterable</span>
 <span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">getpass</span>
+
+<span class="kn">from</span> <span class="nn">.item</span> <span class="kn">import</span> <span class="n">BItem</span>
 
 
 <span class="k">class</span> <span class="nc">WaitTimeoutError</span><span class="p">(</span><span class="ne">TimeoutError</span><span class="p">):</span>
@@ -240,7 +242,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_status_current</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_status_exception</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_user</span> <span class="o">=</span> <span class="s2">&quot;Python API User&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_user</span> <span class="o">=</span> <span class="s2">&quot;Queue Server API User&quot;</span>  <span class="c1"># Meaningful user name should be set in application code.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span> <span class="o">=</span> <span class="s2">&quot;admin&quot;</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_plan_queue</span> <span class="o">=</span> <span class="p">[]</span>
@@ -259,16 +261,68 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list_uid</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="k">def</span> <span class="nf">_check_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">name_in_msg</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name_in_msg</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not a string: type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">name_in_msg</span><span class="si">}</span><span class="s2"> is an empty string.&quot;</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">user</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get and set the default user name. The default value is used if user name is not passed</span>
+<span class="sd">        explicitly as an API parameter (for API calls that require user name). User name is ignored</span>
+<span class="sd">        by the HTTP version of API, since HTTP server is expected to manage user names.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user</span>
+
+    <span class="nd">@user</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">user</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_name</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="s2">&quot;User name&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_user</span> <span class="o">=</span> <span class="n">user</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">user_group</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get and set the default user group name. The default value is used if the group name is</span>
+<span class="sd">        not passed explicitly as an API parameter (for API calls that require user group name).</span>
+<span class="sd">        The group name is ignored by the HTTP version of API, since HTTP server is expected to manage</span>
+<span class="sd">        user information including names of user group.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span>
+
+    <span class="nd">@user_group</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">user_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_name</span><span class="p">(</span><span class="n">user_group</span><span class="p">,</span> <span class="s2">&quot;User group name&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span> <span class="o">=</span> <span class="n">user_group</span>
+
+    <span class="k">def</span> <span class="nf">set_user_name_to_login_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set the default user name to &#39;login name&#39;. Login name the current user of the workstation</span>
+<span class="sd">        is used. User name is ignored by the HTTP version of the API.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">user</span> <span class="o">=</span> <span class="n">getpass</span><span class="o">.</span><span class="n">getuser</span><span class="p">()</span>
+
     <span class="k">def</span> <span class="nf">_clear_status_timestamp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Clearing status timestamp causes status to be reloaded from the server next time it is requested.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_status_timestamp</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="nf">_request_params_add_user_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_params</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_get_user_group_for_allowed_plans_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns ``user_group`` used by ``plans_allowed`` and ``devices_allowed`` API.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">:</span>
+            <span class="n">user_group</span> <span class="o">=</span> <span class="n">user_group</span> <span class="k">if</span> <span class="n">user_group</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">user_group</span> <span class="o">=</span> <span class="s2">&quot;http&quot;</span>  <span class="c1"># Arbitrary group names, since it is not sent in the request</span>
+        <span class="k">return</span> <span class="n">user_group</span>
+
+    <span class="k">def</span> <span class="nf">_request_params_add_user_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_params</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pass_user_info</span><span class="p">:</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user</span>
-            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">user</span> <span class="k">if</span> <span class="n">user</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">user_group</span> <span class="k">if</span> <span class="n">user_group</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_group</span>
 
     <span class="k">def</span> <span class="nf">_add_request_param</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request_params</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -277,7 +331,7 @@
         <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">request_params</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
-    <span class="k">def</span> <span class="nf">_prepare_item_add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_item_add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Prepare parameters for ``item_add`` operation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -290,10 +344,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;before_uid&quot;</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;after_uid&quot;</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="o">=</span><span class="n">user_group</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 
-    <span class="k">def</span> <span class="nf">_prepare_item_add_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_item_add_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Prepare parameters for ``item_add_batch`` operation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -312,10 +366,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;before_uid&quot;</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;after_uid&quot;</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="o">=</span><span class="n">user_group</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 
-    <span class="k">def</span> <span class="nf">_prepare_item_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">replace</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_item_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">replace</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Prepare parameters for ``item_update`` operation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -326,7 +380,7 @@
 
         <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;replace&quot;</span><span class="p">,</span> <span class="n">replace</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="o">=</span><span class="n">user_group</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 
     <span class="k">def</span> <span class="nf">_prepare_item_move</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">pos_dest</span><span class="p">,</span> <span class="n">before_uid</span><span class="p">,</span> <span class="n">after_uid</span><span class="p">):</span>
@@ -372,7 +426,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;ignore_missing&quot;</span><span class="p">,</span> <span class="n">ignore_missing</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 
-    <span class="k">def</span> <span class="nf">_prepare_item_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_item_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Prepare parameters for ``item_execute`` operation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -382,7 +436,7 @@
         <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">BItem</span><span class="p">)</span> <span class="k">else</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
         <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="o">=</span><span class="n">user_group</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 
     <span class="k">def</span> <span class="nf">_prepare_queue_mode_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -437,12 +491,12 @@
         <span class="p">}</span>
         <span class="k">return</span> <span class="n">response</span>
 
-    <span class="k">def</span> <span class="nf">_prepare_plans_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_plans_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Prepare parameters for ``plans_allowed`` and ``devices_allowed`` operation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">user_group</span><span class="o">=</span><span class="n">user_group</span><span class="p">)</span>
 
         <span class="c1"># User name should not be includedin the request</span>
         <span class="k">if</span> <span class="s2">&quot;user&quot;</span> <span class="ow">in</span> <span class="n">request_params</span><span class="p">:</span>
@@ -450,15 +504,20 @@
 
         <span class="k">return</span> <span class="n">request_params</span>
 
-    <span class="k">def</span> <span class="nf">_process_response_plans_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_invalidate_plans_allowed_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_plans_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        ``plans_allowed``: process response</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_allowed&quot;</span><span class="p">])</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_allowed_uid&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_allowed_uid&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed_uid</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_invalidate_plans_allowed_cache</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed_uid</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_allowed_uid&quot;</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span><span class="p">[</span><span class="n">user_group</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_allowed&quot;</span><span class="p">])</span>
 
-    <span class="k">def</span> <span class="nf">_generate_response_plans_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_generate_response_plans_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        ``plans_allowed``: generate response based on cached data</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -466,19 +525,24 @@
             <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
             <span class="s2">&quot;plans_allowed_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed_uid</span><span class="p">,</span>
-            <span class="s2">&quot;plans_allowed&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span><span class="p">),</span>
+            <span class="s2">&quot;plans_allowed&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_allowed</span><span class="p">[</span><span class="n">user_group</span><span class="p">]),</span>
         <span class="p">}</span>
         <span class="k">return</span> <span class="n">response</span>
 
-    <span class="k">def</span> <span class="nf">_process_response_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_invalidate_devices_allowed_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        ``devices_allowed``: process response</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_allowed&quot;</span><span class="p">])</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_allowed_uid&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_allowed_uid&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed_uid</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_invalidate_devices_allowed_cache</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed_uid</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_allowed_uid&quot;</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span><span class="p">[</span><span class="n">user_group</span><span class="p">]</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_allowed&quot;</span><span class="p">])</span>
 
-    <span class="k">def</span> <span class="nf">_generate_response_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_generate_response_devices_allowed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        ``devices_allowed``: generate response based on cached data</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -486,7 +550,7 @@
             <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
             <span class="s2">&quot;devices_allowed_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed_uid</span><span class="p">,</span>
-            <span class="s2">&quot;devices_allowed&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span><span class="p">),</span>
+            <span class="s2">&quot;devices_allowed&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_allowed</span><span class="p">[</span><span class="n">user_group</span><span class="p">]),</span>
         <span class="p">}</span>
         <span class="k">return</span> <span class="n">response</span>
 
@@ -496,7 +560,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_existing&quot;</span><span class="p">])</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_existing_uid&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_plans_existing_uid</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;plans_existing_uid&quot;</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">_generate_response_plans_existing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -516,7 +580,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_existing&quot;</span><span class="p">])</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_existing_uid&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing_uid</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;devices_existing_uid&quot;</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">_generate_response_devices_existing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -555,7 +619,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;run_in_background&quot;</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 
-    <span class="k">def</span> <span class="nf">_prepare_function_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_prepare_function_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Prepare parameters for ``script_upload``</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -566,7 +630,7 @@
 
         <span class="n">request_params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;item&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;run_in_background&quot;</span><span class="p">,</span> <span class="n">run_in_background</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_request_params_add_user_info</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">user</span><span class="p">,</span> <span class="n">user_group</span><span class="o">=</span><span class="n">user_group</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
 
     <span class="k">def</span> <span class="nf">_prepare_task_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">task_uid</span><span class="p">):</span>
