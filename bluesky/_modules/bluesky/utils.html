@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.utils &mdash; bluesky 1.8.3.post2+gc1c8ac02 documentation</title>
+  <title>bluesky.utils &mdash; bluesky 1.8.3.post12+g85c5d92f documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -28,7 +28,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.8.3.post2+gc1c8ac02
+                1.8.3.post12+g85c5d92f
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -1664,7 +1664,39 @@
             <span class="c1"># if with a Qt backend, do the scary thing</span>
             <span class="k">if</span> <span class="s1">&#39;qt&#39;</span> <span class="ow">in</span> <span class="n">backend</span><span class="p">:</span>
 
-                <span class="kn">from</span> <span class="nn">matplotlib.backends.qt_compat</span> <span class="kn">import</span> <span class="n">QtCore</span><span class="p">,</span> <span class="n">QtWidgets</span>
+                <span class="kn">from</span> <span class="nn">matplotlib.backends.qt_compat</span> <span class="kn">import</span> <span class="n">QtCore</span><span class="p">,</span> <span class="n">QtWidgets</span><span class="p">,</span> <span class="n">QT_API</span>
+                <span class="kn">import</span> <span class="nn">functools</span>
+
+                <span class="nd">@functools</span><span class="o">.</span><span class="n">lru_cache</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                <span class="k">def</span> <span class="nf">_enum</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+                    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    Between PyQt5 and PyQt6 how the various enums were accessed changed from</span>
+<span class="sd">                    all of the various names being in the module namespace to being nested under</span>
+<span class="sd">                    the Enum name.  Thus in PyQt5 we access the QSocketNotifier Type enum values as ::</span>
+
+<span class="sd">                        QtCore.QSocketNotifier.Read</span>
+
+<span class="sd">                    but in PyQt6 we use::</span>
+
+<span class="sd">                         QtCore.QSocketNotifier.Type.Read</span>
+
+<span class="sd">                    rather than have this checking inline where we use it, this function lets us do::</span>
+
+<span class="sd">                        _enum(&#39;QtCore.QSocketNotifier.Type&#39;).Read</span>
+
+<span class="sd">                    and well get the right namespace to get the Enum member from.</span>
+
+<span class="sd">                    We use the extra layer of indirection of `operator.attrgetter` so that</span>
+<span class="sd">                    multi-level names work and we can rely on the Qt compat layer to get the</span>
+<span class="sd">                    correct PyQt5 vs PyQt6</span>
+
+<span class="sd">                    This is copied from Matplotlib.</span>
+<span class="sd">                    &quot;&quot;&quot;</span>
+                    <span class="c1"># foo.bar.Enum.Entry (PyQt6) &lt;=&gt; foo.bar.Entry (non-PyQt6).</span>
+                    <span class="k">return</span> <span class="n">operator</span><span class="o">.</span><span class="n">attrgetter</span><span class="p">(</span>
+                        <span class="n">name</span> <span class="k">if</span> <span class="n">QT_API</span> <span class="o">==</span> <span class="s1">&#39;PyQt6&#39;</span> <span class="k">else</span> <span class="n">name</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="p">)(</span><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">QtCore</span><span class="o">.</span><span class="n">__package__</span><span class="p">])</span>
+
                 <span class="n">app</span> <span class="o">=</span> <span class="n">QtWidgets</span><span class="o">.</span><span class="n">QApplication</span><span class="o">.</span><span class="n">instance</span><span class="p">()</span>
                 <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">_qapp</span> <span class="o">=</span> <span class="n">app</span> <span class="o">=</span> <span class="n">QtWidgets</span><span class="o">.</span><span class="n">QApplication</span><span class="p">([</span><span class="sa">b</span><span class="s1">&#39;bluesky&#39;</span><span class="p">])</span>
@@ -1697,8 +1729,10 @@
                     <span class="k">for</span> <span class="n">fd</span> <span class="ow">in</span> <span class="p">(</span><span class="n">rfd</span><span class="p">,</span> <span class="n">wfd</span><span class="p">):</span>
                         <span class="n">flags</span> <span class="o">=</span> <span class="n">fcntl</span><span class="o">.</span><span class="n">fcntl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">fcntl</span><span class="o">.</span><span class="n">F_GETFL</span><span class="p">)</span>
                         <span class="n">fcntl</span><span class="o">.</span><span class="n">fcntl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">fcntl</span><span class="o">.</span><span class="n">F_SETFL</span><span class="p">,</span> <span class="n">flags</span> <span class="o">|</span> <span class="n">os</span><span class="o">.</span><span class="n">O_NONBLOCK</span><span class="p">)</span>
-                    <span class="n">wakeupsn</span> <span class="o">=</span> <span class="n">QtCore</span><span class="o">.</span><span class="n">QSocketNotifier</span><span class="p">(</span><span class="n">rfd</span><span class="p">,</span>
-                                                      <span class="n">QtCore</span><span class="o">.</span><span class="n">QSocketNotifier</span><span class="o">.</span><span class="n">Read</span><span class="p">)</span>
+                    <span class="n">wakeupsn</span> <span class="o">=</span> <span class="n">QtCore</span><span class="o">.</span><span class="n">QSocketNotifier</span><span class="p">(</span>
+                        <span class="n">rfd</span><span class="p">,</span>
+                        <span class="n">_enum</span><span class="p">(</span><span class="s1">&#39;QtCore.QSocketNotifier.Type&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">Read</span>
+                    <span class="p">)</span>
                     <span class="n">origwakeupfd</span> <span class="o">=</span> <span class="n">signal</span><span class="o">.</span><span class="n">set_wakeup_fd</span><span class="p">(</span><span class="n">wfd</span><span class="p">)</span>
 
                     <span class="k">def</span> <span class="nf">cleanup</span><span class="p">():</span>
@@ -1761,7 +1795,10 @@
 
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">sys</span><span class="o">.</span><span class="n">excepthook</span> <span class="o">=</span> <span class="n">my_exception_hook</span>
-                    <span class="n">event_loop</span><span class="o">.</span><span class="n">exec_</span><span class="p">()</span>
+                    <span class="p">(</span><span class="n">event_loop</span><span class="o">.</span><span class="n">exec</span><span class="p">()</span>
+                     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">event_loop</span><span class="p">,</span> <span class="s2">&quot;exec&quot;</span><span class="p">)</span>
+                     <span class="k">else</span> <span class="n">event_loop</span><span class="o">.</span><span class="n">exec_</span><span class="p">()</span>
+                     <span class="p">)</span>
                     <span class="c1"># make sure any pending signals are processed</span>
                     <span class="n">event_loop</span><span class="o">.</span><span class="n">processEvents</span><span class="p">()</span>
                     <span class="k">if</span> <span class="n">vals</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
