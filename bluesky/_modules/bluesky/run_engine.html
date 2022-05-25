@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.run_engine &mdash; bluesky 1.8.3.post12+g85c5d92f documentation</title>
+  <title>bluesky.run_engine &mdash; bluesky 1.8.3.post20+g2cad6cd0 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -28,7 +28,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.8.3.post12+g85c5d92f
+                1.8.3.post20+g2cad6cd0
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -439,7 +439,7 @@
     <span class="n">_UNCACHEABLE_COMMANDS</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;pause&#39;</span><span class="p">,</span> <span class="s1">&#39;subscribe&#39;</span><span class="p">,</span> <span class="s1">&#39;unsubscribe&#39;</span><span class="p">,</span> <span class="s1">&#39;stage&#39;</span><span class="p">,</span>
                              <span class="s1">&#39;unstage&#39;</span><span class="p">,</span> <span class="s1">&#39;monitor&#39;</span><span class="p">,</span> <span class="s1">&#39;unmonitor&#39;</span><span class="p">,</span> <span class="s1">&#39;open_run&#39;</span><span class="p">,</span>
                              <span class="s1">&#39;close_run&#39;</span><span class="p">,</span> <span class="s1">&#39;install_suspender&#39;</span><span class="p">,</span>
-                             <span class="s1">&#39;remove_suspender&#39;</span><span class="p">]</span>
+                             <span class="s1">&#39;remove_suspender&#39;</span><span class="p">,</span> <span class="s1">&#39;_start_suspender&#39;</span><span class="p">]</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -577,7 +577,8 @@
             <span class="s1">&#39;clear_checkpoint&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clear_checkpoint</span><span class="p">,</span>
             <span class="s1">&#39;rewindable&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rewindable</span><span class="p">,</span>
             <span class="s1">&#39;pause&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pause</span><span class="p">,</span>
-            <span class="s1">&#39;resume&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resume</span><span class="p">,</span>
+            <span class="s1">&#39;_resume_from_suspender&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resume</span><span class="p">,</span>
+            <span class="s1">&#39;_start_suspender&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_suspender</span><span class="p">,</span>
             <span class="s1">&#39;collect&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collect</span><span class="p">,</span>
             <span class="s1">&#39;kickoff&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kickoff</span><span class="p">,</span>
             <span class="s1">&#39;complete&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_complete</span><span class="p">,</span>
@@ -1260,58 +1261,15 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;aborting&#39;</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">was_paused</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
-
             <span class="k">if</span> <span class="n">justification</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Justification for this suspension:</span><span class="se">\n</span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">justification</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">current_run</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                <span class="n">current_run</span><span class="o">.</span><span class="n">record_interruption</span><span class="p">(</span><span class="s1">&#39;resume&#39;</span><span class="p">)</span>
-            <span class="c1"># During suspend, all motors should be stopped. Call stop() on</span>
-            <span class="c1"># every object we ever set().</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="c1"># Notify Devices of the pause in case they want to clean up.</span>
-            <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_objs_seen</span><span class="p">:</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;pause&#39;</span><span class="p">):</span>
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="n">obj</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>
-                    <span class="k">except</span> <span class="n">NoReplayAllowed</span><span class="p">:</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_reset_checkpoint_state_meth</span><span class="p">()</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Justification for this suspension:</span><span class="se">\n</span><span class="si">{</span><span class="n">justification</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-            <span class="c1"># rewind to the last checkpoint</span>
-            <span class="n">new_plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rewind</span><span class="p">()</span>
-            <span class="c1"># queue up the cached messages</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_plan</span><span class="p">)</span>
+            <span class="c1"># add starting the suspender logic to the stack</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">single_gen</span><span class="p">(</span><span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;_start_suspender&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">pre_plan</span><span class="p">,</span> <span class="n">post_plan</span><span class="p">,</span> <span class="n">justification</span><span class="p">,</span> <span class="n">fut</span><span class="p">))</span>
+            <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">single_gen</span><span class="p">(</span>
-                <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;rewindable&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rewindable</span><span class="p">)))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-
-            <span class="c1"># if there is a post plan add it between the wait</span>
-            <span class="c1"># and the cached messages</span>
-            <span class="k">if</span> <span class="n">post_plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">post_plan</span><span class="p">):</span>
-                    <span class="n">post_plan</span> <span class="o">=</span> <span class="n">post_plan</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ensure_generator</span><span class="p">(</span><span class="n">post_plan</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-
-            <span class="c1"># tell the devices they are ready to go again</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">single_gen</span><span class="p">(</span><span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;resume&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">)))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-
-            <span class="c1"># add the wait on the future to the stack</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">single_gen</span><span class="p">(</span><span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;wait_for&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">[</span><span class="n">fut</span><span class="p">,</span> <span class="p">])))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-
-            <span class="c1"># if there is a pre plan add on top of the wait</span>
-            <span class="k">if</span> <span class="n">pre_plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">pre_plan</span><span class="p">):</span>
-                    <span class="n">pre_plan</span> <span class="o">=</span> <span class="n">pre_plan</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ensure_generator</span><span class="p">(</span><span class="n">pre_plan</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">single_gen</span><span class="p">(</span>
-                <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;rewindable&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">False</span><span class="p">)))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
             <span class="c1"># The event loop is still running. The pre_plan will be processed,</span>
             <span class="c1"># and then the RunEngine will be hung up on processing the</span>
             <span class="c1"># &#39;wait_for&#39; message until `fut` is set.</span>
@@ -1323,6 +1281,55 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">loop</span><span class="o">.</span><span class="n">create_task</span><span class="p">,</span>
             <span class="n">_request_suspend</span><span class="p">(</span><span class="n">pre_plan</span><span class="p">,</span> <span class="n">post_plan</span><span class="p">,</span> <span class="n">justification</span><span class="p">))</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_start_suspender</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        An internal message to do the initial work of starting a suspender</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pre_plan</span><span class="p">,</span> <span class="n">post_plan</span><span class="p">,</span> <span class="n">justification</span><span class="p">,</span> <span class="n">fut</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span>
+        <span class="k">for</span> <span class="n">current_run</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">current_run</span><span class="o">.</span><span class="n">record_interruption</span><span class="p">(</span>
+                <span class="n">justification</span> <span class="k">if</span> <span class="n">justification</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;suspended&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># During suspend, all motors should be stopped. Call stop() on</span>
+        <span class="c1"># every object we ever set().</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Notify Devices of the pause in case they want to clean up.</span>
+        <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_objs_seen</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;pause&#39;</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">obj</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>
+                <span class="k">except</span> <span class="n">NoReplayAllowed</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_reset_checkpoint_state_meth</span><span class="p">()</span>
+        <span class="c1"># rewind to the last checkpoint</span>
+        <span class="n">rewind_plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rewind</span><span class="p">()</span>
+        <span class="n">was_rewindable</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rewindable</span>
+
+        <span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">pre_plan</span><span class="p">):</span>
+            <span class="n">pre_plan</span> <span class="o">=</span> <span class="n">pre_plan</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">post_plan</span><span class="p">):</span>
+            <span class="n">post_plan</span> <span class="o">=</span> <span class="n">post_plan</span><span class="p">()</span>
+
+        <span class="k">def</span> <span class="nf">suspender_helper_inner_plan</span><span class="p">():</span>
+            <span class="c1"># none of this should run again.</span>
+            <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;rewindable&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="c1"># if there is a pre plan add on top of the wait</span>
+            <span class="k">if</span> <span class="n">pre_plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">yield from</span> <span class="n">ensure_generator</span><span class="p">(</span><span class="n">pre_plan</span><span class="p">)</span>
+            <span class="c1"># wait for the future from the suspender to be released</span>
+            <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;wait_for&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">[</span><span class="n">fut</span><span class="p">,</span> <span class="p">])</span>
+            <span class="c1"># do the work we need to do to resume</span>
+            <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;_resume_from_suspender&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">)</span>
+            <span class="c1"># if there is a post plan, run it</span>
+            <span class="k">if</span> <span class="n">post_plan</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">yield from</span> <span class="n">ensure_generator</span><span class="p">(</span><span class="n">post_plan</span><span class="p">)</span>
+            <span class="c1"># put rewindable back the way it was</span>
+            <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;rewindable&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">was_rewindable</span><span class="p">)</span>
+            <span class="k">yield from</span> <span class="n">rewind_plan</span>
+
+        <span class="c1"># add the above helper to the plan stack</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">suspender_helper_inner_plan</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
 <div class="viewcode-block" id="RunEngine.abort"><a class="viewcode-back" href="../../generated/bluesky.run_engine.RunEngine.abort.html#bluesky.run_engine.RunEngine.abort">[docs]</a>    <span class="k">def</span> <span class="nf">abort</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -1571,19 +1578,24 @@
                     <span class="c1"># the new response to be added</span>
                     <span class="n">new_response</span> <span class="o">=</span> <span class="kc">None</span>
 
-                    <span class="c1"># This &#39;await&#39; must be here to ensure that</span>
-                    <span class="c1"># this coroutine breaks out of its current behavior</span>
-                    <span class="c1"># before trying to get the next message from the</span>
-                    <span class="c1"># top of the generator stack in case there has</span>
-                    <span class="c1"># been a pause requested.  Without this the next</span>
-                    <span class="c1"># message after the pause may be processed first</span>
-                    <span class="c1"># on resume (instead of the first message in</span>
-                    <span class="c1"># self._msg_cache).</span>
+                    <span class="c1"># This &#39;await&#39; must be here to ensure that this coroutine</span>
+                    <span class="c1"># breaks out of its current behavior before trying to get</span>
+                    <span class="c1"># the next message from the top of the generator stack in</span>
+                    <span class="c1"># case there has been a pause requested.  Without this the</span>
+                    <span class="c1"># next message after the pause may be processed first on</span>
+                    <span class="c1"># resume (instead of the first message in self._msg_cache).</span>
+                    <span class="c1"># This await also gives the co-routine for requesting</span>
+                    <span class="c1"># suspends a chance to run.</span>
 
-                    <span class="c1"># This sleep has to be inside of this try block so</span>
-                    <span class="c1"># that any of the &#39;async&#39; exceptions get thrown in the</span>
-                    <span class="c1"># correct place</span>
-                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop_for_kwargs</span><span class="p">)</span>
+                    <span class="c1"># This sleep has to be inside of this try block so that any</span>
+                    <span class="c1"># of the &#39;async&#39; exceptions get thrown in the correct</span>
+                    <span class="c1"># place.</span>
+
+                    <span class="c1"># If we are handling an exception, then burn through the</span>
+                    <span class="c1"># current plan stack before rather than allowing a pause or</span>
+                    <span class="c1"># suspension to try and finish firing.</span>
+                    <span class="k">if</span> <span class="n">stashed_exception</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop_for_kwargs</span><span class="p">)</span>
                     <span class="c1"># always pop off a result, we are either sending it back in</span>
                     <span class="c1"># or throwing an exception in, in either case the left hand</span>
                     <span class="c1"># side of the yield in the plan will be moved past</span>
@@ -1595,12 +1607,10 @@
                             <span class="n">stashed_exception</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exception</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">_exception</span> <span class="o">=</span> <span class="kc">None</span>
                     <span class="c1"># The case where we have a stashed exception</span>
-                    <span class="k">if</span> <span class="p">(</span><span class="n">stashed_exception</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span>
-                            <span class="nb">isinstance</span><span class="p">(</span><span class="n">resp</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">)):</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">stashed_exception</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">resp</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">)):</span>
                         <span class="c1"># throw the exception at the current plan</span>
                         <span class="k">try</span><span class="p">:</span>
-                            <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">throw</span><span class="p">(</span>
-                                <span class="n">stashed_exception</span> <span class="ow">or</span> <span class="n">resp</span><span class="p">)</span>
+                            <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">throw</span><span class="p">(</span><span class="n">stashed_exception</span> <span class="ow">or</span> <span class="n">resp</span><span class="p">)</span>
                         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                             <span class="c1"># The current plan did not handle it,</span>
                             <span class="c1"># maybe the next plan (if any) would like</span>
@@ -1609,6 +1619,8 @@
                             <span class="c1"># we have killed the current plan, do not give</span>
                             <span class="c1"># it a new response</span>
                             <span class="n">resp</span> <span class="o">=</span> <span class="n">sentinel</span>
+                            <span class="c1"># If there is at least one plan left in the stack,</span>
+                            <span class="c1"># stash the new exception go back to top</span>
                             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_plan_stack</span><span class="p">):</span>
                                 <span class="n">stashed_exception</span> <span class="o">=</span> <span class="n">e</span>
                                 <span class="k">continue</span>
