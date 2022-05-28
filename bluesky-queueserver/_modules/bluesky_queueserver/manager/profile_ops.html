@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+g8cad799 documentation</title>
+  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.post1+gd3f1ce4 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+g8cad799
+                0.post1+gd3f1ce4
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -89,12 +89,10 @@
 <span></span><span class="kn">import</span> <span class="nn">ast</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">glob</span>
-<span class="kn">import</span> <span class="nn">runpy</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterable</span>
 <span class="kn">import</span> <span class="nn">pkg_resources</span>
 <span class="kn">import</span> <span class="nn">yaml</span>
-<span class="kn">import</span> <span class="nn">tempfile</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">pprint</span>
@@ -108,12 +106,30 @@
 <span class="kn">import</span> <span class="nn">importlib</span>
 <span class="kn">import</span> <span class="nn">numbers</span>
 <span class="kn">from</span> <span class="nn">numpydoc.docscrape</span> <span class="kn">import</span> <span class="n">NumpyDocString</span>
+<span class="kn">import</span> <span class="nn">traceback</span>
 
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">bluesky_queueserver</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 <span class="n">qserver_version</span> <span class="o">=</span> <span class="n">bluesky_queueserver</span><span class="o">.</span><span class="n">__version__</span>
+
+
+<span class="k">class</span> <span class="nc">ScriptLoadingError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">tb</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tb</span> <span class="o">=</span> <span class="n">tb</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">tb</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the full traceback (string) that is passed as a second parameter.</span>
+<span class="sd">        The traceback is expected to be fully prepared so that it could be saved</span>
+<span class="sd">        or passed to consumer over the network. Capturing traceback in the function</span>
+<span class="sd">        executing the script is reducing references to Queue Server code, which</span>
+<span class="sd">        is generic and unimportant for debugging startup scripts.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tb</span>
 
 
 <span class="k">def</span> <span class="nf">get_default_startup_dir</span><span class="p">():</span>
@@ -125,8 +141,7 @@
     <span class="k">return</span> <span class="n">pc_path</span>
 
 
-<span class="n">_patch1</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-
+<span class="n">_startup_script_patch</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">import sys</span>
 <span class="s2">import logging</span>
 <span class="s2">from bluesky_queueserver.manager.profile_tools import global_user_namespace</span>
@@ -134,141 +149,19 @@
 
 <span class="s2">global_user_namespace.set_user_namespace(user_ns=locals(), use_ipython=False)</span>
 
-<span class="s2">try:</span>
-<span class="s2">    pass  # Prevent errors when patching an empty file</span>
+<span class="s2">class IPDummy:</span>
+<span class="s2">    def __init__(self, user_ns):</span>
+<span class="s2">        self.user_ns = user_ns</span>
 
+<span class="s2">        # May be this should be some meaningful logger (used by &#39;configure_bluesky_logging&#39;)</span>
+<span class="s2">        self.log = logging.Logger(&#39;ipython_patch&#39;)</span>
+
+<span class="s2">def get_ipython_patch():</span>
+<span class="s2">    ip_dummy = IPDummy(global_user_namespace.user_ns)</span>
+<span class="s2">    return ip_dummy</span>
+
+<span class="s2">get_ipython = get_ipython_patch</span>
 <span class="s2">&quot;&quot;&quot;</span>
-
-<span class="n">_patch2</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-
-<span class="s2">    class IPDummy:</span>
-<span class="s2">        def __init__(self, user_ns):</span>
-<span class="s2">            self.user_ns = user_ns</span>
-
-<span class="s2">            # May be this should be some meaningful logger (used by &#39;configure_bluesky_logging&#39;)</span>
-<span class="s2">            self.log = logging.Logger(&#39;ipython_patch&#39;)</span>
-
-
-<span class="s2">    def get_ipython_patch():</span>
-<span class="s2">        ip_dummy = IPDummy(global_user_namespace.user_ns)</span>
-<span class="s2">        return ip_dummy</span>
-
-<span class="s2">    get_ipython = get_ipython_patch</span>
-
-<span class="s2">&quot;&quot;&quot;</span>
-
-<span class="n">_patch3</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-
-<span class="s2">except BaseException as ex:</span>
-<span class="s2">    # Save exception data</span>
-<span class="s2">    __plan_exc_info = sys.exc_info()</span>
-
-<span class="s2">&quot;&quot;&quot;</span>
-
-
-<span class="k">def</span> <span class="nf">_patch_profile</span><span class="p">(</span><span class="n">file_name</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Patch the profile (.py file from a beamline profile collection).</span>
-<span class="sd">    Patching includes placing the code in the file in ``try..except..` block</span>
-<span class="sd">    and inserting patch for ``get_ipython()`` function after the line</span>
-<span class="sd">    ``from IPython import get_python``.</span>
-
-<span class="sd">    The patched file is saved to the temporary file ``qserver/profile_temp.py``</span>
-<span class="sd">    in standard directory for the temporary files. For Linux it is ``/tmp``.</span>
-<span class="sd">    It is assumed that files in profile collection are processed one by one, so</span>
-<span class="sd">    overwriting the same temporary file is a good way to eliminate resource leaks.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    file_name: str</span>
-<span class="sd">        full path to the patched file.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    str</span>
-<span class="sd">        full path to the patched temporary file.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="c1"># On Linux the temporary .py file will be always &#39;/tmp/qserver/profile_temp.py&#39;</span>
-    <span class="c1">#   On other systems the file will be placed in appropriate location, but</span>
-    <span class="c1">#   it will always be the same file.</span>
-    <span class="n">tmp_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">(),</span> <span class="s2">&quot;qserver&quot;</span><span class="p">)</span>
-    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">tmp_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">tmp_fln</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tmp_dir</span><span class="p">,</span> <span class="s2">&quot;profile_temp.py&quot;</span><span class="p">)</span>
-
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fln_in</span><span class="p">:</span>
-        <span class="n">code</span> <span class="o">=</span> <span class="n">fln_in</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
-
-    <span class="k">class</span> <span class="nc">GetIPythonUsed</span><span class="p">(</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
-        <span class="n">NOT_PRESENT</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">IMPORTED</span> <span class="o">=</span> <span class="mi">1</span>
-        <span class="n">CALLED</span> <span class="o">=</span> <span class="mi">2</span>
-
-    <span class="k">def</span> <span class="nf">is_get_ipython_in_line</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Check if ``get_ipython()`` is imported or called in the line&quot;&quot;&quot;</span>
-        <span class="c1"># It is assumed that commenting is done using #</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">GetIPythonUsed</span><span class="o">.</span><span class="n">NOT_PRESENT</span>
-        <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^[^#]*IPython[^#]+get_ipython&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">):</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">GetIPythonUsed</span><span class="o">.</span><span class="n">IMPORTED</span>
-        <span class="k">elif</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^[^#]*get_ipython&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">):</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">GetIPythonUsed</span><span class="o">.</span><span class="n">CALLED</span>
-        <span class="k">return</span> <span class="n">result</span>
-
-    <span class="k">def</span> <span class="nf">patch_before_first_line</span><span class="p">(</span><span class="n">code</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Determine if the code file needs to be patched before the first line.</span>
-<span class="sd">        The file should be patched if ``get_ipython`` is called before it is imported.</span>
-<span class="sd">        Otherwise it should be patched each time it is imported</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">code</span><span class="p">:</span>
-            <span class="n">is_get_ipython</span> <span class="o">=</span> <span class="n">is_get_ipython_in_line</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">is_get_ipython</span> <span class="o">==</span> <span class="n">GetIPythonUsed</span><span class="o">.</span><span class="n">IMPORTED</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">False</span>
-            <span class="k">elif</span> <span class="n">is_get_ipython</span> <span class="o">==</span> <span class="n">GetIPythonUsed</span><span class="o">.</span><span class="n">CALLED</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">True</span>
-        <span class="c1"># &#39;get_ipython()&#39; was not found.Don&#39;t patch the file.</span>
-        <span class="k">return</span> <span class="kc">False</span>
-
-    <span class="k">def</span> <span class="nf">apply_patch2</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
-        <span class="n">patch2_lines</span> <span class="o">=</span> <span class="n">_patch2</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">lp</span> <span class="ow">in</span> <span class="n">patch2_lines</span><span class="p">:</span>
-            <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="n">lp</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">patch__file__</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="n">file_name</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Patch ``__file__`` for the current file with ``file_name`` so that</span>
-<span class="sd">        the path to the original file name and location could be accessed by</span>
-<span class="sd">        the user script.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">patch_line</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">file_name</span><span class="si">}</span><span class="s2">&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
-        <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">patch_line</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">get_prefix</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
-        <span class="c1"># Returns the sequence of spaces and tabs at the beginning of the code line</span>
-        <span class="n">prefix</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-        <span class="k">while</span> <span class="n">s</span> <span class="ow">and</span> <span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot; &quot;</span> <span class="ow">or</span> <span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">):</span>
-            <span class="n">prefix</span> <span class="o">+=</span> <span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="n">s</span> <span class="o">=</span> <span class="n">s</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-        <span class="k">return</span> <span class="n">prefix</span>
-
-    <span class="n">patch_first</span> <span class="o">=</span> <span class="n">patch_before_first_line</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
-
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">tmp_fln</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fln_out</span><span class="p">:</span>
-        <span class="c1"># insert &#39;try ..&#39;</span>
-        <span class="n">fln_out</span><span class="o">.</span><span class="n">writelines</span><span class="p">(</span><span class="n">_patch1</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">patch_first</span><span class="p">:</span>
-            <span class="n">apply_patch2</span><span class="p">(</span><span class="n">fln_out</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-        <span class="n">patch__file__</span><span class="p">(</span><span class="n">fln_out</span><span class="p">,</span> <span class="n">file_name</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">code</span><span class="p">:</span>
-            <span class="n">fln_out</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">+</span> <span class="n">line</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">is_get_ipython_in_line</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="o">==</span> <span class="n">GetIPythonUsed</span><span class="o">.</span><span class="n">IMPORTED</span><span class="p">:</span>
-                <span class="c1"># Keep the same indentation as in the preceding line</span>
-                <span class="n">prefix</span> <span class="o">=</span> <span class="n">get_prefix</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
-                <span class="n">apply_patch2</span><span class="p">(</span><span class="n">fln_out</span><span class="p">,</span> <span class="n">prefix</span><span class="p">)</span>
-        <span class="c1"># insert &#39;except ..&#39;</span>
-        <span class="n">fln_out</span><span class="o">.</span><span class="n">writelines</span><span class="p">(</span><span class="n">_patch3</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">tmp_fln</span>
 
 
 <span class="c1"># Discard RE and db from the profile namespace (if they exist).</span>
@@ -279,6 +172,28 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">keep_re</span><span class="p">:</span>
         <span class="n">nspace</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;RE&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">nspace</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;db&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_patch_script_code</span><span class="p">(</span><span class="n">code_str</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Patch script code represented as a single text string:</span>
+<span class="sd">    detect lines that import ``get_ipython`` from ``IPython`` and</span>
+<span class="sd">    set ``get_ipython=get_ipython_patch`` after each import.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">is_get_ipython_imported_in_line</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Check if ``get_ipython()`` is imported in the line&quot;&quot;&quot;</span>
+        <span class="c1"># It is assumed that commenting is done using #</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^[^#]*IPython[^#]+get_ipython&quot;</span><span class="p">,</span> <span class="n">line</span><span class="p">))</span>
+
+    <span class="n">s_list</span> <span class="o">=</span> <span class="n">code_str</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">s_list</span><span class="p">)):</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">s_list</span><span class="p">[</span><span class="n">n</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">is_get_ipython_imported_in_line</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+            <span class="n">line</span> <span class="o">+=</span> <span class="s2">&quot;; get_ipython = get_ipython_patch&quot;</span>
+            <span class="n">s_list</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">line</span>
+
+    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">s_list</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">load_profile_collection</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">patch_profiles</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
@@ -337,17 +252,38 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">path_is_set</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="c1"># Load the files into the namespace &#39;nspace&#39;.</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">file_list</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loading startup file &#39;</span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">&#39; ...&quot;</span><span class="p">)</span>
-            <span class="n">fln_tmp</span> <span class="o">=</span> <span class="n">_patch_profile</span><span class="p">(</span><span class="n">file</span><span class="p">)</span> <span class="k">if</span> <span class="n">patch_profiles</span> <span class="k">else</span> <span class="n">file</span>
-            <span class="n">nspace</span> <span class="o">=</span> <span class="n">runpy</span><span class="o">.</span><span class="n">run_path</span><span class="p">(</span><span class="n">fln_tmp</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
-            <span class="k">if</span> <span class="s2">&quot;__plan_exc_info&quot;</span> <span class="ow">in</span> <span class="n">nspace</span><span class="p">:</span>
-                <span class="n">exc_info</span> <span class="o">=</span> <span class="n">nspace</span><span class="p">[</span><span class="s2">&quot;__plan_exc_info&quot;</span><span class="p">]</span>
-                <span class="k">raise</span> <span class="n">exc_info</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">with_traceback</span><span class="p">(</span><span class="n">exc_info</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="c1"># Load the files into the namespace &#39;nspace&#39;.</span>
+        <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="n">patch_profiles</span><span class="p">:</span>
+            <span class="n">exec</span><span class="p">(</span><span class="n">_startup_script_patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">file_list</span><span class="p">:</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loading startup file </span><span class="si">{</span><span class="n">file</span><span class="si">!r}</span><span class="s2"> ...&quot;</span><span class="p">)</span>
+
+                <span class="c1"># Set &#39;__file__&#39; and &#39;__name__&#39; variables</span>
+                <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">&#39;; __name__ = &#39;startup_script&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">file</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Startup file </span><span class="si">{</span><span class="n">file</span><span class="si">!r}</span><span class="s2"> was not found&quot;</span><span class="p">)</span>
+                <span class="n">code_str</span> <span class="o">=</span> <span class="n">_patch_script_code</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+                <span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="n">code_str</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="s2">&quot;exec&quot;</span><span class="p">)</span>
+                <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+                <span class="c1"># Capture traceback and send it as a message</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error while executing script </span><span class="si">{</span><span class="n">file</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">ex_str</span> <span class="o">=</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_exception</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">())</span>
+                <span class="n">ex_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ex_str</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">msg</span>
+                <span class="k">raise</span> <span class="n">ScriptLoadingError</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ex_str</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
+
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">patch</span> <span class="o">=</span> <span class="s2">&quot;del __file__</span><span class="se">\n</span><span class="s2">&quot;</span>  <span class="c1"># Do not delete &#39;__name__&#39;</span>
+                <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
         <span class="n">_discard_re_from_nspace</span><span class="p">(</span><span class="n">nspace</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">)</span>
 
@@ -380,20 +316,21 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">importlib</span><span class="o">.</span><span class="n">invalidate_caches</span><span class="p">()</span>
 
-    <span class="n">_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
-    <span class="n">nspace</span> <span class="o">=</span> <span class="n">_module</span><span class="o">.</span><span class="vm">__dict__</span>
+    <span class="k">try</span><span class="p">:</span>
+
+        <span class="n">_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+        <span class="n">nspace</span> <span class="o">=</span> <span class="n">_module</span><span class="o">.</span><span class="vm">__dict__</span>
+
+    <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+        <span class="c1"># Capture traceback and send it as a message</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error while loading module </span><span class="si">{</span><span class="n">module_name</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">ex_str</span> <span class="o">=</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_exception</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">())</span>
+        <span class="n">ex_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ex_str</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">msg</span>
+        <span class="k">raise</span> <span class="n">ScriptLoadingError</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ex_str</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
 
     <span class="n">_discard_re_from_nspace</span><span class="p">(</span><span class="n">nspace</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">nspace</span>
-
-
-<span class="k">class</span> <span class="nc">StartupLoadingError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-    <span class="o">...</span>
-
-
-<span class="k">class</span> <span class="nc">ScriptLoadingError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-    <span class="o">...</span>
 
 
 <span class="k">def</span> <span class="nf">load_startup_script</span><span class="p">(</span><span class="n">script_path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">enable_local_imports</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
@@ -431,19 +368,35 @@
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">exec</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">script_path</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">(),</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">script_path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Startup file </span><span class="si">{</span><span class="n">script_path</span><span class="si">!r}</span><span class="s2"> was not found&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Set &#39;__file__&#39; and &#39;__name__&#39; variables</span>
+        <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">script_path</span><span class="si">}</span><span class="s2">&#39;; __name__ = &#39;startup_script&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+
+        <span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">script_path</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">(),</span> <span class="n">script_path</span><span class="p">,</span> <span class="s2">&quot;exec&quot;</span><span class="p">)</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">code</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
     <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">StartupLoadingError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error encountered executing startup script at &#39;</span><span class="si">{</span><span class="n">script_path</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
+        <span class="c1"># Capture traceback and send it as a message</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error while executing script </span><span class="si">{</span><span class="n">script_path</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">ex_str</span> <span class="o">=</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_exception</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">())</span>
+        <span class="n">ex_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ex_str</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">msg</span>
+        <span class="k">raise</span> <span class="n">ScriptLoadingError</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ex_str</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
 
     <span class="k">finally</span><span class="p">:</span>
+
+        <span class="n">patch</span> <span class="o">=</span> <span class="s2">&quot;del __file__</span><span class="se">\n</span><span class="s2">&quot;</span>  <span class="c1"># Do not delete &#39;__name__&#39;</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">enable_local_imports</span><span class="p">:</span>
             <span class="c1"># Delete data on all modules that were loaded by the script.</span>
             <span class="c1"># We don&#39;t need them anymore. Modules will be reloaded from disk if</span>
             <span class="c1">#   the script is executed again.</span>
             <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
                 <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sm_keys</span><span class="p">:</span>
-                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Deleting the key &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+                    <span class="c1"># print(f&quot;Deleting the key &#39;{key}&#39;&quot;)</span>
                     <span class="k">del</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
 
             <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
@@ -569,6 +522,7 @@
 <span class="sd">    ------</span>
 <span class="sd">    Exceptions may be raised by the ``exec`` function.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_n_running_scripts</span>
 
     <span class="n">importlib</span><span class="o">.</span><span class="n">invalidate_caches</span><span class="p">()</span>
 
@@ -592,12 +546,20 @@
             <span class="n">object_backup</span><span class="p">[</span><span class="s2">&quot;db&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">nspace</span><span class="p">[</span><span class="s2">&quot;db&quot;</span><span class="p">]</span>
 
     <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Set &#39;__name__&#39; variables. NOTE: &#39;__file__&#39; variable is undefined (difference!!!)</span>
+        <span class="n">patch</span> <span class="o">=</span> <span class="s2">&quot;__name__ = &#39;startup_script&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+
         <span class="c1"># A script may be partially loaded into the environment in case it fails.</span>
         <span class="c1">#   This is &#39;realistic&#39; behavior, similar to what happens in IPython.</span>
         <span class="n">exec</span><span class="p">(</span><span class="n">script</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">ScriptLoadingError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to load stript: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
+    <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+        <span class="c1"># Capture traceback and send it as a message</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Failed to execute stript: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">ex_str</span> <span class="o">=</span> <span class="n">traceback</span><span class="o">.</span><span class="n">format_exception</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">())</span>
+        <span class="n">ex_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ex_str</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">msg</span>
+        <span class="k">raise</span> <span class="n">ScriptLoadingError</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ex_str</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
 
     <span class="k">finally</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">update_re</span><span class="p">:</span>
@@ -3124,7 +3086,7 @@
         <span class="p">)</span>
 
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to create the list of plans and devices: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to create the list of plans and devices: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
 
     <span class="k">finally</span><span class="p">:</span>
         <span class="n">clear_re_worker_active</span><span class="p">()</span>
