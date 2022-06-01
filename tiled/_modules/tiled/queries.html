@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.queries &mdash; tiled 0.1.0a62.post9+gf9365c3 documentation</title>
+  <title>tiled.queries &mdash; tiled 0.1.0a62.post17+ga3ae3d3 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a62.post9+gf9365c3
+                0.1.0a62.post17+ga3ae3d3
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -83,6 +83,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../reference/service.html">Service-side Components</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../reference/http-api-overview.html">HTTP API</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../reference/python-client.html">Python Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reference/queries.html">Queries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../reference/authentication.html">Authentication Details</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../reference/scopes.html">Scopes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../reference/commandline.html">Command-line tool</a></li>
@@ -117,9 +118,21 @@
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.queries</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">These objects describe queries, independent of how the actual querying is implemented.</span>
+<span class="sd">They are used on the client side and the server side.</span>
+
+<span class="sd">The are encoded into and decoded from URL query parameters.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">enum</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">from</span> <span class="nn">.query_registration</span> <span class="kn">import</span> <span class="n">register</span>
+
+<span class="n">JSONSerializable</span> <span class="o">=</span> <span class="n">Any</span>  <span class="c1"># Feel free to refine this.</span>
 
 
 <div class="viewcode-block" id="FullText"><a class="viewcode-back" href="../../reference/generated/tiled.queries.FullText.html#tiled.queries.FullText">[docs]</a><span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;fulltext&quot;</span><span class="p">)</span>
@@ -130,10 +143,27 @@
 
 <span class="sd">    This matches *complete words*, so &#39;dog&#39; would match &#39;cat dog elephant&#39;,</span>
 <span class="sd">    but &#39;do&#39; would not match.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    text : str</span>
+<span class="sd">    case_sensitive : bool, optional</span>
+<span class="sd">        Default False (case-insensitive).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">text</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">case_sensitive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
+    <span class="n">case_sensitive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="s2">&quot;case_sensitive&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">case_sensitive</span><span class="p">)}</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">case_sensitive</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="c1"># Note: FastAPI decodes case_sensitive into a boolean for us.</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
+            <span class="n">case_sensitive</span><span class="o">=</span><span class="n">case_sensitive</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="KeyLookup"><a class="viewcode-back" href="../../reference/generated/tiled.queries.KeyLookup.html#tiled.queries.KeyLookup">[docs]</a><span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;lookup&quot;</span><span class="p">)</span>
@@ -149,9 +179,225 @@
 <span class="sd">    The server handles this directly and generically, simply calling __getitem__</span>
 <span class="sd">    on the tree after apply all other queries.  Implementations of search(...)</span>
 <span class="sd">    do not need to handle it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    key : str</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span></div>
+    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span>
+
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">}</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span></div>
+
+
+<span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;regex&quot;</span><span class="p">)</span>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Regex</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Match a key&#39;s value to a regular expression.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    key : str</span>
+<span class="sd">        e.g. &quot;color&quot;, &quot;sample.name&quot;</span>
+<span class="sd">    pattern : str</span>
+<span class="sd">        regular expression</span>
+<span class="sd">    case_sensitive : bool, optional</span>
+<span class="sd">        Default False (case-insensitive).</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Search for color == &quot;red&quot;</span>
+
+<span class="sd">    &gt;&gt;&gt; c.search(Regex(&quot;sample.name&quot;, &quot;Cu.*&quot;))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">pattern</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">case_sensitive</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span>
+            <span class="s2">&quot;pattern&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pattern</span><span class="p">,</span>
+            <span class="s2">&quot;case_sensitive&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">case_sensitive</span><span class="p">),</span>
+        <span class="p">}</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">case_sensitive</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="c1"># Note: FastAPI decodes case_sensitive into a boolean for us.</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+            <span class="n">pattern</span><span class="o">=</span><span class="n">pattern</span><span class="p">,</span>
+            <span class="n">case_sensitive</span><span class="o">=</span><span class="n">case_sensitive</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="Eq"><a class="viewcode-back" href="../../reference/generated/tiled.queries.Eq.html#tiled.queries.Eq">[docs]</a><span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;eq&quot;</span><span class="p">)</span>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Eq</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Query equality of a given key&#39;s value to the specified value.</span>
+
+<span class="sd">    See `Key` in this module for a more intuitive interface for equality.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    key : str</span>
+<span class="sd">        e.g. &quot;color&quot;, &quot;sample.name&quot;</span>
+<span class="sd">    value : JSONSerializable</span>
+<span class="sd">        May be a string, number, list, or dict.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Search for color == &quot;red&quot;</span>
+
+<span class="sd">    &gt;&gt;&gt; c.search(Eq(&quot;color&quot;, &quot;red&quot;))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">value</span><span class="p">:</span> <span class="n">JSONSerializable</span>
+
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">)}</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">value</span><span class="p">))</span></div>
+
+
+<span class="k">class</span> <span class="nc">Operator</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">lt</span> <span class="o">=</span> <span class="s2">&quot;lt&quot;</span>
+    <span class="n">gt</span> <span class="o">=</span> <span class="s2">&quot;gt&quot;</span>
+    <span class="n">le</span> <span class="o">=</span> <span class="s2">&quot;le&quot;</span>
+    <span class="n">ge</span> <span class="o">=</span> <span class="s2">&quot;ge&quot;</span>
+
+
+<div class="viewcode-block" id="Comparison"><a class="viewcode-back" href="../../reference/generated/tiled.queries.Comparison.html#tiled.queries.Comparison">[docs]</a><span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;comparison&quot;</span><span class="p">)</span>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Comparison</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Query binary comparison between given key&#39;s value to the specified value.</span>
+
+<span class="sd">    See `Key` in this module for a more intuitive interface for comparisons.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    operator : {&quot;gt&quot;, &quot;lt&quot;, &quot;ge&quot;, &quot;lt&quot;}</span>
+<span class="sd">    key : str</span>
+<span class="sd">        e.g. &quot;temperature&quot;</span>
+<span class="sd">    value : JSONSerializable</span>
+<span class="sd">        May be a string, number, list, or dict.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Search for temperature &gt; 300.</span>
+
+<span class="sd">    &gt;&gt;&gt; c.search(Comparison(&quot;gt&quot;, &quot;temperature&quot;, 300))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">operator</span><span class="p">:</span> <span class="n">Operator</span>
+    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">value</span><span class="p">:</span> <span class="n">JSONSerializable</span>
+
+<div class="viewcode-block" id="Comparison.__init__"><a class="viewcode-back" href="../../reference/generated/tiled.queries.Comparison.html#tiled.queries.Comparison.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operator</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="o">=</span> <span class="n">Operator</span><span class="p">(</span><span class="n">operator</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span></div>
+
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;operator&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span>
+            <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="p">}</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">operator</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">operator</span><span class="o">=</span><span class="n">Operator</span><span class="p">(</span><span class="n">operator</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">value</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="Contains"><a class="viewcode-back" href="../../reference/generated/tiled.queries.Contains.html#tiled.queries.Contains">[docs]</a><span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;contains&quot;</span><span class="p">)</span>
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">Contains</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Query where a given key&#39;s value contains the specified value.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    key : str</span>
+<span class="sd">        e.g. &quot;motors&quot;</span>
+<span class="sd">    value : JSONSerializable</span>
+<span class="sd">        May be a string, number, list, or dict.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Search for matches where &quot;ccd&quot; is including the list of detectors.</span>
+
+<span class="sd">    &gt;&gt;&gt; c.search(Contains(&quot;detectors&quot;, &quot;ccd&quot;))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">key</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">value</span><span class="p">:</span> <span class="n">JSONSerializable</span>
+
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">)}</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">value</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="Key"><a class="viewcode-back" href="../../reference/generated/tiled.queries.Key.html#tiled.queries.Key">[docs]</a><span class="k">class</span> <span class="nc">Key</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compare a key in the metadata to a value using standard Python operators.</span>
+
+<span class="sd">    This itself is not a query, but *comparing* it with a value, as shown</span>
+<span class="sd">    in the examples below, produces a query.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    key : str</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Search for equality, comparison, or membership in a collection.</span>
+
+<span class="sd">    &gt;&gt;&gt; c.search(Key(&quot;color&quot;) == &quot;red&quot;)</span>
+<span class="sd">    &gt;&gt;&gt; c.search(Key(&quot;temperature&quot;) &gt;= 300)</span>
+<span class="sd">    &gt;&gt;&gt; c.search(Key(&quot;temperature&quot;) &lt;= 300)</span>
+<span class="sd">    &gt;&gt;&gt; c.search(Key(&quot;position&quot;) &gt; 5.0)</span>
+<span class="sd">    &gt;&gt;&gt; c.search(Key(&quot;position&quot;) &lt; 5.0)</span>
+<span class="sd">    &gt;&gt;&gt; c.search(&quot;current&quot; in Key(&quot;detectors&quot;))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="Key.__init__"><a class="viewcode-back" href="../../reference/generated/tiled.queries.Key.html#tiled.queries.Key.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span></div>
+
+    <span class="k">def</span> <span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Eq</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Comparison</span><span class="p">(</span><span class="s2">&quot;lt&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Comparison</span><span class="p">(</span><span class="s2">&quot;gt&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__le__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Comparison</span><span class="p">(</span><span class="s2">&quot;le&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Comparison</span><span class="p">(</span><span class="s2">&quot;ge&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
 
 
 <span class="k">class</span> <span class="nc">QueryValueError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
