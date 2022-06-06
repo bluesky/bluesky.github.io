@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a63.post7+gf87a935 documentation</title>
+  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a63.post8+g0493ab4 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a63.post7+gf87a935
+                0.1.0a63.post8+g0493ab4
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -121,7 +121,7 @@
 <span></span><span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">mimetypes</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="n">deserialization_registry</span><span class="p">,</span> <span class="n">serialization_registry</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span> <span class="n">modules_available</span>
@@ -129,8 +129,8 @@
 
 <div class="viewcode-block" id="DataFrameMicroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameMicroStructure.html#tiled.structures.dataframe.DataFrameMicroStructure">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">DataFrameMicroStructure</span><span class="p">:</span>
-    <span class="n">meta</span><span class="p">:</span> <span class="s2">&quot;pandas.DataFrame&quot;</span>
-    <span class="n">divisions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span>
+    <span class="n">meta</span><span class="p">:</span> <span class="nb">bytes</span>  <span class="c1"># Arrow-encoded DataFrame</span>
+    <span class="n">divisions</span><span class="p">:</span> <span class="nb">bytes</span>  <span class="c1"># Arrow-encoded DataFrame</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_dask_dataframe</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">ddf</span><span class="p">):</span>
@@ -139,8 +139,26 @@
         <span class="c1"># datetime or actually generic objects.</span>
         <span class="kn">import</span> <span class="nn">dask.dataframe.utils</span>
 
-        <span class="n">meta</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span> <span class="n">divisions</span><span class="o">=</span><span class="n">ddf</span><span class="o">.</span><span class="n">divisions</span><span class="p">)</span></div>
+        <span class="n">meta</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">serialize_arrow</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">),</span> <span class="p">{}))</span>
+        <span class="n">divisions</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span>
+            <span class="n">serialize_arrow</span><span class="p">(</span><span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;divisions&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">divisions</span><span class="p">)}),</span> <span class="p">{})</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span> <span class="n">divisions</span><span class="o">=</span><span class="n">divisions</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_dataframe</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">df</span><span class="p">):</span>
+        <span class="c1"># Make an *empty* DataFrame with the same structure as ddf.</span>
+        <span class="c1"># TODO Look at make_meta_nonempty to see if the &quot;objects&quot; are str or</span>
+        <span class="c1"># datetime or actually generic objects.</span>
+        <span class="kn">import</span> <span class="nn">dask.dataframe</span>
+        <span class="kn">import</span> <span class="nn">dask.dataframe.utils</span>
+
+        <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">npartitions</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">serialize_arrow</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">),</span> <span class="p">{}))</span>
+        <span class="n">divisions</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span>
+            <span class="n">serialize_arrow</span><span class="p">(</span><span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;divisions&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">divisions</span><span class="p">)}),</span> <span class="p">{})</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span> <span class="n">divisions</span><span class="o">=</span><span class="n">divisions</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DataFrameMacroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameMacroStructure.html#tiled.structures.dataframe.DataFrameMacroStructure">[docs]</a><span class="nd">@dataclass</span>
