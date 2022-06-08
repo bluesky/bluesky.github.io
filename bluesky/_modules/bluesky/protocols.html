@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.protocols &mdash; bluesky 1.8.3.post22+g33c7b82c documentation</title>
+  <title>bluesky.protocols &mdash; bluesky 1.8.3.post24+gb7d666e6 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.8.3.post22+g33c7b82c
+                1.8.3.post24+gb7d666e6
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -113,19 +113,126 @@
              
   <h1>Source code for bluesky.protocols</h1><div class="highlight"><pre>
 <span></span><span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+    <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">TypedDict</span><span class="p">,</span> <span class="n">runtime_checkable</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">runtime_checkable</span>
+    <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">TypedDict</span><span class="p">,</span> <span class="n">runtime_checkable</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Generator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">NoReturn</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">TypeVar</span><span class="p">,</span> <span class="n">Union</span>
 
 
-<span class="n">Configuration</span> <span class="o">=</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+<span class="c1"># TODO: these are not placed in Events by RE yet</span>
+<div class="viewcode-block" id="ReadingOptional"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.ReadingOptional">[docs]</a><span class="k">class</span> <span class="nc">ReadingOptional</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing the optional per-reading metadata of a piece of scan data&quot;&quot;&quot;</span>
+    <span class="c1">#: * -ve: alarm unknown, e.g. device disconnected</span>
+    <span class="c1">#: * 0: ok, no alarm</span>
+    <span class="c1">#: * +ve: there is an alarm</span>
+    <span class="c1">#:</span>
+    <span class="c1">#: The exact numbers are transport specific</span>
+    <span class="n">alarm_severity</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="c1">#: A descriptive message if there is an alarm</span>
+    <span class="n">message</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<div class="viewcode-block" id="Reading"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Reading">[docs]</a><span class="k">class</span> <span class="nc">Reading</span><span class="p">(</span><span class="n">ReadingOptional</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing the value and timestamp of a piece of scan data&quot;&quot;&quot;</span>
+    <span class="c1">#: The current value, as a JSON encodable type or numpy array</span>
+    <span class="n">value</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="c1">#: Timestamp in seconds since the UNIX epoch</span>
+    <span class="n">timestamp</span><span class="p">:</span> <span class="nb">float</span></div>
+
+
+<span class="n">Dtype</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;number&quot;</span><span class="p">,</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span> <span class="s2">&quot;integer&quot;</span><span class="p">]</span>
+
+
+<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/event_descriptor.json</span>
+<span class="c1"># Just the data_key definition</span>
+<div class="viewcode-block" id="DescriptorOptional"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.DescriptorOptional">[docs]</a><span class="k">class</span> <span class="nc">DescriptorOptional</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing optional per-scan metadata of a sseries of Readings&quot;&quot;&quot;</span>
+    <span class="c1">#: Where the data is stored if it is stored external to the events</span>
+    <span class="n">external</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: The names for dimensions of the data. Empty list if scalar data</span>
+    <span class="n">dims</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="c1">#: Numpy dtype representation of the data. E.g. &lt;u2</span>
+    <span class="n">dtype_str</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: Number of digits after decimal place if a floating point number</span>
+    <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="c1">#: Engineering units of the value</span>
+    <span class="n">units</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<div class="viewcode-block" id="Descriptor"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Descriptor">[docs]</a><span class="k">class</span> <span class="nc">Descriptor</span><span class="p">(</span><span class="n">DescriptorOptional</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing the source and datatype of a series of Readings&quot;&quot;&quot;</span>
+    <span class="c1">#: The source of the data, e.g. an EPICS Process Variable</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: The JSON type of the data in the event. Deprecated for dtype_str</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">Dtype</span>
+    <span class="c1">#: The shape of the data, e.g. ``[5,5 ]`` for a 5x5 array.</span>
+    <span class="c1">#: An empty list ``[]`` indicates scalar data.</span>
+    <span class="n">shape</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span></div>
+
+
+<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/event.json</span>
+<span class="c1"># But exclude descriptor, seq_num, uid added by RE</span>
+<div class="viewcode-block" id="PartialEventOptional"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialEventOptional">[docs]</a><span class="k">class</span> <span class="nc">PartialEventOptional</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing optional Event data&quot;&quot;&quot;</span>
+    <span class="c1">#: If any data key is in an external asset it should be present in this</span>
+    <span class="c1">#: dictionary with value False</span>
+    <span class="n">filled</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="PartialEvent"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialEvent">[docs]</a><span class="k">class</span> <span class="nc">PartialEvent</span><span class="p">(</span><span class="n">PartialEventOptional</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing Event data&quot;&quot;&quot;</span>
+    <span class="c1">#: The event data for each data key</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="c1">#: The timestamps for each data key</span>
+    <span class="n">timestamps</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+    <span class="c1">#: The timestamp that the event was taken at</span>
+    <span class="n">time</span><span class="p">:</span> <span class="nb">float</span></div>
+
+
+<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/resource.json</span>
+<span class="c1"># But exclude run_start added by RE</span>
+<div class="viewcode-block" id="PartialResourceOptional"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialResourceOptional">[docs]</a><span class="k">class</span> <span class="nc">PartialResourceOptional</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing optional information needed to load an external resource&quot;&quot;&quot;</span>
+    <span class="c1">#: Whether the path is a posix or windows path. If not given default to posix</span>
+    <span class="n">path_semantics</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;posix&quot;</span><span class="p">,</span> <span class="s2">&quot;windows&quot;</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="PartialResource"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialResource">[docs]</a><span class="k">class</span> <span class="nc">PartialResource</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing information needed to load an external resource&quot;&quot;&quot;</span>
+    <span class="c1">#: Hint about the format of the resource, and how it should be loaded</span>
+    <span class="n">spec</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: Relative path, should not change over lifecycle of the resource</span>
+    <span class="n">resource_path</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: Context-dependent root (which may change based on where data is accessed from)</span>
+    <span class="c1">#: that resource_path is relative to</span>
+    <span class="n">root</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: Additional parameters for reading the Resource</span>
+    <span class="n">resource_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="c1">#: UID that can be referenced in a Datum</span>
+    <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/datum.json</span>
+<div class="viewcode-block" id="Datum"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Datum">[docs]</a><span class="k">class</span> <span class="nc">Datum</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary containing information to load event data from a Resource&quot;&quot;&quot;</span>
+    <span class="c1">#: The UID of a Resource</span>
+    <span class="n">resource</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: UID that can be referenced in an Event</span>
+    <span class="n">datum_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: Additional parameters for reading the Datum</span>
+    <span class="n">datum_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span></div>
+
+
+<span class="n">Asset</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;resource&quot;</span><span class="p">],</span> <span class="n">PartialResource</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;datum&quot;</span><span class="p">],</span> <span class="n">Datum</span><span class="p">]]</span>
+
+<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
+<span class="n">SyncOrAsync</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">[</span><span class="n">T</span><span class="p">]]</span>
 
 
 <div class="viewcode-block" id="Status"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Status">[docs]</a><span class="nd">@runtime_checkable</span>
 <span class="k">class</span> <span class="nc">Status</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-<div class="viewcode-block" id="Status.add_callback"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Status.add_callback">[docs]</a>    <span class="k">def</span> <span class="nf">add_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="s2">&quot;Status&quot;</span><span class="p">],</span> <span class="n">NoReturn</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+<div class="viewcode-block" id="Status.add_callback"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Status.add_callback">[docs]</a>    <span class="k">def</span> <span class="nf">add_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="s2">&quot;Status&quot;</span><span class="p">],</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Add a callback function to be called upon completion.</span>
 
 <span class="sd">        The function must take the status as an argument.</span>
@@ -137,34 +244,96 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">done</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;If done return True, otherwise return False.&quot;&quot;&quot;</span>
         <span class="o">...</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">success</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;If done return whether the operation was successful.&quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
 
-<div class="viewcode-block" id="Readable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable">[docs]</a><span class="nd">@runtime_checkable</span>
-<span class="k">class</span> <span class="nc">Readable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="HasName"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.HasName">[docs]</a><span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">HasName</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Used to populate object_keys in the Event Descriptor</span>
+
+<span class="sd">        https://blueskyproject.io/event-model/event-descriptors.html#object-keys&quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="HasParent"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.HasParent">[docs]</a><span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">HasParent</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">parent</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;``None``, or a reference to a parent device.&quot;&quot;&quot;</span>
-        <span class="o">...</span>
+        <span class="sd">&quot;&quot;&quot;``None``, or a reference to a parent device.</span>
 
-<div class="viewcode-block" id="Readable.trigger"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.trigger">[docs]</a>    <span class="k">def</span> <span class="nf">trigger</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Status</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Return a ``Status`` that is marked done when the device is done triggering.</span>
-
-<span class="sd">        If the device does not need to be triggered, simply return a ``Status``</span>
-<span class="sd">        that is marked done immediately.</span>
+<span class="sd">        Used by the RE to stop duplicate stages.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
-<div class="viewcode-block" id="Readable.read"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.read">[docs]</a>    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Configuration</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Return an OrderedDict mapping field name(s) to values and timestamps.</span>
 
-<span class="sd">        The field names must be strings. The values can be any JSON-encodable</span>
-<span class="sd">        type or a numpy array, which the RunEngine will convert to (nested)</span>
-<span class="sd">        lists. The timestamps should be UNIX time (seconds since 1970).</span>
+<div class="viewcode-block" id="WritesExternalAssets"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.WritesExternalAssets">[docs]</a><span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">WritesExternalAssets</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="WritesExternalAssets.collect_asset_docs"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.WritesExternalAssets.collect_asset_docs">[docs]</a>    <span class="k">def</span> <span class="nf">collect_asset_docs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Asset</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Create the resource and datum documents describing data in external source.</span>
+
+<span class="sd">        Example yielded values:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            (&#39;resource&#39;, {</span>
+<span class="sd">                &#39;path_semantics&#39;: &#39;posix&#39;,</span>
+<span class="sd">                &#39;resource_kwargs&#39;: {&#39;frame_per_point&#39;: 1},</span>
+<span class="sd">                &#39;resource_path&#39;: &#39;det.h5&#39;,</span>
+<span class="sd">                &#39;root&#39;: &#39;/tmp/tmpcvxbqctr/&#39;,</span>
+<span class="sd">                &#39;spec&#39;: &#39;AD_HDF5&#39;,</span>
+<span class="sd">                &#39;uid&#39;: &#39;9123df61-a09f-49ae-9d23-41d4d6c6d788&#39;</span>
+<span class="sd">            })</span>
+<span class="sd">            # or</span>
+<span class="sd">            (&#39;datum&#39;, {</span>
+<span class="sd">                &#39;datum_id&#39;: &#39;9123df61-a09f-49ae-9d23-41d4d6c6d788/0&#39;,</span>
+<span class="sd">                &#39;datum_kwargs&#39;: {&#39;point_number&#39;: 0},</span>
+<span class="sd">                &#39;resource&#39;: &#39;9123df61-a09f-49ae-9d23-41d4d6c6d788&#39;}</span>
+<span class="sd">            })</span>
+<span class="sd">        &quot;&quot;&quot;</span></div></div>
+
+
+<div class="viewcode-block" id="Configurable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Configurable">[docs]</a><span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">Configurable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="Configurable.read_configuration"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Configurable.read_configuration">[docs]</a>    <span class="k">def</span> <span class="nf">read_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Reading</span><span class="p">]]:</span>
+        <span class="sd">&quot;&quot;&quot;Same API as ``read`` but for slow-changing fields related to configuration.</span>
+<span class="sd">        e.g., exposure time. These will typically be read only once per run.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+<div class="viewcode-block" id="Configurable.describe_configuration"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Configurable.describe_configuration">[docs]</a>    <span class="k">def</span> <span class="nf">describe_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">]]:</span>
+        <span class="sd">&quot;&quot;&quot;Same API as ``describe``, but corresponding to the keys in</span>
+<span class="sd">        ``read_configuration``.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div></div>
+
+
+<div class="viewcode-block" id="Triggerable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Triggerable">[docs]</a><span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">Triggerable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="Triggerable.trigger"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Triggerable.trigger">[docs]</a>    <span class="k">def</span> <span class="nf">trigger</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Status</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;Return a ``Status`` that is marked done when the device is done triggering.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div></div>
+
+
+<div class="viewcode-block" id="Readable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable">[docs]</a><span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">Readable</span><span class="p">(</span><span class="n">HasName</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="Readable.read"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.read">[docs]</a>    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Reading</span><span class="p">]]:</span>
+        <span class="sd">&quot;&quot;&quot;Return an OrderedDict mapping string field name(s) to dictionaries</span>
+<span class="sd">        of values and timestamps and optional per-point metadata.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
 
 <span class="sd">        Example return value:</span>
 
@@ -177,9 +346,11 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
-<div class="viewcode-block" id="Readable.describe"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.describe">[docs]</a>    <span class="k">def</span> <span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Configuration</span><span class="p">:</span>
+<div class="viewcode-block" id="Readable.describe"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.describe">[docs]</a>    <span class="k">def</span> <span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;Return an OrderedDict with exactly the same keys as the ``read``</span>
-<span class="sd">        method, here mapped to metadata about each field.</span>
+<span class="sd">        method, here mapped to per-scan metadata about each field.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
 
 <span class="sd">        Example return value:</span>
 
@@ -193,59 +364,19 @@
 <span class="sd">                         {&#39;source&#39;: &#39;XF23-ID:SOME_PV_NAME&#39;,</span>
 <span class="sd">                          &#39;dtype&#39;: &#39;number&#39;,</span>
 <span class="sd">                          &#39;shape&#39;: []}))</span>
-
-<span class="sd">        We refer to each entry as a &quot;data key.&quot; These fields are required:</span>
-
-<span class="sd">        * source (a descriptive string --- e.g., an EPICS Process Variable)</span>
-<span class="sd">        * dtype: one of the JSON data types: {&#39;number&#39;, &#39;string&#39;, &#39;array&#39;}</span>
-<span class="sd">        * shape: list of integers (dimension sizes) --- e.g., ``[5, 5]`` for a</span>
-<span class="sd">          5x5 array. Use empty list ``[]`` to indicate a scalar.</span>
-
-<span class="sd">        Optional additional fields (precision, units, etc.) are allowed.</span>
-<span class="sd">        The optional field ``external`` should be used to provide information</span>
-<span class="sd">        about references to externally-stored data, such as large image arrays.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-<div class="viewcode-block" id="Readable.read_configuration"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.read_configuration">[docs]</a>    <span class="k">def</span> <span class="nf">read_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Configuration</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Same API as ``read`` but for slow-changing fields related to configuration.</span>
-
-<span class="sd">        (e.g., exposure time)</span>
-
-<span class="sd">        These will typically be read only once per run.</span>
-
-<span class="sd">        Of course, for simple cases, you can effectively omit this complexity</span>
-<span class="sd">        by returning an empty dictionary.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-<div class="viewcode-block" id="Readable.describe_configuration"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.describe_configuration">[docs]</a>    <span class="k">def</span> <span class="nf">describe_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Configuration</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Same API as ``describe``, but corresponding to the keys in ``read_configuration``.&quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="o">...</span></div>
+        <span class="o">...</span></div></div>
 
 
 <div class="viewcode-block" id="Movable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Movable">[docs]</a><span class="nd">@runtime_checkable</span>
-<span class="k">class</span> <span class="nc">Movable</span><span class="p">(</span><span class="n">Readable</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">Movable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
 <div class="viewcode-block" id="Movable.set"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Movable.set">[docs]</a>    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Status</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Return a ``Status`` that is marked done when the device is done moving.&quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
 
 
 <div class="viewcode-block" id="Flyable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable">[docs]</a><span class="nd">@runtime_checkable</span>
-<span class="k">class</span> <span class="nc">Flyable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="o">...</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">parent</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;``None``, or a reference to a parent device.&quot;&quot;&quot;</span>
-        <span class="o">...</span>
-
+<span class="k">class</span> <span class="nc">Flyable</span><span class="p">(</span><span class="n">HasName</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
 <div class="viewcode-block" id="Flyable.kickoff"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.kickoff">[docs]</a>    <span class="k">def</span> <span class="nf">kickoff</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Status</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Begin acculumating data.</span>
 
@@ -257,7 +388,7 @@
         <span class="sd">&quot;&quot;&quot;Return a ``Status`` and mark it done when acquisition has completed.&quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
-<div class="viewcode-block" id="Flyable.collect"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.collect">[docs]</a>    <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<div class="viewcode-block" id="Flyable.collect"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.collect">[docs]</a>    <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">PartialEvent</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Yield dictionaries that are partial Event documents.</span>
 
 <span class="sd">        They should contain the keys &#39;time&#39;, &#39;data&#39;, and &#39;timestamps&#39;.</span>
@@ -265,26 +396,21 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
-<div class="viewcode-block" id="Flyable.describe_collect"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.describe_collect">[docs]</a>    <span class="k">def</span> <span class="nf">describe_collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Configuration</span><span class="p">]:</span>
+<div class="viewcode-block" id="Flyable.describe_collect"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.describe_collect">[docs]</a>    <span class="k">def</span> <span class="nf">describe_collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">]]]:</span>
         <span class="sd">&quot;&quot;&quot;This is like ``describe()`` on readable devices, but with an extra layer of nesting.</span>
 
 <span class="sd">        Since a flyer can potentially return more than one event stream, this is a dict</span>
 <span class="sd">        of stream names (strings) mapped to a ``describe()``-type output for each.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-    <span class="c1"># Remaining same as Readable</span>
-<div class="viewcode-block" id="Flyable.read_configuration"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.read_configuration">[docs]</a>    <span class="k">def</span> <span class="nf">read_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Configuration</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Same as for a Readable device.&quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-<div class="viewcode-block" id="Flyable.describe_configuration"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.describe_configuration">[docs]</a>    <span class="k">def</span> <span class="nf">describe_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Configuration</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Same as for a Readable device.&quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
 
 
 <div class="viewcode-block" id="Stageable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Stageable">[docs]</a><span class="nd">@runtime_checkable</span>
 <span class="k">class</span> <span class="nc">Stageable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+    <span class="c1"># TODO: we were going to extend these to be able to return plans, what</span>
+    <span class="c1"># signature should they have?</span>
 <div class="viewcode-block" id="Stageable.stage"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Stageable.stage">[docs]</a>    <span class="k">def</span> <span class="nf">stage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;An optional hook for &quot;setting up&quot; the device for acquisition.</span>
 
@@ -306,18 +432,24 @@
 
 <div class="viewcode-block" id="Pausable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Pausable">[docs]</a><span class="nd">@runtime_checkable</span>
 <span class="k">class</span> <span class="nc">Pausable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-<div class="viewcode-block" id="Pausable.pause"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Pausable.pause">[docs]</a>    <span class="k">def</span> <span class="nf">pause</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Perform device-specific work when the RunEngine pauses.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="Pausable.pause"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Pausable.pause">[docs]</a>    <span class="k">def</span> <span class="nf">pause</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Perform device-specific work when the RunEngine pauses.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
-<div class="viewcode-block" id="Pausable.resume"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Pausable.resume">[docs]</a>    <span class="k">def</span> <span class="nf">resume</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
-        <span class="sd">&quot;&quot;&quot;Perform device-specific work when the RunEngine resumes after a pause.&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="Pausable.resume"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Pausable.resume">[docs]</a>    <span class="k">def</span> <span class="nf">resume</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;Perform device-specific work when the RunEngine resumes after a pause.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
 
 
 <div class="viewcode-block" id="Stoppable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Stoppable">[docs]</a><span class="nd">@runtime_checkable</span>
 <span class="k">class</span> <span class="nc">Stoppable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-<div class="viewcode-block" id="Stoppable.stop"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Stoppable.stop">[docs]</a>    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sucess</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<div class="viewcode-block" id="Stoppable.stop"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Stoppable.stop">[docs]</a>    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Safely stop a device that may or may not be in motion.</span>
 
 <span class="sd">        The argument ``success`` is a boolean.</span>
@@ -325,30 +457,35 @@
 <span class="sd">        and the device should stop &quot;normally&quot;.</span>
 <span class="sd">        When ``success`` is false, something has gone wrong and the device</span>
 <span class="sd">        may wish to take defensive action to make itself safe.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
 
 
+<span class="n">Callback</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Reading</span><span class="p">]],</span> <span class="kc">None</span><span class="p">]</span>
+
+
 <div class="viewcode-block" id="Subscribable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Subscribable">[docs]</a><span class="nd">@runtime_checkable</span>
-<span class="k">class</span> <span class="nc">Subscribable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-<div class="viewcode-block" id="Subscribable.subscribe"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Subscribable.subscribe">[docs]</a>    <span class="k">def</span> <span class="nf">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="k">class</span> <span class="nc">Subscribable</span><span class="p">(</span><span class="n">HasName</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="Subscribable.subscribe"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Subscribable.subscribe">[docs]</a>    <span class="k">def</span> <span class="nf">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">function</span><span class="p">:</span> <span class="n">Callback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Subscribe to updates in value of a device.</span>
 
 <span class="sd">        When the device has a new value ready, it should call ``function``</span>
-<span class="sd">        asynchronously in a separate thread.</span>
+<span class="sd">        with something that looks like the output of ``read()``.</span>
 
 <span class="sd">        Needed for :doc:`monitored &lt;async&gt;`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
-<div class="viewcode-block" id="Subscribable.clear_sub"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Subscribable.clear_sub">[docs]</a>    <span class="k">def</span> <span class="nf">clear_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<div class="viewcode-block" id="Subscribable.clear_sub"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Subscribable.clear_sub">[docs]</a>    <span class="k">def</span> <span class="nf">clear_sub</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">function</span><span class="p">:</span> <span class="n">Callback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Remove a subscription.&quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
 
 
 <div class="viewcode-block" id="Checkable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Checkable">[docs]</a><span class="nd">@runtime_checkable</span>
 <span class="k">class</span> <span class="nc">Checkable</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
-<div class="viewcode-block" id="Checkable.check_value"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Checkable.check_value">[docs]</a>    <span class="k">def</span> <span class="nf">check_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">NoReturn</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<div class="viewcode-block" id="Checkable.check_value"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Checkable.check_value">[docs]</a>    <span class="k">def</span> <span class="nf">check_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="kc">None</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Test for a valid setpoint without actually moving.</span>
 
 <span class="sd">        This should accept the same arguments as ``set``. It should raise an</span>
@@ -358,14 +495,30 @@
 
 <span class="sd">        This method is used by simulators that check limits. If not implemented</span>
 <span class="sd">        those simulators should assume all values are valid, but may warn.</span>
+
+<span class="sd">        This method may be used during a scan, so should not write to any Signals</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
 
 
-<div class="viewcode-block" id="Hinted"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Hinted">[docs]</a><span class="nd">@runtime_checkable</span>
-<span class="k">class</span> <span class="nc">Hinted</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
+<div class="viewcode-block" id="Hints"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Hints">[docs]</a><span class="k">class</span> <span class="nc">Hints</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;A dictionary of optional hints for visualization&quot;&quot;&quot;</span>
+    <span class="c1">#: A list of the interesting fields to plot</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="c1">#: Partition fields (and their stream name) into dimensions for plotting</span>
+    <span class="c1">#:</span>
+    <span class="c1">#: ``&#39;dimensions&#39;: [(fields, stream_name), (fields, stream_name), ...]``</span>
+    <span class="n">dimensions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span>
+    <span class="c1">#: Include this if scan data is sampled on a regular rectangular grid</span>
+    <span class="n">gridding</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;rectilinear&quot;</span><span class="p">,</span> <span class="s2">&quot;rectilinear_nonsequential&quot;</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="HasHints"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.HasHints">[docs]</a><span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">HasHints</span><span class="p">(</span><span class="n">HasName</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">hints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">hints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Hints</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;A dictionary of suggestions for best-effort visualization and processing.</span>
 
 <span class="sd">        This does not affect what data is read or saved; it is only</span>
@@ -373,6 +526,22 @@
 <span class="sd">        with minimal guidance from the user. See :ref:`hints`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="check_supports"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.check_supports">[docs]</a><span class="k">def</span> <span class="nf">check_supports</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">protocol</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Check that an object supports a protocol</span>
+
+<span class="sd">    This exists so that multiple protocol checks can be run in a mypy</span>
+<span class="sd">    compatible way, e.g.::</span>
+
+<span class="sd">        triggerable = check_supports(obj, Triggerable)</span>
+<span class="sd">        triggerable.trigger()</span>
+<span class="sd">        readable = check_supports(obj, Readable)</span>
+<span class="sd">        readable.read()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">protocol</span><span class="p">),</span> \
+        <span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> does not implement all </span><span class="si">%s</span><span class="s2"> methods&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">protocol</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">obj</span></div>
 </pre></div>
 
            </div>

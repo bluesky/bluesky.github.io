@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.utils &mdash; bluesky 1.8.3.post22+g33c7b82c documentation</title>
+  <title>bluesky.utils &mdash; bluesky 1.8.3.post24+gb7d666e6 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.8.3.post22+g33c7b82c
+                1.8.3.post24+gb7d666e6
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -121,7 +121,7 @@
 <span class="kn">import</span> <span class="nn">operator</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">reduce</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Callable</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Callable</span>
 <span class="kn">from</span> <span class="nn">weakref</span> <span class="kn">import</span> <span class="n">ref</span><span class="p">,</span> <span class="n">WeakKeyDictionary</span>
 <span class="kn">import</span> <span class="nn">types</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
@@ -142,6 +142,11 @@
 <span class="kn">import</span> <span class="nn">msgpack</span>
 <span class="kn">import</span> <span class="nn">msgpack_numpy</span>
 <span class="kn">import</span> <span class="nn">zict</span>
+
+<span class="kn">from</span> <span class="nn">bluesky.protocols</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">T</span><span class="p">,</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">HasParent</span><span class="p">,</span> <span class="n">HasHints</span><span class="p">,</span> <span class="n">Hints</span><span class="p">,</span> <span class="n">Movable</span><span class="p">,</span> <span class="n">Readable</span><span class="p">,</span>
+    <span class="n">SyncOrAsync</span><span class="p">,</span> <span class="n">WritesExternalAssets</span><span class="p">,</span> <span class="n">check_supports</span>
+<span class="p">)</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="c1"># cytools is a drop-in replacement for toolz, implemented in Cython</span>
@@ -1503,7 +1508,7 @@
 <span class="sd">        Mapping of interdependent axis passed in.</span>
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">def</span> <span class="nf">get_parent</span><span class="p">(</span><span class="n">o</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="s1">&#39;parent&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">HasParent</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span>
 
     <span class="n">independent_objs</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
     <span class="n">maybe_coupled</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
@@ -1833,7 +1838,7 @@
 
 
 <span class="k">def</span> <span class="nf">is_movable</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Check if object satisfies bluesky &#39;movable&#39; interface.</span>
+    <span class="sd">&quot;&quot;&quot;Check if object satisfies bluesky &#39;Movable&#39; and `Readable` interfaces.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -1845,51 +1850,47 @@
 <span class="sd">    boolean</span>
 <span class="sd">        True if movable, False otherwise.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">EXPECTED_ATTRS</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="s1">&#39;name&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;parent&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;read&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;describe&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;read_configuration&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;describe_configuration&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;set&#39;</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span> <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">EXPECTED_ATTRS</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Movable</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Readable</span><span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">Movable</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Abstract base class for objects that satisfy the bluesky &#39;movable&#39; interface.</span>
+<span class="k">def</span> <span class="nf">get_hinted_fields</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">HasHints</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">obj</span><span class="o">.</span><span class="n">hints</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fields&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
 
-<span class="sd">    Examples</span>
-<span class="sd">    --------</span>
 
-<span class="sd">    .. code-block:: python</span>
+<span class="n">already_warned</span> <span class="o">=</span> <span class="p">{}</span>
 
-<span class="sd">        m = hw.motor</span>
-<span class="sd">        # We need to detect if &#39;m&#39; is a motor</span>
-<span class="sd">        if isinstance(m, Movable):</span>
-<span class="sd">            print(f&quot;The object {m.name} is a motor&quot;)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">__subclasshook__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">C</span><span class="p">):</span>
-        <span class="c1"># If the following condition is True, the object C is recognized</span>
-        <span class="c1"># to have Movable interface (e.g. a motor)</span>
-        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;The Movable abstract base class is deprecated and will be removed in a future</span>
-<span class="s2">                 version of bluesky. Please use bluesky.utils.is_movable(obj) to test if an object</span>
-<span class="s2">                 satisfies the movable interface.&quot;&quot;&quot;</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="ne">DeprecationWarning</span><span class="p">)</span>
-        <span class="n">EXPECTED_ATTRS</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="s1">&#39;name&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;parent&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;read&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;describe&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;read_configuration&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;describe_configuration&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;set&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;stop&#39;</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">attr</span><span class="p">)</span> <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">EXPECTED_ATTRS</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">warn_if_msg_args_or_kwargs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">meth</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">args</span> <span class="ow">or</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">already_warned</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">command</span><span class="p">):</span>
+        <span class="n">already_warned</span><span class="p">[</span><span class="n">msg</span><span class="o">.</span><span class="n">command</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">error_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
+<span class="s2">About to call </span><span class="si">{</span><span class="n">meth</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">() with args </span><span class="si">{</span><span class="n">args</span><span class="si">}</span><span class="s2"> and kwargs </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2">.</span>
+<span class="s2">In the future the passing of Msg.args and Msg.kwargs down to hardware from</span>
+<span class="s2">Msg(&quot;</span><span class="si">{</span><span class="n">msg</span><span class="o">.</span><span class="n">command</span><span class="si">}</span><span class="s2">&quot;) may be deprecated. If you have a use case for these,</span>
+<span class="s2">we would like to know about it, so please open an issue at</span>
+<span class="s2">https://github.com/bluesky/bluesky/issues&quot;&quot;&quot;</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">error_msg</span><span class="p">,</span> <span class="ne">PendingDeprecationWarning</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">maybe_update_hints</span><span class="p">(</span><span class="n">hints</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Hints</span><span class="p">],</span> <span class="n">obj</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">HasHints</span><span class="p">):</span>
+        <span class="n">hints</span><span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">hints</span>
+
+
+<span class="k">def</span> <span class="nf">maybe_collect_asset_docs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Asset</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">WritesExternalAssets</span><span class="p">):</span>
+        <span class="n">warn_if_msg_args_or_kwargs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="o">.</span><span class="n">collect_asset_docs</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">yield from</span> <span class="n">obj</span><span class="o">.</span><span class="n">collect_asset_docs</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">maybe_await</span><span class="p">(</span><span class="n">ret</span><span class="p">:</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isawaitable</span><span class="p">(</span><span class="n">ret</span><span class="p">):</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">ret</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ret</span>
 </pre></div>
 
            </div>

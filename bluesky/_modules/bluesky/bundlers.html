@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.bundlers &mdash; bluesky 1.8.3.post22+g33c7b82c documentation</title>
+  <title>bluesky.bundlers &mdash; bluesky 1.8.3.post24+gb7d666e6 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.8.3.post22+g33c7b82c
+                1.8.3.post24+gb7d666e6
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -113,17 +113,28 @@
              
   <h1>Source code for bluesky.bundlers</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">count</span><span class="p">,</span> <span class="n">tee</span>
 <span class="kn">import</span> <span class="nn">time</span> <span class="k">as</span> <span class="nn">ttime</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Deque</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">FrozenSet</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span>
 <span class="kn">from</span> <span class="nn">event_model</span> <span class="kn">import</span> <span class="n">DocumentNames</span>
 <span class="kn">from</span> <span class="nn">.log</span> <span class="kn">import</span> <span class="n">doc_logger</span>
+<span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">T</span><span class="p">,</span> <span class="n">Callback</span><span class="p">,</span> <span class="n">Configurable</span><span class="p">,</span> <span class="n">PartialEvent</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">,</span> <span class="n">Flyable</span><span class="p">,</span>
+    <span class="n">HasName</span><span class="p">,</span> <span class="n">Readable</span><span class="p">,</span> <span class="n">Reading</span><span class="p">,</span> <span class="n">Subscribable</span><span class="p">,</span> <span class="n">check_supports</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">new_uid</span><span class="p">,</span>
     <span class="n">IllegalMessageSequence</span><span class="p">,</span>
     <span class="n">_rearrange_into_parallel_dicts</span><span class="p">,</span>
     <span class="n">short_uid</span><span class="p">,</span>
     <span class="n">Msg</span><span class="p">,</span>
+    <span class="n">maybe_await</span><span class="p">,</span>
+    <span class="n">maybe_collect_asset_docs</span><span class="p">,</span>
+    <span class="n">maybe_update_hints</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="n">ObjDict</span> <span class="o">=</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">T</span><span class="p">]]</span>
 
 
 <div class="viewcode-block" id="RunBundler"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.html#bluesky.bundlers.RunBundler">[docs]</a><span class="k">class</span> <span class="nc">RunBundler</span><span class="p">:</span>
@@ -132,17 +143,19 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">bundling</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># if we are in the middle of bundling readings</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_bundle_name</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># name given to event descriptor</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># The (future) runstart uid</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_objs_read</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>  <span class="c1"># objects read in one Event</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_read_cache</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>  <span class="c1"># cache of obj.read() in one Event</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_objs_read</span><span class="p">:</span> <span class="n">Deque</span><span class="p">[</span><span class="n">HasName</span><span class="p">]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>  <span class="c1"># objects read in one Event</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_read_cache</span><span class="p">:</span> <span class="n">Deque</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Reading</span><span class="p">]]</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>  <span class="c1"># cache of obj.read() in one Event</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_asset_docs_cache</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>  <span class="c1"># cache of obj.collect_asset_docs()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># cache of all obj.describe() output</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.describe_configuration()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_config_values_cache</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.read_configuration() values</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_config_ts_cache</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.read_configuration() timestamps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">:</span> <span class="n">ObjDict</span><span class="p">[</span><span class="n">Descriptor</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># cache of all obj.describe() output</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">:</span> <span class="n">ObjDict</span><span class="p">[</span><span class="n">Descriptor</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.describe_configuration()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_config_values_cache</span><span class="p">:</span> <span class="n">ObjDict</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.read_configuration() values</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_config_ts_cache</span><span class="p">:</span> <span class="n">ObjDict</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.read_configuration() timestamps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># cache of {name: (objs_frozen_set, doc)}</span>
+        <span class="c1"># cache of {obj: {objs_frozen_set: (name, uid)}}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_local_descriptors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">FrozenSet</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># a seq_num counter per stream</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_teed_sequence_counters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># for if we redo data-points</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># cache of {obj: (cb, kwargs)}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Subscribable</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Callback</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># cache of {obj: (cb, kwargs)}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">run_is_open</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_uncollected</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>  <span class="c1"># objects after kickoff(), before collect()</span>
         <span class="c1"># we expect the RE to take care of the composition</span>
@@ -281,12 +294,16 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bundling</span><span class="p">:</span>
             <span class="n">obj</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span>
             <span class="c1"># if the object is not in the _describe_cache, cache it</span>
+            <span class="c1"># Note: there is a race condition between the code here</span>
+            <span class="c1"># and in monitor() and collect(), so if you do them concurrently</span>
+            <span class="c1"># on the same device you make obj.describe() calls multiple times.</span>
+            <span class="c1"># As this is harmless and not an expected use case, we don&#39;t guard</span>
+            <span class="c1"># against it. Reading multiple devices concurrently works fine.</span>
             <span class="k">if</span> <span class="n">obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">:</span>
-                <span class="c1"># Validate that there is no data key name collision.</span>
-                <span class="n">data_keys</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_keys</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">describe_configuration</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_cache_config</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_describe</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_describe_config</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_read_config</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
 
             <span class="c1"># check that current read collides with nothing else in</span>
             <span class="c1"># current event</span>
@@ -310,18 +327,34 @@
             <span class="c1"># Ask the object for any resource or datum documents is has cached</span>
             <span class="c1"># and cache them as well. Likewise, these will be emitted if and</span>
             <span class="c1"># when _save is called.</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;collect_asset_docs&quot;</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_asset_docs_cache</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
-                    <span class="n">obj</span><span class="o">.</span><span class="n">collect_asset_docs</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
-                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_asset_docs_cache</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                <span class="n">maybe_collect_asset_docs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">reading</span></div>
 
-    <span class="k">def</span> <span class="nf">_cache_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_cache_describe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+        <span class="s2">&quot;Read the object&#39;s describe and cache it.&quot;</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Readable</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_cache_describe_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+        <span class="s2">&quot;Read the object&#39;s describe_configuration and cache it.&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Configurable</span><span class="p">):</span>
+            <span class="n">conf_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">describe_configuration</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">conf_keys</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">conf_keys</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_cache_read_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
         <span class="s2">&quot;Read the object&#39;s configuration and cache it.&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Configurable</span><span class="p">):</span>
+            <span class="n">conf</span> <span class="o">=</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">read_configuration</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">conf</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">config_values</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">config_ts</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">read_configuration</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">conf</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">config_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
             <span class="n">config_ts</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">[</span><span class="s2">&quot;timestamp&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_config_values_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">config_values</span>
@@ -343,7 +376,7 @@
 
 <span class="sd">        where kwargs are passed through to ``obj.subscribe()``</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Subscribable</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;The &#39;monitor&#39; Msg does not accept positional &quot;</span> <span class="s2">&quot;arguments.&quot;</span>
@@ -356,16 +389,20 @@
                 <span class="s2">&quot;which is already monitored&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
-        <span class="n">data_keys</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span>
-        <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">&quot;timestamps&quot;</span><span class="p">:</span> <span class="p">{}}}</span>
-        <span class="n">config</span><span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">][</span><span class="s2">&quot;data_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">describe_configuration</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">read_configuration</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">config</span><span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
-            <span class="n">config</span><span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">][</span><span class="s2">&quot;timestamps&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">[</span><span class="s2">&quot;timestamp&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_describe</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_describe_config</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_read_config</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+        <span class="n">data_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_values_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">],</span>
+            <span class="s2">&quot;timestamps&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_ts_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">],</span>
+            <span class="s2">&quot;data_keys&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
+        <span class="p">}}</span>
         <span class="n">object_keys</span> <span class="o">=</span> <span class="p">{</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">data_keys</span><span class="p">)}</span>
         <span class="n">hints</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;hints&quot;</span><span class="p">):</span>
-            <span class="n">hints</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">obj</span><span class="o">.</span><span class="n">hints</span><span class="p">})</span>
+        <span class="n">maybe_update_hints</span><span class="p">(</span><span class="n">hints</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
         <span class="n">desc_doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
             <span class="n">run_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
             <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
@@ -384,10 +421,21 @@
                                 <span class="s1">&#39;data_keys&#39;</span><span class="p">:</span> <span class="n">data_keys</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>
         <span class="n">seq_num_counter</span> <span class="o">=</span> <span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
-        <span class="k">def</span> <span class="nf">emit_event</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-            <span class="c1"># Ignore the inputs. Use this call as a signal to call read on the</span>
-            <span class="c1"># object, a crude way to be sure we get all the info we need.</span>
-            <span class="n">data</span><span class="p">,</span> <span class="n">timestamps</span> <span class="o">=</span> <span class="n">_rearrange_into_parallel_dicts</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+        <span class="k">def</span> <span class="nf">emit_event</span><span class="p">(</span><span class="n">readings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Reading</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">readings</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># We were passed something we can use, but check no args or kwargs</span>
+                <span class="k">assert</span> <span class="ow">not</span> <span class="n">args</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">kwargs</span><span class="p">,</span> \
+                    <span class="s2">&quot;If subscribe callback called with readings, &quot;</span> \
+                    <span class="s2">&quot;args and kwargs are not supported.&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Ignore the inputs. Use this call as a signal to call read on the</span>
+                <span class="c1"># object, a crude way to be sure we get all the info we need.</span>
+                <span class="n">readable_obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Readable</span><span class="p">)</span>
+                <span class="n">readings</span> <span class="o">=</span> <span class="n">readable_obj</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                <span class="k">assert</span> <span class="ow">not</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isawaitable</span><span class="p">(</span><span class="n">readings</span><span class="p">),</span> \
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">readable_obj</span><span class="si">}</span><span class="s2"> has async read() method and the callback &quot;</span> \
+                    <span class="s2">&quot;passed to subscribe() was not called with Dict[str, Reading]&quot;</span>
+            <span class="n">data</span><span class="p">,</span> <span class="n">timestamps</span> <span class="o">=</span> <span class="n">_rearrange_into_parallel_dicts</span><span class="p">(</span><span class="n">readings</span><span class="p">)</span>
             <span class="n">doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
                 <span class="n">descriptor</span><span class="o">=</span><span class="n">descriptor_uid</span><span class="p">,</span>
                 <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
@@ -400,6 +448,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_params</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">emit_event</span><span class="p">,</span> <span class="n">kwargs</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">descriptor</span><span class="p">,</span> <span class="n">desc_doc</span><span class="p">)</span>
+        <span class="c1"># TODO: deprecate **kwargs when Ophyd.v2 is available</span>
         <span class="n">obj</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">emit_event</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="RunBundler.record_interruption"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.record_interruption.html#bluesky.bundlers.RunBundler.record_interruption">[docs]</a>    <span class="k">def</span> <span class="nf">record_interruption</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
@@ -437,7 +486,7 @@
 
 <span class="sd">            Msg(&#39;unmonitor&#39;, obj)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Subscribable</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_params</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">IllegalMessageSequence</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Cannot &#39;unmonitor&#39; </span><span class="si">{</span><span class="n">obj</span><span class="si">}</span><span class="s2">; it is not &quot;</span> <span class="s2">&quot;being monitored.&quot;</span>
@@ -506,7 +555,7 @@
                 <span class="n">dks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
                 <span class="n">obj_name</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">name</span>
                 <span class="c1"># dks is an OrderedDict. Record that order as a list.</span>
-                <span class="n">object_keys</span><span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">dks</span><span class="p">)</span>
+                <span class="n">object_keys</span><span class="p">[</span><span class="n">obj_name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">dks</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">dk</span> <span class="ow">in</span> <span class="n">dks</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                     <span class="n">dk</span><span class="p">[</span><span class="s2">&quot;object_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj_name</span>
                 <span class="n">data_keys</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">dks</span><span class="p">)</span>
@@ -514,8 +563,7 @@
                 <span class="n">config</span><span class="p">[</span><span class="n">obj_name</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_values_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
                 <span class="n">config</span><span class="p">[</span><span class="n">obj_name</span><span class="p">][</span><span class="s2">&quot;timestamps&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_ts_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
                 <span class="n">config</span><span class="p">[</span><span class="n">obj_name</span><span class="p">][</span><span class="s2">&quot;data_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;hints&quot;</span><span class="p">):</span>
-                    <span class="n">hints</span><span class="p">[</span><span class="n">obj_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">hints</span>
+                <span class="n">maybe_update_hints</span><span class="p">(</span><span class="n">hints</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
             <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
             <span class="n">descriptor_doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
                 <span class="n">run_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
@@ -687,63 +735,30 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div>
 
-<div class="viewcode-block" id="RunBundler.collect"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.collect.html#bluesky.bundlers.RunBundler.collect">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Collect data cached by a flyer and emit documents.</span>
-
-<span class="sd">        Expect message object is</span>
-
-<span class="sd">            Msg(&#39;collect&#39;, collect_obj)</span>
-<span class="sd">            Msg(&#39;collect&#39;, flyer_object, stream=True, return_payload=False)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">collect_obj</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_is_open</span><span class="p">:</span>
-            <span class="c1"># sanity check -- &#39;kickoff&#39; should catch this and make this</span>
-            <span class="c1"># code path impossible</span>
-            <span class="k">raise</span> <span class="n">IllegalMessageSequence</span><span class="p">(</span>
-                <span class="s2">&quot;A &#39;collect&#39; message was sent but no run is open.&quot;</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_uncollected</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">,</span> <span class="s2">&quot;collect_asset_docs&quot;</span><span class="p">):</span>
-            <span class="c1"># Resource and Datum documents</span>
-            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">collect_obj</span><span class="o">.</span><span class="n">collect_asset_docs</span><span class="p">():</span>
-                <span class="c1"># Add a &#39;run_start&#39; field to the resource document on its way out.</span>
-                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;resource&quot;</span><span class="p">:</span>
-                    <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;run_start&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span>
-                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">doc</span><span class="p">)</span>
-
-        <span class="n">collect_obj_config</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">bulk_data</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">local_descriptors</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># hashed on objs_read, not (name, objs_read)</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_cache_describe_collect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collect_obj</span><span class="p">:</span> <span class="n">Flyable</span><span class="p">):</span>
+        <span class="s2">&quot;Read the object&#39;s describe_collect and cache it.&quot;</span>
+        <span class="n">describe_collect</span> <span class="o">=</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">collect_obj</span><span class="o">.</span><span class="n">describe_collect</span><span class="p">())</span>
+        <span class="n">collect_obj_config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">local_descriptors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">FrozenSet</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="c1"># collect_obj.describe_collect() returns a dictionary like this:</span>
         <span class="c1">#     {name_for_desc1: data_keys_for_desc1,</span>
         <span class="c1">#      name_for_desc2: data_keys_for_desc2, ...}</span>
-        <span class="k">for</span> <span class="n">stream_name</span><span class="p">,</span> <span class="n">stream_data_keys</span> <span class="ow">in</span> <span class="n">collect_obj</span><span class="o">.</span><span class="n">describe_collect</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">stream_name</span><span class="p">,</span> <span class="n">stream_data_keys</span> <span class="ow">in</span> <span class="n">describe_collect</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">stream_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">:</span>
                 <span class="c1"># We do not have an Event Descriptor for this set.</span>
                 <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
                 <span class="c1"># if we have not yet read the configuration, do so</span>
                 <span class="k">if</span> <span class="n">collect_obj</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">collect_obj_config</span><span class="p">:</span>
-                    <span class="n">_config</span> <span class="o">=</span> <span class="n">collect_obj_config</span><span class="p">[</span><span class="n">collect_obj</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-                        <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{},</span>
-                        <span class="s2">&quot;timestamps&quot;</span><span class="p">:</span> <span class="p">{},</span>
-                        <span class="s2">&quot;data_keys&quot;</span><span class="p">:</span> <span class="p">{}</span>
+                    <span class="k">if</span> <span class="n">collect_obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">:</span>
+                        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_describe_config</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">)</span>
+                        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_read_config</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">)</span>
+                    <span class="n">collect_obj_config</span><span class="p">[</span><span class="n">collect_obj</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_values_cache</span><span class="p">[</span><span class="n">collect_obj</span><span class="p">],</span>
+                        <span class="s2">&quot;timestamps&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_ts_cache</span><span class="p">[</span><span class="n">collect_obj</span><span class="p">],</span>
+                        <span class="s2">&quot;data_keys&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">[</span><span class="n">collect_obj</span><span class="p">]</span>
                     <span class="p">}</span>
-                    <span class="c1"># but read_configuration is optional</span>
-                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">,</span> <span class="s2">&quot;read_configuration&quot;</span><span class="p">):</span>
-                        <span class="n">doc_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;reading configuration from </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">collect_obj</span><span class="p">)</span>
-                        <span class="n">_config</span><span class="p">[</span><span class="s1">&#39;data_keys&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">collect_obj</span><span class="o">.</span><span class="n">describe_configuration</span><span class="p">())</span>
-                        <span class="k">for</span> <span class="n">config_key</span><span class="p">,</span> <span class="n">config</span> <span class="ow">in</span> <span class="n">collect_obj</span><span class="o">.</span><span class="n">read_configuration</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                            <span class="n">_config</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="n">config_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
-                            <span class="n">_config</span><span class="p">[</span><span class="s2">&quot;timestamps&quot;</span><span class="p">][</span><span class="n">config_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;timestamp&quot;</span><span class="p">]</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">doc_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> has no read_configuration method&quot;</span><span class="p">,</span> <span class="n">collect_obj</span><span class="p">)</span>
-
                 <span class="n">hints</span> <span class="o">=</span> <span class="p">{}</span>
-                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">,</span> <span class="s2">&quot;hints&quot;</span><span class="p">):</span>
-                    <span class="n">hints</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">collect_obj</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">collect_obj</span><span class="o">.</span><span class="n">hints</span><span class="p">})</span>
+                <span class="n">maybe_update_hints</span><span class="p">(</span><span class="n">hints</span><span class="p">,</span> <span class="n">collect_obj</span><span class="p">)</span>
                 <span class="n">doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
                     <span class="n">run_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
                     <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
@@ -774,8 +789,39 @@
 
             <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span>
             <span class="n">local_descriptors</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">stream_data_keys</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">stream_name</span><span class="p">,</span> <span class="n">descriptor_uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_local_descriptors</span><span class="p">[</span><span class="n">collect_obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">local_descriptors</span>
 
-            <span class="n">bulk_data</span><span class="p">[</span><span class="n">descriptor_uid</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<div class="viewcode-block" id="RunBundler.collect"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.collect.html#bluesky.bundlers.RunBundler.collect">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Collect data cached by a flyer and emit documents.</span>
+
+<span class="sd">        Expect message object is</span>
+
+<span class="sd">            Msg(&#39;collect&#39;, collect_obj)</span>
+<span class="sd">            Msg(&#39;collect&#39;, flyer_object, stream=True, return_payload=False)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">collect_obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Flyable</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_is_open</span><span class="p">:</span>
+            <span class="c1"># sanity check -- &#39;kickoff&#39; should catch this and make this</span>
+            <span class="c1"># code path impossible</span>
+            <span class="k">raise</span> <span class="n">IllegalMessageSequence</span><span class="p">(</span>
+                <span class="s2">&quot;A &#39;collect&#39; message was sent but no run is open.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_uncollected</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">)</span>
+
+        <span class="c1"># Resource and Datum documents</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">maybe_collect_asset_docs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">collect_obj</span><span class="p">):</span>
+            <span class="c1"># Add a &#39;run_start&#39; field to the resource document on its way out.</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;resource&quot;</span><span class="p">:</span>
+                <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;run_start&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">doc</span><span class="p">)</span>
+
+        <span class="c1"># Populate descriptors and local descriptors from describe_collect</span>
+        <span class="c1"># if not already called</span>
+        <span class="k">if</span> <span class="n">collect_obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_local_descriptors</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_describe_collect</span><span class="p">(</span><span class="n">collect_obj</span><span class="p">)</span>
+        <span class="n">local_descriptors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_local_descriptors</span><span class="p">[</span><span class="n">collect_obj</span><span class="p">]</span>
 
         <span class="c1"># If stream is True, run &#39;event&#39; subscription per document.</span>
         <span class="c1"># If stream is False, run &#39;bulk_events&#39; subscription once.</span>
@@ -785,6 +831,7 @@
         <span class="c1"># accumulate, and return None.</span>
         <span class="n">return_payload</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;return_payload&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="n">payload</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">bulk_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">PartialEvent</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
 
         <span class="k">for</span> <span class="n">ev</span> <span class="ow">in</span> <span class="n">collect_obj</span><span class="o">.</span><span class="n">collect</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">return_payload</span><span class="p">:</span>
@@ -793,13 +840,7 @@
             <span class="n">objs_read</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">ev</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
             <span class="n">stream_name</span><span class="p">,</span> <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">local_descriptors</span><span class="p">[</span><span class="n">objs_read</span><span class="p">]</span>
             <span class="n">seq_num</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">stream_name</span><span class="p">])</span>
-
             <span class="n">event_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
-
-            <span class="n">reading</span> <span class="o">=</span> <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
-            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]:</span>
-                <span class="n">reading</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">reading</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-            <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reading</span>
             <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;descriptor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">descriptor_uid</span>
             <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;seq_num&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">seq_num</span>
             <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">event_uid</span>
@@ -813,7 +854,7 @@
                                         <span class="s1">&#39;data_keys&#39;</span><span class="p">:</span> <span class="n">ev</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>
                 <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">event</span><span class="p">,</span> <span class="n">ev</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">bulk_data</span><span class="p">[</span><span class="n">descriptor_uid</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ev</span><span class="p">)</span>
+                <span class="n">bulk_data</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">descriptor_uid</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ev</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">stream</span><span class="p">:</span>
             <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">bulk_events</span><span class="p">,</span> <span class="n">bulk_data</span><span class="p">)</span>
@@ -850,7 +891,7 @@
             <span class="n">obj_set</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">obj_set</span><span class="p">:</span>
                 <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cache_config</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span></div></div>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_read_config</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span></div></div>
 </pre></div>
 
            </div>

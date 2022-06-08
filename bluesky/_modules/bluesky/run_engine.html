@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.run_engine &mdash; bluesky 1.8.3.post22+g33c7b82c documentation</title>
+  <title>bluesky.run_engine &mdash; bluesky 1.8.3.post24+gb7d666e6 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.8.3.post22+g33c7b82c
+                1.8.3.post24+gb7d666e6
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -116,7 +116,7 @@
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">from</span> <span class="nn">warnings</span> <span class="kn">import</span> <span class="n">warn</span>
-<span class="kn">from</span> <span class="nn">inspect</span> <span class="kn">import</span> <span class="n">Parameter</span><span class="p">,</span> <span class="n">Signature</span>
+<span class="kn">from</span> <span class="nn">inspect</span> <span class="kn">import</span> <span class="n">Parameter</span><span class="p">,</span> <span class="n">Signature</span><span class="p">,</span> <span class="n">iscoroutine</span>
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">count</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span><span class="p">,</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">ChainMap</span>
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
@@ -127,8 +127,9 @@
 <span class="kn">import</span> <span class="nn">weakref</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">import</span> <span class="nn">typing</span>
-<span class="kn">from</span> <span class="nn">.bundlers</span> <span class="kn">import</span> <span class="n">RunBundler</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">protocols</span> <span class="k">as</span> <span class="n">bs_protocols</span>
+<span class="kn">from</span> <span class="nn">.bundlers</span> <span class="kn">import</span> <span class="n">RunBundler</span><span class="p">,</span> <span class="n">maybe_await</span>
+<span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="p">(</span><span class="n">Flyable</span><span class="p">,</span> <span class="n">Movable</span><span class="p">,</span> <span class="n">Pausable</span><span class="p">,</span> <span class="n">Readable</span><span class="p">,</span> <span class="n">Stageable</span><span class="p">,</span>
+                        <span class="n">Stoppable</span><span class="p">,</span> <span class="n">Triggerable</span><span class="p">,</span> <span class="n">check_supports</span><span class="p">)</span>
 
 <span class="kn">import</span> <span class="nn">concurrent</span>
 
@@ -152,7 +153,7 @@
                     <span class="n">RunEngineInterrupted</span><span class="p">,</span> <span class="n">IllegalMessageSequence</span><span class="p">,</span>
                     <span class="n">FailedPause</span><span class="p">,</span> <span class="n">FailedStatus</span><span class="p">,</span> <span class="n">InvalidCommand</span><span class="p">,</span>
                     <span class="n">PlanHalt</span><span class="p">,</span> <span class="n">Msg</span><span class="p">,</span> <span class="n">ensure_generator</span><span class="p">,</span> <span class="n">single_gen</span><span class="p">,</span>
-                    <span class="n">DefaultDuringTask</span><span class="p">)</span>
+                    <span class="n">DefaultDuringTask</span><span class="p">,</span> <span class="n">warn_if_msg_args_or_kwargs</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_RunEnginePanic</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
@@ -467,7 +468,8 @@
                  <span class="n">scan_id_source</span><span class="o">=</span><span class="n">default_scan_id_source</span><span class="p">,</span>
                  <span class="n">during_task</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">call_returns_result</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">loop</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">loop</span> <span class="o">=</span> <span class="n">get_bluesky_event_loop</span><span class="p">()</span>
+            <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
+            <span class="n">set_bluesky_event_loop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_th</span> <span class="o">=</span> <span class="n">_ensure_event_loop_running</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_state_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">RLock</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span> <span class="o">=</span> <span class="n">loop</span>
@@ -536,7 +538,7 @@
         <span class="c1"># The RunEngine keeps track of a *lot* of state.</span>
         <span class="c1"># All flags and caches are defined here with a comment. Good luck.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_call_returns_result</span> <span class="o">=</span> <span class="n">call_returns_result</span>  <span class="c1"># should __call__ return UIDs or plan value</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># a mapping of open run -&gt; bundlers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Dict</span><span class="p">[</span><span class="n">typing</span><span class="o">.</span><span class="n">Any</span><span class="p">,</span> <span class="n">RunBundler</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># a mapping of open run -&gt; bundlers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metadata_per_call</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># for all runs generated by one __call__</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_deferred_pause_requested</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># pause at next &#39;checkpoint&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exception</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># stored and then raised in the _run loop</span>
@@ -1047,8 +1049,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_response_stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
         <span class="c1"># Notify Devices of the resume in case they want to clean up.</span>
         <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_objs_seen</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;resume&#39;</span><span class="p">):</span>
-                <span class="n">obj</span><span class="o">.</span><span class="n">resume</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Pausable</span><span class="p">):</span>
+                <span class="n">fut</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run_coroutine_threadsafe</span><span class="p">(</span><span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">resume</span><span class="p">()),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="p">)</span>
+                <span class="n">fut</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
         <span class="n">plan_return</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resume_task</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interrupted</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">RunEngineInterrupted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pause_msg</span><span class="p">)</span> <span class="kn">from</span> <span class="bp">None</span>
@@ -1294,12 +1297,12 @@
             <span class="p">)</span>
         <span class="c1"># During suspend, all motors should be stopped. Call stop() on</span>
         <span class="c1"># every object we ever set().</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="c1"># Notify Devices of the pause in case they want to clean up.</span>
         <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_objs_seen</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;pause&#39;</span><span class="p">):</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">obj</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>
+                    <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">pause</span><span class="p">())</span>
                 <span class="k">except</span> <span class="n">NoReplayAllowed</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_reset_checkpoint_state_meth</span><span class="p">()</span>
         <span class="c1"># rewind to the last checkpoint</span>
@@ -1439,6 +1442,7 @@
 
     <span class="k">def</span> <span class="nf">__interrupter_helper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coro</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">==</span> <span class="s1">&#39;panicked&#39;</span><span class="p">:</span>
+            <span class="n">coro</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;The RunEngine is panicked and &quot;</span>
                                <span class="s2">&quot;cannot be recovered. &quot;</span>
                                <span class="s2">&quot;You must restart bluesky.&quot;</span><span class="p">)</span>
@@ -1484,18 +1488,16 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uids</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_stop_movable_objects</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_stop_movable_objects</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="s2">&quot;Call obj.stop() for all objects we have moved. Log any exceptions.&quot;</span>
         <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_movable_objs_touched</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">stop</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">stop</span>
-            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No &#39;stop&#39; method available on </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Stoppable</span><span class="p">):</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">stop</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="n">success</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="n">success</span><span class="p">))</span>
                 <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Failed to stop </span><span class="si">%r</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No &#39;stop&#39; method available on </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Pull messages from the plan, process them, send results back.</span>
@@ -1547,13 +1549,13 @@
                         <span class="k">await</span> <span class="n">current_run</span><span class="o">.</span><span class="n">suspend_monitors</span><span class="p">()</span>
                     <span class="c1"># During pause, all motors should be stopped. Call stop()</span>
                     <span class="c1"># on every object we ever set().</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
                     <span class="c1"># Notify Devices of the pause in case they want to</span>
                     <span class="c1"># clean up.</span>
                     <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_objs_seen</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;pause&#39;</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Pausable</span><span class="p">):</span>
                             <span class="k">try</span><span class="p">:</span>
-                                <span class="n">obj</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>
+                                <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">pause</span><span class="p">())</span>
                             <span class="k">except</span> <span class="n">NoReplayAllowed</span><span class="p">:</span>
                                 <span class="bp">self</span><span class="o">.</span><span class="n">_reset_checkpoint_state_meth</span><span class="p">()</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;paused&#39;</span>
@@ -1784,7 +1786,7 @@
             <span class="c1"># Block them from creating new &#39;failed status&#39; tasks on the loop.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_pardon_failures</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
             <span class="c1"># call stop() on every movable object we ever set()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stop_movable_objects</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">current_run</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
                 <span class="c1"># Clear any uncleared monitoring callbacks.</span>
                 <span class="n">current_run</span><span class="o">.</span><span class="n">clear_monitors</span><span class="p">()</span>
@@ -1945,9 +1947,10 @@
 
 <span class="sd">            Msg(&#39;read&#39;, obj)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Readable</span><span class="p">)</span>
         <span class="c1"># actually _read_ the object</span>
-        <span class="n">ret</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">warn_if_msg_args_or_kwargs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="o">.</span><span class="n">read</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">))</span>
 
         <span class="k">if</span> <span class="n">ret</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -2071,9 +2074,10 @@
                                          <span class="s2">&quot;run is open.&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ke</span>
 
         <span class="n">_</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">msg</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Flyable</span><span class="p">)</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">group</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;group&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-
+        <span class="n">warn_if_msg_args_or_kwargs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="o">.</span><span class="n">kickoff</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
         <span class="n">ret</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">kickoff</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">p_event</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop_for_kwargs</span><span class="p">)</span>
         <span class="n">pardon_failures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pardon_failures</span>
@@ -2083,7 +2087,7 @@
         <span class="k">def</span> <span class="nf">done_callback</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="s2">&quot;The object </span><span class="si">%r</span><span class="s2"> reports &#39;kickoff&#39; is done &quot;</span> <span class="s2">&quot;with status </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
-                <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span>
+                <span class="n">obj</span><span class="p">,</span>
                 <span class="n">ret</span><span class="o">.</span><span class="n">success</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span>
@@ -2127,7 +2131,9 @@
         <span class="k">await</span> <span class="n">current_run</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">group</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;group&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="n">ret</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Flyable</span><span class="p">)</span>
+        <span class="n">warn_if_msg_args_or_kwargs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="o">.</span><span class="n">complete</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="n">p_event</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop_for_kwargs</span><span class="p">)</span>
         <span class="n">pardon_failures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pardon_failures</span>
@@ -2135,7 +2141,7 @@
         <span class="k">def</span> <span class="nf">done_callback</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
                 <span class="s2">&quot;The object </span><span class="si">%r</span><span class="s2"> reports &#39;complete&#39; is done &quot;</span> <span class="s2">&quot;with status </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
-                <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span>
+                <span class="n">obj</span><span class="p">,</span>
                 <span class="n">ret</span><span class="o">.</span><span class="n">success</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span>
@@ -2195,16 +2201,17 @@
 
 <span class="sd">        where arguments are passed through to `obj.set(*args, **kwargs)`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Movable</span><span class="p">)</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">group</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;group&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_movable_objs_touched</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">)</span>
-        <span class="n">ret</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_movable_objs_touched</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">p_event</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop_for_kwargs</span><span class="p">)</span>
         <span class="n">pardon_failures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pardon_failures</span>
 
         <span class="k">def</span> <span class="nf">done_callback</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;The object </span><span class="si">%r</span><span class="s2"> reports set is done &quot;</span>
-                           <span class="s2">&quot;with status </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">ret</span><span class="o">.</span><span class="n">success</span><span class="p">)</span>
+                           <span class="s2">&quot;with status </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">ret</span><span class="o">.</span><span class="n">success</span><span class="p">)</span>
             <span class="n">task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_status_object_completed</span><span class="p">,</span> <span class="n">ret</span><span class="p">,</span> <span class="n">p_event</span><span class="p">,</span> <span class="n">pardon_failures</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_status_tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
@@ -2227,15 +2234,17 @@
 
 <span class="sd">            Msg(&#39;trigger&#39;, obj)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Triggerable</span><span class="p">)</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">group</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;group&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="n">ret</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">warn_if_msg_args_or_kwargs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="o">.</span><span class="n">trigger</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">trigger</span><span class="p">(</span><span class="o">*</span><span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">p_event</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop_for_kwargs</span><span class="p">)</span>
         <span class="n">pardon_failures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pardon_failures</span>
 
         <span class="k">def</span> <span class="nf">done_callback</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;The object </span><span class="si">%r</span><span class="s2"> reports trigger is &quot;</span>
-                           <span class="s2">&quot;done with status </span><span class="si">%r</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">ret</span><span class="o">.</span><span class="n">success</span><span class="p">)</span>
+                           <span class="s2">&quot;done with status </span><span class="si">%r</span><span class="s2">.&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">ret</span><span class="o">.</span><span class="n">success</span><span class="p">)</span>
             <span class="n">task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_status_object_completed</span><span class="p">,</span> <span class="n">ret</span><span class="p">,</span> <span class="n">p_event</span><span class="p">,</span> <span class="n">pardon_failures</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_status_tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
@@ -2340,8 +2349,8 @@
             <span class="k">await</span> <span class="n">current_run</span><span class="o">.</span><span class="n">restore_monitors</span><span class="p">()</span>
         <span class="c1"># Notify Devices of the resume in case they want to clean up.</span>
         <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_objs_seen</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s1">&#39;resume&#39;</span><span class="p">):</span>
-                <span class="n">obj</span><span class="o">.</span><span class="n">resume</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Pausable</span><span class="p">):</span>
+                <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">resume</span><span class="p">())</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_checkpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Instruct the RunEngine to create a checkpoint so that we can rewind</span>
@@ -2443,7 +2452,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">_</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">msg</span>
         <span class="c1"># If an object has no &#39;stage&#39; method, assume there is nothing to do.</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">bs_protocols</span><span class="o">.</span><span class="n">Stageable</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Stageable</span><span class="p">):</span>
             <span class="k">return</span> <span class="p">[]</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">stage</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_staged</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>  <span class="c1"># add first in case of failure below</span>
@@ -2459,7 +2468,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">_</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">msg</span>
         <span class="c1"># If an object has no &#39;unstage&#39; method, assume there is nothing to do.</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">bs_protocols</span><span class="o">.</span><span class="n">Stageable</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Stageable</span><span class="p">):</span>
             <span class="k">return</span> <span class="p">[]</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">unstage</span><span class="p">()</span>
         <span class="c1"># use `discard()` to ignore objects that are not in the staged set.</span>
@@ -2475,7 +2484,8 @@
 
 <span class="sd">            Msg(&#39;stop&#39;, obj)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>  <span class="c1"># nominally, this returns None</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">check_supports</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,</span> <span class="n">Stoppable</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">stop</span><span class="p">())</span>  <span class="c1"># nominally, this returns None</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -2724,15 +2734,40 @@
 
 
 <span class="k">def</span> <span class="nf">get_bluesky_event_loop</span><span class="p">():</span>
-    <span class="k">global</span> <span class="n">_bluesky_event_loop</span>
-    <span class="k">if</span> <span class="n">_bluesky_event_loop</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_bluesky_event_loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">_bluesky_event_loop</span>
 
 
 <span class="k">def</span> <span class="nf">set_bluesky_event_loop</span><span class="p">(</span><span class="n">loop</span><span class="p">):</span>
     <span class="k">global</span> <span class="n">_bluesky_event_loop</span>
     <span class="n">_bluesky_event_loop</span> <span class="o">=</span> <span class="n">loop</span>
+
+
+<span class="k">def</span> <span class="nf">in_bluesky_event_loop</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># TODO: change to asyncio.get_running_loop() when we drop py3.6</span>
+        <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+        <span class="c1"># Ok, no running loop</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Check if running loop is bluesky event loop</span>
+        <span class="k">return</span> <span class="n">loop</span> <span class="ow">is</span> <span class="n">_bluesky_event_loop</span>
+
+
+<span class="n">T</span> <span class="o">=</span> <span class="n">typing</span><span class="o">.</span><span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">call_in_bluesky_event_loop</span><span class="p">(</span><span class="n">coro</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Awaitable</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">_bluesky_event_loop</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">_bluesky_event_loop</span><span class="o">.</span><span class="n">is_running</span><span class="p">():</span>
+        <span class="c1"># Quell &quot;coroutine never awaited&quot; warnings</span>
+        <span class="k">if</span> <span class="n">iscoroutine</span><span class="p">(</span><span class="n">coro</span><span class="p">):</span>
+            <span class="n">coro</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Bluesky event loop not running&quot;</span><span class="p">)</span>
+    <span class="n">fut</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run_coroutine_threadsafe</span><span class="p">(</span>
+        <span class="n">coro</span><span class="p">,</span>
+        <span class="n">loop</span><span class="o">=</span><span class="n">_bluesky_event_loop</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fut</span><span class="o">.</span><span class="n">result</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
 </pre></div>
 
            </div>
