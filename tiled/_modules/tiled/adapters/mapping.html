@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.mapping &mdash; tiled 0.1.0a64.post4+g2b35ba7 documentation</title>
+  <title>tiled.adapters.mapping &mdash; tiled 0.1.0a64.post5+g21d518e documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a64.post4+g2b35ba7
+                0.1.0a64.post5+g21d518e
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -126,7 +126,7 @@
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 
 <span class="kn">from</span> <span class="nn">..iterviews</span> <span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
-<span class="kn">from</span> <span class="nn">..queries</span> <span class="kn">import</span> <span class="n">Comparison</span><span class="p">,</span> <span class="n">Contains</span><span class="p">,</span> <span class="n">Eq</span><span class="p">,</span> <span class="n">FullText</span><span class="p">,</span> <span class="n">Regex</span>
+<span class="kn">from</span> <span class="nn">..queries</span> <span class="kn">import</span> <span class="n">Comparison</span><span class="p">,</span> <span class="n">Contains</span><span class="p">,</span> <span class="n">Eq</span><span class="p">,</span> <span class="n">FullText</span><span class="p">,</span> <span class="n">In</span><span class="p">,</span> <span class="n">NotIn</span><span class="p">,</span> <span class="n">Regex</span>
 <span class="kn">from</span> <span class="nn">..query_registration</span> <span class="kn">import</span> <span class="n">QueryTranslationRegistry</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">SpecialUsers</span><span class="p">,</span> <span class="n">import_object</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">IndexersMixin</span>
@@ -516,6 +516,42 @@
 
 
 <span class="n">MapAdapter</span><span class="o">.</span><span class="n">register_query</span><span class="p">(</span><span class="n">Comparison</span><span class="p">,</span> <span class="n">comparison</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_in</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">tree</span><span class="p">):</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">tree</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="c1"># Find the queried key in the metadata.</span>
+        <span class="n">term</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">metadata</span>
+        <span class="k">for</span> <span class="n">subkey</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">subkey</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">term</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">term</span> <span class="o">=</span> <span class="n">term</span><span class="p">[</span><span class="n">subkey</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">term</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">matches</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">tree</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">mapping</span><span class="o">=</span><span class="n">matches</span><span class="p">)</span>
+
+
+<span class="n">MapAdapter</span><span class="o">.</span><span class="n">register_query</span><span class="p">(</span><span class="n">In</span><span class="p">,</span> <span class="n">_in</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">notin</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">tree</span><span class="p">):</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">tree</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="c1"># Find the queried key in the metadata.</span>
+        <span class="n">term</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">metadata</span>
+        <span class="k">for</span> <span class="n">subkey</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">key</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">subkey</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">term</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">term</span> <span class="o">=</span> <span class="n">term</span><span class="p">[</span><span class="n">subkey</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">term</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">matches</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">tree</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">mapping</span><span class="o">=</span><span class="n">matches</span><span class="p">)</span>
+
+
+<span class="n">MapAdapter</span><span class="o">.</span><span class="n">register_query</span><span class="p">(</span><span class="n">NotIn</span><span class="p">,</span> <span class="n">notin</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">DummyAccessPolicy</span><span class="p">:</span>
