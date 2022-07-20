@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Structures &mdash; tiled 0.1.0a65.post6+gee067dd documentation</title>
+  <title>Structures &mdash; tiled 0.1.0a65.post34+g4e53112 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -23,7 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Security" href="security.html" />
+    <link rel="next" title="Metadata and Specs" href="metadata.html" />
     <link rel="prev" title="Standards Used by Tiled" href="standards.html" /> 
 </head>
 
@@ -35,7 +35,7 @@
             <a href="../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a65.post6+gee067dd
+                0.1.0a65.post34+g4e53112
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -80,12 +80,12 @@
 <li class="toctree-l3"><a class="reference internal" href="#array-multiple-chunks">Array (multiple chunks)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#array-with-a-structured-data-type">Array (with a structured data type)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#dataframe">DataFrame</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#data-array-xarray">Data Array (xarray)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#dataset-xarray">Dataset (xarray)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#node">Node</a></li>
 </ul>
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="metadata.html">Metadata and Specs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="specialized-formats.html">Reading and Exporting Specialized Formats</a></li>
@@ -142,21 +142,15 @@ language-agnostic formats and transferred from the service to a client in
 potentially any language.</p>
 <section id="supported-structure-families">
 <h2>Supported structure families<a class="headerlink" href="#supported-structure-families" title="Permalink to this heading">¶</a></h2>
-<p>The most commonly-used structure families are:</p>
+<p>The structure families are:</p>
 <ul class="simple">
 <li><p>array — a strided array, like a <a class="reference external" href="https://numpy.org">numpy</a> array</p></li>
 <li><p>dataframe — tabular data, as in <a class="reference external" href="https://arrow.apache.org">Apache Arrow</a> or
 <a class="reference external" href="https://pandas.pydata.org/">pandas</a></p></li>
-<li><p>node — a grouping of other structures, akin to a directory</p></li>
+<li><p>node — a grouping of other structures, akin to a dictionary or a directory</p></li>
 </ul>
-<p>Additional structures come from
-<a class="reference external" href="https://xarray.pydata.org/en/stable/">xarray</a>. They may be considered
-<em>containers</em> for one or more strided arrays.</p>
-<ul class="simple">
-<li><p>xarray_data_array</p></li>
-<li><p>xarray_dataset</p></li>
-</ul>
-<p>Support for <a class="reference external" href="https://awkward-array.org/">Awkward Array</a> is planned.</p>
+<p>Support for sparse arrays and <a class="reference external" href="https://awkward-array.org/">Awkward Array</a> are
+planned.</p>
 </section>
 <section id="how-structure-is-encoded">
 <h2>How structure is encoded<a class="headerlink" href="#how-structure-is-encoded" title="Permalink to this heading">¶</a></h2>
@@ -165,8 +159,8 @@ the client so that the  client can intelligently request the pieces that it
 wants.</p>
 <p>The structures encodings are designed to be as unoriginal as possible, using
 established standards and, where some invention is required, using established
-names from numpy, pandas/Arrow, xarray, and dask.</p>
-<p>The structures are encoded in two parts:</p>
+names from numpy, pandas/Arrow, and dask.</p>
+<p>Some structures are encoded in two parts:</p>
 <ul class="simple">
 <li><p><strong>Macrostructure</strong> — This is the high-level structure including things like
 shape, chunk shape, number of partitions, and column names. This structure
@@ -370,309 +364,270 @@ We generate this in a similar way.</p></li>
 dask.dataframe. They should enable any client, including in languages other than
 Python, to perform the same function.</p>
 </section>
-<section id="data-array-xarray">
-<h3>Data Array (xarray)<a class="headerlink" href="#data-array-xarray" title="Permalink to this heading">¶</a></h3>
-<p>A
-<a class="reference external" href="http://xarray.pydata.org/en/stable/user-guide/terminology.html#term-DataArray">DataArray</a>
-is an array with labeled dimensions, grouped with optional “coordinates”, which are
-tick labels for the dimensions.</p>
-<p>Here is an example DataArray that holds only an array, without coordinates.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http :8000/node/metadata/structured_data/xarray_data_array | jq .data.attributes.structure
-</pre></div>
-</div>
+<section id="node">
+<h3>Node<a class="headerlink" href="#node" title="Permalink to this heading">¶</a></h3>
+<p>The node structure is a container for other structures. It may be compared to a
+directory, a JSON object, a Python dictionary, or an HDF5 Group. Nodes may contain
+other nodes, any other structure, or a mixture.</p>
+<p>Some nodes contain a small number of children, easy to list in a single request,
+while others may contain many listed via multiple paginated requests. Some Tiled
+deployments currently in use contain nodes with with up to hundreds of thousands
+of children.</p>
+<p>Typically, a node’s structures tell us only how many children it has (<code class="docutils literal notranslate"><span class="pre">count</span></code>).
+The <code class="docutils literal notranslate"><span class="pre">contents</span></code> key is typically set to <code class="docutils literal notranslate"><span class="pre">null</span></code>, which indicates that we will need
+a separate request to fetch information of this node’s children.</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">          </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">          </span><span class="p">],</span><span class="w"></span>
-<span class="w">          </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">          </span><span class="p">]</span><span class="w"></span>
-<span class="w">        </span><span class="p">],</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">          </span><span class="mi">1000</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">        </span><span class="p">],</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">          </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">        </span><span class="p">],</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">      </span><span class="p">},</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">      </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="p">},</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">  </span><span class="p">}</span><span class="w"></span>
+<span class="w">  </span><span class="nt">&quot;contents&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
+<span class="w">  </span><span class="nt">&quot;count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
 </pre></div>
 </div>
-<p>And here is an example DataArray with an array and coordinates:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http :8000/node/metadata/structured_data/image_with_coords | jq .data.attributes.structure
-</pre></div>
-</div>
+<p>In certain cases, it is efficient to in-line all the information about the node’s children
+(their metadata, structure, and more) in a single response.</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">          </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">          </span><span class="p">],</span><span class="w"></span>
-<span class="w">          </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">          </span><span class="p">]</span><span class="w"></span>
+<span class="w">  </span><span class="nt">&quot;contents&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nt">&quot;lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;attributes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;ancestors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;structured_data&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_dataset&quot;</span><span class="w"></span>
 <span class="w">        </span><span class="p">],</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">          </span><span class="mi">1000</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="mi">1000</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;sorting&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;specs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_coord&quot;</span><span class="w"></span>
 <span class="w">        </span><span class="p">],</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">          </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
+<span class="w">              </span><span class="p">],</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
+<span class="w">              </span><span class="p">]</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="w"></span>
+<span class="w">            </span><span class="p">]</span><span class="w"></span>
+<span class="w">          </span><span class="p">},</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">}</span><span class="w"></span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure_family&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;lat&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;links&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;block&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/block/structured_data/xarray_dataset/lat?block={index_0},{index_1}&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;full&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/full/structured_data/xarray_dataset/lat&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;self&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/node/metadata/structured_data/xarray_dataset/lat&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
+<span class="w">    </span><span class="p">},</span><span class="w"></span>
+<span class="w">    </span><span class="nt">&quot;lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;attributes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;ancestors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;structured_data&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_dataset&quot;</span><span class="w"></span>
 <span class="w">        </span><span class="p">],</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;sorting&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;specs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_coord&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">],</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
+<span class="w">              </span><span class="p">],</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
+<span class="w">              </span><span class="p">]</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="w"></span>
+<span class="w">            </span><span class="p">]</span><span class="w"></span>
+<span class="w">          </span><span class="p">},</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">}</span><span class="w"></span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure_family&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="w"></span>
 <span class="w">      </span><span class="p">},</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">      </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="p">},</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="p">[</span><span class="w"></span>
-<span class="w">                  </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">                </span><span class="p">]</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="s2">&quot;x&quot;</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">            </span><span class="p">},</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">            </span><span class="p">}</span><span class="w"></span>
-<span class="w">          </span><span class="p">},</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="s2">&quot;x&quot;</span><span class="w"></span>
-<span class="w">          </span><span class="p">],</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">        </span><span class="p">},</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;lon&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;links&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;block&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/block/structured_data/xarray_dataset/lon?block={index_0},{index_1}&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;full&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/full/structured_data/xarray_dataset/lon&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;self&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/node/metadata/structured_data/xarray_dataset/lon&quot;</span><span class="w"></span>
 <span class="w">      </span><span class="p">},</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="p">[</span><span class="w"></span>
-<span class="w">                  </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">                </span><span class="p">]</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">            </span><span class="p">},</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">            </span><span class="p">}</span><span class="w"></span>
-<span class="w">          </span><span class="p">},</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">          </span><span class="p">],</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">        </span><span class="p">},</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
-<span class="w">      </span><span class="p">}</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
 <span class="w">    </span><span class="p">},</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">      </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">      </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">    </span><span class="p">],</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">  </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-</div>
-</section>
-<section id="dataset-xarray">
-<h3>Dataset (xarray)<a class="headerlink" href="#dataset-xarray" title="Permalink to this heading">¶</a></h3>
-<p>A
-<a class="reference external" href="http://xarray.pydata.org/en/stable/user-guide/terminology.html#term-Dataset">Dataset</a>
-is a dict-like collection of DataArrays that may share coordinates.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ http :8000/node/metadata/structured_data/xarray_dataset | jq .data.attributes.structure
-</pre></div>
-</div>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;data_vars&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;image&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="p">[</span><span class="w"></span>
-<span class="w">                  </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">                </span><span class="p">],</span><span class="w"></span>
-<span class="w">                </span><span class="p">[</span><span class="w"></span>
-<span class="w">                  </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">                </span><span class="p">]</span><span class="w"></span>
+<span class="w">    </span><span class="nt">&quot;precipitation&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;attributes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;ancestors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;structured_data&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_dataset&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">],</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;sorting&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;specs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_data_var&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">],</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
 <span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="mi">1000</span><span class="p">,</span><span class="w"></span>
-<span class="w">                </span><span class="mi">1000</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
 <span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">                </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">            </span><span class="p">},</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">            </span><span class="p">}</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">3</span><span class="w"></span>
+<span class="w">              </span><span class="p">]</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;y&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;time&quot;</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="mi">3</span><span class="w"></span>
+<span class="w">            </span><span class="p">]</span><span class="w"></span>
 <span class="w">          </span><span class="p">},</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">            </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">          </span><span class="p">],</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;image&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">}</span><span class="w"></span>
 <span class="w">        </span><span class="p">},</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure_family&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="w"></span>
 <span class="w">      </span><span class="p">},</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;z&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="p">[</span><span class="w"></span>
-<span class="w">                  </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">                </span><span class="p">]</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="s2">&quot;dim_0&quot;</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">            </span><span class="p">},</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">            </span><span class="p">}</span><span class="w"></span>
-<span class="w">          </span><span class="p">},</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;z&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">        </span><span class="p">},</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
-<span class="w">      </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="p">},</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="p">[</span><span class="w"></span>
-<span class="w">                  </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">                </span><span class="p">]</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="s2">&quot;x&quot;</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">            </span><span class="p">},</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">            </span><span class="p">}</span><span class="w"></span>
-<span class="w">          </span><span class="p">},</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="s2">&quot;x&quot;</span><span class="w"></span>
-<span class="w">          </span><span class="p">],</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">        </span><span class="p">},</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;precipitation&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;links&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;block&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/block/structured_data/xarray_dataset/precipitation?block={index_0},{index_1},{index_2}&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;full&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/full/structured_data/xarray_dataset/precipitation&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;self&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/node/metadata/structured_data/xarray_dataset/precipitation&quot;</span><span class="w"></span>
 <span class="w">      </span><span class="p">},</span><span class="w"></span>
-<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;variable&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="p">[</span><span class="w"></span>
-<span class="w">                  </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">                </span><span class="p">]</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="mi">1000</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">                </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">              </span><span class="p">],</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">            </span><span class="p">},</span><span class="w"></span>
-<span class="w">            </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">              </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="w"></span>
-<span class="w">            </span><span class="p">}</span><span class="w"></span>
-<span class="w">          </span><span class="p">},</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coords&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;coord_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
-<span class="w">            </span><span class="s2">&quot;y&quot;</span><span class="w"></span>
-<span class="w">          </span><span class="p">],</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="p">,</span><span class="w"></span>
-<span class="w">          </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">        </span><span class="p">},</span><span class="w"></span>
-<span class="w">        </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
-<span class="w">      </span><span class="p">}</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
 <span class="w">    </span><span class="p">},</span><span class="w"></span>
-<span class="w">    </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w"></span>
-<span class="w">  </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;attributes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;ancestors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;structured_data&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_dataset&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">],</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;sorting&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;specs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_data_var&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">],</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
+<span class="w">              </span><span class="p">],</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">2</span><span class="w"></span>
+<span class="w">              </span><span class="p">],</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">3</span><span class="w"></span>
+<span class="w">              </span><span class="p">]</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;x&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;y&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;time&quot;</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="mi">2</span><span class="p">,</span><span class="w"></span>
+<span class="w">              </span><span class="mi">3</span><span class="w"></span>
+<span class="w">            </span><span class="p">]</span><span class="w"></span>
+<span class="w">          </span><span class="p">},</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;f&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">}</span><span class="w"></span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure_family&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;temperature&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;links&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;block&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/block/structured_data/xarray_dataset/temperature?block={index_0},{index_1},{index_2}&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;full&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/full/structured_data/xarray_dataset/temperature&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;self&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/node/metadata/structured_data/xarray_dataset/temperature&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
+<span class="w">    </span><span class="p">},</span><span class="w"></span>
+<span class="w">    </span><span class="nt">&quot;time&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;attributes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;ancestors&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;structured_data&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_dataset&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">],</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;sorting&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;specs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;xarray_coord&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">],</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;macro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;chunks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="p">[</span><span class="w"></span>
+<span class="w">                </span><span class="mi">3</span><span class="w"></span>
+<span class="w">              </span><span class="p">]</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;dims&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="s2">&quot;time&quot;</span><span class="w"></span>
+<span class="w">            </span><span class="p">],</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;resizable&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;shape&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">              </span><span class="mi">3</span><span class="w"></span>
+<span class="w">            </span><span class="p">]</span><span class="w"></span>
+<span class="w">          </span><span class="p">},</span><span class="w"></span>
+<span class="w">          </span><span class="nt">&quot;micro&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;endianness&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;little&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;itemsize&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="nt">&quot;kind&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;M&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">}</span><span class="w"></span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;structure_family&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;time&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;links&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;block&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/block/structured_data/xarray_dataset/time?block={index_0}&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;full&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/array/full/structured_data/xarray_dataset/time&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="nt">&quot;self&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/node/metadata/structured_data/xarray_dataset/time&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="nt">&quot;meta&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">  </span><span class="p">},</span><span class="w"></span>
+<span class="w">  </span><span class="nt">&quot;count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
 </pre></div>
 </div>
@@ -685,7 +640,7 @@ is a dict-like collection of DataArrays that may share coordinates.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="standards.html" class="btn btn-neutral float-left" title="Standards Used by Tiled" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="security.html" class="btn btn-neutral float-right" title="Security" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="metadata.html" class="btn btn-neutral float-right" title="Metadata and Specs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

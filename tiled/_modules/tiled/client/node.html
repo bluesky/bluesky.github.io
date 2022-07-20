@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.node &mdash; tiled 0.1.0a65.post6+gee067dd documentation</title>
+  <title>tiled.client.node &mdash; tiled 0.1.0a65.post34+g4e53112 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a65.post6+gee067dd
+                0.1.0a65.post34+g4e53112
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -70,6 +70,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/standards.html">Standards Used by Tiled</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/structures.html">Structures</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/metadata.html">Metadata and Specs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/specialized-formats.html">Reading and Exporting Specialized Formats</a></li>
@@ -130,18 +131,22 @@
 
 <span class="kn">import</span> <span class="nn">entrypoints</span>
 
-<span class="kn">from</span> <span class="nn">..adapters.utils</span> <span class="kn">import</span> <span class="n">IndexersMixin</span><span class="p">,</span> <span class="n">tree_repr</span>
+<span class="kn">from</span> <span class="nn">..adapters.utils</span> <span class="kn">import</span> <span class="n">IndexersMixin</span>
 <span class="kn">from</span> <span class="nn">..iterviews</span> <span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
 <span class="kn">from</span> <span class="nn">..queries</span> <span class="kn">import</span> <span class="n">KeyLookup</span>
 <span class="kn">from</span> <span class="nn">..query_registration</span> <span class="kn">import</span> <span class="n">query_registry</span>
+<span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">serialize_arrow</span>
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">StructureFamily</span>
-<span class="kn">from</span> <span class="nn">..structures.dataframe</span> <span class="kn">import</span> <span class="n">serialize_arrow</span>
-
-<span class="c1"># from ..client.utils import handle_error</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">OneShotCachedMap</span><span class="p">,</span> <span class="n">Sentinel</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span>
+    <span class="n">UNCHANGED</span><span class="p">,</span>
+    <span class="n">OneShotCachedMap</span><span class="p">,</span>
+    <span class="n">Sentinel</span><span class="p">,</span>
+    <span class="n">node_repr</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">BaseClient</span>
 <span class="kn">from</span> <span class="nn">.cache</span> <span class="kn">import</span> <span class="n">Revalidate</span><span class="p">,</span> <span class="n">verify_cache</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">export_util</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">ClientError</span><span class="p">,</span> <span class="n">client_for_item</span><span class="p">,</span> <span class="n">export_util</span>
 
 
 <span class="k">class</span> <span class="nc">Node</span><span class="p">(</span><span class="n">BaseClient</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Mapping</span><span class="p">,</span> <span class="n">IndexersMixin</span><span class="p">):</span>
@@ -159,12 +164,6 @@
                 <span class="s2">&quot;dataframe&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
                     <span class="s2">&quot;..dataframe&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">DataFrameClient</span><span class="p">,</span>
-                <span class="s2">&quot;variable&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
-                    <span class="s2">&quot;..xarray&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">VariableClient</span><span class="p">,</span>
-                <span class="s2">&quot;xarray_data_array&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
-                    <span class="s2">&quot;..xarray&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">DataArrayClient</span><span class="p">,</span>
                 <span class="s2">&quot;xarray_dataset&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
                     <span class="s2">&quot;..xarray&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">DatasetClient</span><span class="p">,</span>
@@ -179,12 +178,6 @@
                 <span class="s2">&quot;dataframe&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
                     <span class="s2">&quot;..dataframe&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">DaskDataFrameClient</span><span class="p">,</span>
-                <span class="s2">&quot;variable&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
-                    <span class="s2">&quot;..xarray&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">DaskVariableClient</span><span class="p">,</span>
-                <span class="s2">&quot;xarray_data_array&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
-                    <span class="s2">&quot;..xarray&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">DaskDataArrayClient</span><span class="p">,</span>
                 <span class="s2">&quot;xarray_dataset&quot;</span><span class="p">:</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span>
                     <span class="s2">&quot;..xarray&quot;</span><span class="p">,</span> <span class="n">Node</span><span class="o">.</span><span class="vm">__module__</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">DaskDatasetClient</span><span class="p">,</span>
@@ -238,7 +231,6 @@
         <span class="n">path</span><span class="p">,</span>
         <span class="n">item</span><span class="p">,</span>
         <span class="n">structure_clients</span><span class="p">,</span>
-        <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">queries</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">sorting</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
@@ -274,7 +266,6 @@
             <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
             <span class="n">item</span><span class="o">=</span><span class="n">item</span><span class="p">,</span>
             <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
-            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
             <span class="n">structure_clients</span><span class="o">=</span><span class="n">structure_clients</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -282,7 +273,7 @@
         <span class="c1"># Display up to the first N keys to avoid making a giant service</span>
         <span class="c1"># request. Use _keys_slicer because it is unauthenticated.</span>
         <span class="n">N</span> <span class="o">=</span> <span class="mi">10</span>
-        <span class="k">return</span> <span class="n">tree_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys_slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">node_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys_slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">sorting</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -324,38 +315,7 @@
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">revalidation</span><span class="p">(</span><span class="n">revalidate</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Node.client_for_item"><a class="viewcode-back" href="../../../reference/generated/tiled.client.node.Node.client_for_item.html#tiled.client.node.Node.client_for_item">[docs]</a>    <span class="k">def</span> <span class="nf">client_for_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Create an instance of the appropriate client class for an item.</span>
-
-<span class="sd">        This is intended primarily for internal use and use by subclasses.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># The server can use specs to tell us that this is not just *any*</span>
-        <span class="c1"># node/array/dataframe/etc. but that is matches a certain specification</span>
-        <span class="c1"># for which there may be a special client available.</span>
-        <span class="c1"># Check each spec in order for a matching structure client. Use the first</span>
-        <span class="c1"># one we find. If we find no structure client for any spec, fall back on</span>
-        <span class="c1"># the default for this structure family.</span>
-        <span class="n">specs</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;specs&quot;</span><span class="p">,</span> <span class="p">[])</span> <span class="ow">or</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">:</span>
-            <span class="n">class_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">class_</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">break</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">structure_family</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure_family&quot;</span><span class="p">]</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">class_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">[</span><span class="n">structure_family</span><span class="p">]</span>
-            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">UnknownStructureFamily</span><span class="p">(</span><span class="n">structure_family</span><span class="p">)</span> <span class="kn">from</span> <span class="bp">None</span>
-        <span class="k">return</span> <span class="n">class_</span><span class="p">(</span>
-            <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
-            <span class="n">item</span><span class="o">=</span><span class="n">item</span><span class="p">,</span>
-            <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
-            <span class="n">structure_clients</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
-            <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
-        <span class="p">)</span></div>
-
-<div class="viewcode-block" id="Node.new_variation"><a class="viewcode-back" href="../../../reference/generated/tiled.client.node.Node.new_variation.html#tiled.client.node.Node.new_variation">[docs]</a>    <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">structure_clients</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
@@ -384,9 +344,15 @@
             <span class="n">queries</span><span class="o">=</span><span class="n">queries</span><span class="p">,</span>
             <span class="n">sorting</span><span class="o">=</span><span class="n">sorting</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># If the contents of this node was provided in-line, there is an</span>
+        <span class="c1"># implication that the contents are not expected to be dynamic. Used the</span>
+        <span class="c1"># count provided in the structure.</span>
+        <span class="n">structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">structure</span><span class="p">[</span><span class="s2">&quot;contents&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">structure</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">]</span>
         <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">length</span><span class="p">,</span> <span class="n">deadline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span>
@@ -399,7 +365,6 @@
                 <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
                 <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span><span class="p">,</span>
                 <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_sorting_params</span><span class="p">,</span>
-                <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">)</span>
         <span class="n">length</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;count&quot;</span><span class="p">]</span>
@@ -411,7 +376,18 @@
         <span class="c1"># https://www.python.org/dev/peps/pep-0424/</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_ignore_inlined_contents</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="c1"># If the contents of this node was provided in-line, and we don&#39;t need</span>
+        <span class="c1"># to apply any filtering or sorting, we can slice the in-lined data</span>
+        <span class="c1"># without fetching anything from the server.</span>
+        <span class="n">contents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;contents&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">contents</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queries</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="p">((</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">sorting</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sorting</span> <span class="o">==</span> <span class="p">[(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]))</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">_ignore_inlined_contents</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">contents</span><span class="p">)</span>
         <span class="n">next_page_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;search&quot;</span><span class="p">]</span>
         <span class="k">while</span> <span class="n">next_page_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
@@ -420,7 +396,6 @@
                     <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
                     <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span><span class="p">,</span>
                     <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_sorting_params</span><span class="p">,</span>
-                    <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
                 <span class="p">},</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="p">(</span>
@@ -431,7 +406,7 @@
                 <span class="k">yield</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
             <span class="n">next_page_url</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">_ignore_inlined_contents</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="c1"># These are equivalent:</span>
         <span class="c1">#</span>
         <span class="c1"># &gt;&gt;&gt; node[&#39;a&#39;][&#39;b&#39;][&#39;c&#39;]</span>
@@ -457,28 +432,55 @@
                 <span class="n">child</span> <span class="o">=</span> <span class="n">child</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
             <span class="k">return</span> <span class="n">child</span>
 
-        <span class="c1"># Lookup this key *within the search results* of this Node.</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;search&quot;</span><span class="p">],</span>
-            <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                <span class="o">**</span><span class="n">_queries_to_params</span><span class="p">(</span><span class="n">KeyLookup</span><span class="p">(</span><span class="n">key</span><span class="p">)),</span>
-                <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span><span class="p">,</span>
-                <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_sorting_params</span><span class="p">,</span>
-                <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
-            <span class="p">},</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queries</span><span class="p">:</span>
+            <span class="c1"># Lookup this key *within the search results* of this Node.</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;search&quot;</span><span class="p">],</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                    <span class="o">**</span><span class="n">_queries_to_params</span><span class="p">(</span><span class="n">KeyLookup</span><span class="p">(</span><span class="n">key</span><span class="p">)),</span>
+                    <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span><span class="p">,</span>
+                    <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_sorting_params</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">content</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;count&quot;</span><span class="p">],</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">+</span> <span class="n">LENGTH_CACHE_TTL</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="p">(</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+            <span class="p">),</span> <span class="s2">&quot;The key lookup query must never result more than one result.&quot;</span>
+            <span class="p">(</span><span class="n">item</span><span class="p">,)</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Straightforwardly look up the key under this node.</span>
+            <span class="c1"># There is no search filter in place, so if it is there</span>
+            <span class="c1"># then we want it.</span>
+
+            <span class="c1"># Sometimes Nodes will in-line their contents (child nodes)</span>
+            <span class="c1"># to reduce latency. This is how we handle xarray Datasets efficiently,</span>
+            <span class="c1"># for example. Use that, if present.</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;contents&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">item</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_ignore_inlined_contents</span><span class="p">:</span>
+                <span class="c1"># The item was not inlined, either because nothing was inlined</span>
+                <span class="c1"># or because it was added after we fetched the inlined contents.</span>
+                <span class="c1"># Make a request for it.</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">self_link</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">self_link</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">):</span>
+                        <span class="n">self_link</span> <span class="o">=</span> <span class="n">self_link</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
+                        <span class="n">self_link</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="n">ClientError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">err</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                    <span class="k">raise</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">client_for_item</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span> <span class="o">+</span> <span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],)</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">content</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;count&quot;</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">+</span> <span class="n">LENGTH_CACHE_TTL</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">data</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="p">(</span>
-            <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-        <span class="p">),</span> <span class="s2">&quot;The key lookup query must never result more than one result.&quot;</span>
-        <span class="p">(</span><span class="n">item</span><span class="p">,)</span> <span class="o">=</span> <span class="n">data</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_for_item</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span> <span class="o">+</span> <span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],))</span>
 
     <span class="k">def</span> <span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
@@ -494,7 +496,21 @@
 
     <span class="c1"># The following two methods are used by keys(), values(), items().</span>
 
-    <span class="k">def</span> <span class="nf">_keys_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">direction</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_keys_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">direction</span><span class="p">,</span> <span class="n">_ignore_inlined_contents</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="c1"># If the contents of this node was provided in-line, and we don&#39;t need</span>
+        <span class="c1"># to apply any filtering or sorting, we can slice the in-lined data</span>
+        <span class="c1"># without fetching anything from the server.</span>
+        <span class="n">contents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;contents&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">contents</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queries</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="p">((</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">sorting</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sorting</span> <span class="o">==</span> <span class="p">[(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]))</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">_ignore_inlined_contents</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">contents</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">direction</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">keys</span><span class="p">))</span>
+            <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">keys</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">direction</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">sorting_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sorting_params</span>
         <span class="k">else</span><span class="p">:</span>
@@ -510,7 +526,6 @@
                     <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
                     <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span><span class="p">,</span>
                     <span class="o">**</span><span class="n">sorting_params</span><span class="p">,</span>
-                    <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
                 <span class="p">},</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="p">(</span>
@@ -523,7 +538,28 @@
                 <span class="k">yield</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
             <span class="n">next_page_url</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="nf">_items_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">direction</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_items_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">direction</span><span class="p">,</span> <span class="n">_ignore_inlined_contents</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="c1"># If the contents of this node was provided in-line, and we don&#39;t need</span>
+        <span class="c1"># to apply any filtering or sorting, we can slice the in-lined data</span>
+        <span class="c1"># without fetching anything from the server.</span>
+        <span class="n">contents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;contents&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">contents</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queries</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="p">((</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">sorting</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sorting</span> <span class="o">==</span> <span class="p">[(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]))</span>
+            <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">_ignore_inlined_contents</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">contents</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">direction</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">items</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]:</span>
+                <span class="k">yield</span> <span class="n">key</span><span class="p">,</span> <span class="n">client_for_item</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
+                    <span class="n">item</span><span class="p">,</span>
+                    <span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span> <span class="o">+</span> <span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],),</span>
+                <span class="p">)</span>
+            <span class="k">return</span>
         <span class="k">if</span> <span class="n">direction</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">sorting_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sorting_params</span>
         <span class="k">else</span><span class="p">:</span>
@@ -535,7 +571,7 @@
         <span class="k">while</span> <span class="n">next_page_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
                 <span class="n">next_page_url</span><span class="p">,</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span><span class="p">,</span> <span class="o">**</span><span class="n">sorting_params</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">},</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span><span class="p">,</span> <span class="o">**</span><span class="n">sorting_params</span><span class="p">},</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">content</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;count&quot;</span><span class="p">],</span>
@@ -546,7 +582,12 @@
                 <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">next</span><span class="p">(</span><span class="n">item_counter</span><span class="p">)</span> <span class="o">==</span> <span class="n">stop</span><span class="p">:</span>
                     <span class="k">return</span>
                 <span class="n">key</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
-                <span class="k">yield</span> <span class="n">key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_for_item</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span> <span class="o">+</span> <span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],))</span>
+                <span class="k">yield</span> <span class="n">key</span><span class="p">,</span> <span class="n">client_for_item</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
+                    <span class="n">item</span><span class="p">,</span>
+                    <span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span> <span class="o">+</span> <span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],),</span>
+                <span class="p">)</span>
             <span class="n">next_page_url</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">]</span>
 
 <div class="viewcode-block" id="Node.keys"><a class="viewcode-back" href="../../../reference/generated/tiled.client.node.Node.keys.html#tiled.client.node.Node.keys">[docs]</a>    <span class="k">def</span> <span class="nf">keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -587,14 +628,16 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">sorting</span><span class="o">=</span><span class="n">sorting</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filepath</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filepath</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Download all metadata and data below this node in some format and write to a file.</span>
+<span class="sd">        Download metadata and data below this node in some format and write to a file.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        file: str or buffer</span>
 <span class="sd">            Filepath or writeable buffer.</span>
+<span class="sd">        fields: List[str], optional</span>
+<span class="sd">            Filter which items in this node to export.</span>
 <span class="sd">        format : str, optional</span>
 <span class="sd">            If format is None and `file` is a filepath, the format is inferred</span>
 <span class="sd">            from the name, like &#39;table.h5&#39; implies format=&quot;application/x-hdf5&quot;. The format</span>
@@ -780,10 +823,6 @@
             <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">params</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;filter[</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">][condition][</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
     <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
-
-
-<span class="k">class</span> <span class="nc">UnknownStructureFamily</span><span class="p">(</span><span class="ne">KeyError</span><span class="p">):</span>
-    <span class="k">pass</span>
 
 
 <span class="n">LENGTH_CACHE_TTL</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># second</span>

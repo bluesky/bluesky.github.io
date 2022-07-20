@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a65.post6+gee067dd documentation</title>
+  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a65.post34+g4e53112 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a65.post6+gee067dd
+                0.1.0a65.post34+g4e53112
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -70,6 +70,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/standards.html">Standards Used by Tiled</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/structures.html">Structures</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/metadata.html">Metadata and Specs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/specialized-formats.html">Reading and Exporting Specialized Formats</a></li>
@@ -119,13 +120,8 @@
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.structures.dataframe</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">io</span>
-<span class="kn">import</span> <span class="nn">mimetypes</span>
-<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span></span><span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
-
-<span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="n">deserialization_registry</span><span class="p">,</span> <span class="n">serialization_registry</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span> <span class="n">modules_available</span>
 
 
 <div class="viewcode-block" id="DataFrameMicroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameMicroStructure.html#tiled.structures.dataframe.DataFrameMicroStructure">[docs]</a><span class="nd">@dataclass</span>
@@ -139,6 +135,9 @@
         <span class="c1"># TODO Look at make_meta_nonempty to see if the &quot;objects&quot; are str or</span>
         <span class="c1"># datetime or actually generic objects.</span>
         <span class="kn">import</span> <span class="nn">dask.dataframe.utils</span>
+        <span class="kn">import</span> <span class="nn">pandas</span>
+
+        <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">serialize_arrow</span>
 
         <span class="n">meta</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">serialize_arrow</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">),</span> <span class="p">{}))</span>
         <span class="n">divisions</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span>
@@ -153,6 +152,9 @@
         <span class="c1"># datetime or actually generic objects.</span>
         <span class="kn">import</span> <span class="nn">dask.dataframe</span>
         <span class="kn">import</span> <span class="nn">dask.dataframe.utils</span>
+        <span class="kn">import</span> <span class="nn">pandas</span>
+
+        <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">serialize_arrow</span>
 
         <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">npartitions</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">meta</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">serialize_arrow</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">),</span> <span class="p">{}))</span>
@@ -180,114 +182,15 @@
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
-        <span class="n">divisions_wrapped_in_df</span> <span class="o">=</span> <span class="n">deserialization_registry</span><span class="p">(</span>
-            <span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;divisions&quot;</span><span class="p">]</span>
-        <span class="p">)</span>
+        <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">deserialize_arrow</span>
+
+        <span class="n">divisions_wrapped_in_df</span> <span class="o">=</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;divisions&quot;</span><span class="p">])</span>
         <span class="n">divisions</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">divisions_wrapped_in_df</span><span class="p">[</span><span class="s2">&quot;divisions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
-        <span class="n">meta</span> <span class="o">=</span> <span class="n">deserialization_registry</span><span class="p">(</span>
-            <span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">]</span>
-        <span class="p">)</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">])</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">micro</span><span class="o">=</span><span class="n">DataFrameMicroStructure</span><span class="p">(</span><span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span> <span class="n">divisions</span><span class="o">=</span><span class="n">divisions</span><span class="p">),</span>
             <span class="n">macro</span><span class="o">=</span><span class="n">DataFrameMacroStructure</span><span class="p">(</span><span class="o">**</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;macro&quot;</span><span class="p">]),</span>
         <span class="p">)</span></div>
-
-
-<span class="k">def</span> <span class="nf">serialize_arrow</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
-    <span class="kn">import</span> <span class="nn">pyarrow</span>
-
-    <span class="n">table</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
-    <span class="n">sink</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">BufferOutputStream</span><span class="p">()</span>
-    <span class="k">with</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">ipc</span><span class="o">.</span><span class="n">new_file</span><span class="p">(</span><span class="n">sink</span><span class="p">,</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">)</span> <span class="k">as</span> <span class="n">writer</span><span class="p">:</span>
-        <span class="n">writer</span><span class="o">.</span><span class="n">write_table</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">memoryview</span><span class="p">(</span><span class="n">sink</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span>
-
-
-<span class="k">def</span> <span class="nf">deserialize_arrow</span><span class="p">(</span><span class="n">buffer</span><span class="p">):</span>
-    <span class="kn">import</span> <span class="nn">pyarrow</span>
-
-    <span class="k">return</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">ipc</span><span class="o">.</span><span class="n">open_file</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span><span class="o">.</span><span class="n">read_pandas</span><span class="p">()</span>
-
-
-<span class="k">def</span> <span class="nf">serialize_parquet</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
-    <span class="kn">import</span> <span class="nn">pyarrow.parquet</span>
-
-    <span class="n">table</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
-    <span class="n">sink</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">BufferOutputStream</span><span class="p">()</span>
-    <span class="k">with</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">parquet</span><span class="o">.</span><span class="n">ParquetWriter</span><span class="p">(</span><span class="n">sink</span><span class="p">,</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">)</span> <span class="k">as</span> <span class="n">writer</span><span class="p">:</span>
-        <span class="n">writer</span><span class="o">.</span><span class="n">write_table</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">memoryview</span><span class="p">(</span><span class="n">sink</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span>
-
-
-<span class="k">def</span> <span class="nf">serialize_csv</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
-    <span class="n">file</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">()</span>
-    <span class="n">df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">file</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
-
-
-<span class="k">def</span> <span class="nf">serialize_excel</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
-    <span class="n">file</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
-    <span class="n">df</span><span class="o">.</span><span class="n">to_excel</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">file</span><span class="o">.</span><span class="n">getbuffer</span><span class="p">()</span>
-
-
-<span class="k">def</span> <span class="nf">serialize_html</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
-    <span class="n">file</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">()</span>
-    <span class="n">df</span><span class="o">.</span><span class="n">to_html</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">file</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
-
-
-<span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="n">serialize_arrow</span>
-<span class="p">)</span>
-<span class="n">deserialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="n">deserialize_arrow</span>
-<span class="p">)</span>
-<span class="c1"># There seems to be no official Parquet MIME type.</span>
-<span class="c1"># https://issues.apache.org/jira/browse/PARQUET-1889</span>
-<span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="s2">&quot;application/x-parquet&quot;</span><span class="p">,</span> <span class="n">serialize_parquet</span><span class="p">)</span>
-<span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="s2">&quot;text/csv&quot;</span><span class="p">,</span> <span class="n">serialize_csv</span><span class="p">)</span>
-<span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="s2">&quot;text/plain&quot;</span><span class="p">,</span> <span class="n">serialize_csv</span><span class="p">)</span>
-<span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="s2">&quot;text/html&quot;</span><span class="p">,</span> <span class="n">serialize_html</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;openpyxl&quot;</span><span class="p">,</span> <span class="s2">&quot;pandas&quot;</span><span class="p">):</span>
-    <span class="c1"># The optional pandas dependency openpyxel is required for Excel read/write.</span>
-    <span class="kn">import</span> <span class="nn">pandas</span>
-
-    <span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span> <span class="n">serialize_excel</span><span class="p">)</span>
-    <span class="n">deserialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="n">XLSX_MIME_TYPE</span><span class="p">,</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_excel</span><span class="p">)</span>
-    <span class="n">mimetypes</span><span class="o">.</span><span class="n">types_map</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;.xlsx&quot;</span><span class="p">,</span> <span class="n">XLSX_MIME_TYPE</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;orjson&quot;</span><span class="p">):</span>
-    <span class="kn">import</span> <span class="nn">orjson</span>
-
-    <span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-        <span class="s2">&quot;dataframe&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
-        <span class="k">lambda</span> <span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">orjson</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
-            <span class="p">{</span><span class="n">column</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">df</span><span class="p">},</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Newline-delimited JSON. For example, this DataFrame:</span>
-    <span class="c1">#</span>
-    <span class="c1"># &gt;&gt;&gt; pandas.DataFrame({&quot;a&quot;: [1,2,3], &quot;b&quot;: [4,5,6]})</span>
-    <span class="c1">#</span>
-    <span class="c1"># renders as this multi-line output:</span>
-    <span class="c1">#</span>
-    <span class="c1"># {&#39;a&#39;: 1, &#39;b&#39;: 4}</span>
-    <span class="c1"># {&#39;a&#39;: 2, &#39;b&#39;: 5}</span>
-    <span class="c1"># {&#39;a&#39;: 3, &#39;b&#39;: 6}</span>
-    <span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-        <span class="s2">&quot;dataframe&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;application/json-seq&quot;</span><span class="p">,</span>  <span class="c1"># official mimetype for newline-delimited JSON</span>
-        <span class="k">lambda</span> <span class="n">df</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">orjson</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()]</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-
-<span class="k">if</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;h5py&quot;</span><span class="p">):</span>
-    <span class="kn">from</span> <span class="nn">.node</span> <span class="kn">import</span> <span class="n">serialize_hdf5</span>
-
-    <span class="n">serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;dataframe&quot;</span><span class="p">,</span> <span class="s2">&quot;application/x-hdf5&quot;</span><span class="p">,</span> <span class="n">serialize_hdf5</span><span class="p">)</span>
 </pre></div>
 
            </div>
