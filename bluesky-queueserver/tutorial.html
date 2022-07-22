@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Basic Tutorials &mdash; bluesky-queueserver 0.post1+gc6051b0 documentation</title>
+  <title>Basic Tutorials &mdash; bluesky-queueserver 0.post1+g7ba7bf9 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -33,7 +33,7 @@
             <a href="index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+gc6051b0
+                0.post1+g7ba7bf9
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -51,6 +51,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#adding-items-to-queue">Adding Items to Queue</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#starting-and-stopping-the-queue">Starting and Stopping the Queue</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#interacting-with-run-engine">Interacting with Run Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#locking-re-manager">Locking RE Manager</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#running-re-manager-with-custom-startup-code">Running RE Manager with Custom Startup Code</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#manually-generating-lists-of-existing-plans-and-devices">Manually Generating Lists of Existing Plans and Devices</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#remote-monitoring-of-re-manager-console-output">Remote Monitoring of RE Manager Console Output</a></li>
@@ -868,6 +869,229 @@ $ qserver re halt
 </pre></div>
 </div>
 <p>API used in this tutorial: <a class="reference internal" href="re_manager_api.html#method-status"><span class="std std-ref">‘status’</span></a>, <a class="reference internal" href="re_manager_api.html#method-re-pause"><span class="std std-ref">‘re_pause’</span></a>, <a class="reference internal" href="re_manager_api.html#method-re-resume-stop-abort-halt"><span class="std std-ref">‘re_resume’, ‘re_stop’, ‘re_abort’, ‘re_halt’</span></a>.</p>
+</section>
+<section id="locking-re-manager">
+<span id="locking-re-manager-tutorial"></span><h2>Locking RE Manager<a class="headerlink" href="#locking-re-manager" title="Permalink to this heading">¶</a></h2>
+<p>RE Manager can be temporarily locked by a user using a ‘secret’ key. The user is expected to
+remember (or keep) the key and unlock the manager when safe. The user may choose to
+lock the worker environment and/or the queue which prevents other users
+to change the state of environment (start the queue, run plans, upload scripts etc.) or
+the queue (add, edit or reorder plans in the queue etc.) unless they are provided with the key.
+For more detailed description see <a class="reference internal" href="features_and_config.html#locking-re-manager"><span class="std std-ref">Locking RE Manager</span></a>.</p>
+<p>Start RE Manager using instructions given in <a class="reference internal" href="#tutorial-starting-queue-server"><span class="std std-ref">Starting the Queue Server</span></a>.</p>
+<p>Check the status of RE Manager:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver status
+Arguments: [&#39;status&#39;]
+08:40:21 - MESSAGE:
+{ ...
+&#39;lock&#39;: {&#39;environment&#39;: False, &#39;queue&#39;: False},
+&#39;lock_info_uid&#39;: &#39;8a9a76c3-8e27-4084-8bf9-6b6b39d0fdc9&#39;,
+... }
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">lock</span></code> parameter indicates if the environment and the queue are locked, <code class="docutils literal notranslate"><span class="pre">lock_info_uid</span></code>
+is updated each time the lock status is changed and intended for use by monitoring client
+applications.</p>
+<p>Load the lock status:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver lock info
+Arguments: [&#39;lock&#39;, &#39;info&#39;]
+08:47:34 - MESSAGE:
+{&#39;lock_info&#39;: {&#39;emergency_lock_key_is_set&#39;: False,
+              &#39;environment&#39;: False,
+              &#39;note&#39;: None,
+              &#39;queue&#39;: False,
+              &#39;time&#39;: None,
+              &#39;time_str&#39;: &#39;&#39;,
+              &#39;uid&#39;: &#39;8a9a76c3-8e27-4084-8bf9-6b6b39d0fdc9&#39;,
+              &#39;user&#39;: None},
+&#39;msg&#39;: &#39;&#39;,
+&#39;success&#39;: True}
+</pre></div>
+</div>
+<p>When the manager is locked, the status includes the name of the user (<code class="docutils literal notranslate"><span class="pre">user</span></code>) who applied
+the lock, time (<code class="docutils literal notranslate"><span class="pre">time</span></code>, <code class="docutils literal notranslate"><span class="pre">time_str</span></code>) when the lock was applied and optional note (<code class="docutils literal notranslate"><span class="pre">note</span></code>)
+for other users of the system, explaining the reason why the lock was applied.
+The parameter <code class="docutils literal notranslate"><span class="pre">emergency_lock_key_is_set</span></code> (<code class="docutils literal notranslate"><span class="pre">False</span></code>) indicates that the emergency key is
+not set and the manager can be unlocked only only with the key used to lock it.</p>
+<p>Lock the environment with a note:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key userlockkey lock environment &quot;The environment is locked. Do not unlock environment!&quot;
+Arguments: [&#39;lock&#39;, &#39;environment&#39;, &#39;The environment is locked. Do not unlock environment!&#39;]
+09:02:17 - MESSAGE:
+{&#39;lock_info&#39;: {&#39;emergency_lock_key_is_set&#39;: False,
+              &#39;environment&#39;: True,
+              &#39;note&#39;: &#39;The environment is locked. Do not unlock environment!&#39;,
+              &#39;queue&#39;: False,
+              &#39;time&#39;: 1658494937.2947958,
+              &#39;time_str&#39;: &#39;07/22/2022 09:02:17&#39;,
+              &#39;uid&#39;: &#39;14425949-74e3-4a46-9e6d-8ea9123ea760&#39;,
+              &#39;user&#39;: &#39;qserver-cli&#39;},
+&#39;msg&#39;: &#39;&#39;,
+&#39;success&#39;: True}
+</pre></div>
+</div>
+<p>The lock key can be aribtrarily selected by the user who locks the manager (in this example the key is
+<code class="docutils literal notranslate"><span class="pre">userlockkey</span></code>). The parameters <code class="docutils literal notranslate"><span class="pre">user</span></code>, <code class="docutils literal notranslate"><span class="pre">time</span></code>, <code class="docutils literal notranslate"><span class="pre">time_str</span></code> and <code class="docutils literal notranslate"><span class="pre">note</span></code> are properly set
+now and the parameter <code class="docutils literal notranslate"><span class="pre">environment</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">qserver</span> <span class="pre">lock</span> <span class="pre">info</span></code> may be used to validate the lock key. The call always succeeds if called
+without the lock key. If the manager is locked, then the included key is validated and
+the call succeeds only if the key is valid. Try validating an invalid key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key someinvalidkey lock info
+Arguments: [&#39;lock&#39;, &#39;info&#39;]
+09:58:38 - MESSAGE:
+{&#39;lock_info&#39;: {&#39;emergency_lock_key_is_set&#39;: False,
+              &#39;environment&#39;: True,
+              &#39;note&#39;: &#39;The environment is locked. Do not unlock environment!&#39;,
+              &#39;queue&#39;: False,
+              &#39;time&#39;: 1658494937.2947958,
+              &#39;time_str&#39;: &#39;07/22/2022 09:02:17&#39;,
+              &#39;uid&#39;: &#39;14425949-74e3-4a46-9e6d-8ea9123ea760&#39;,
+              &#39;user&#39;: &#39;qserver-cli&#39;},
+&#39;msg&#39;: &#39;Error: Invalid lock key: \n&#39;
+        &#39;RE Manager is locked by qserver-cli at 07/22/2022 09:02:17\n&#39;
+        &#39;Environment is locked: True\n&#39;
+        &#39;Queue is locked:       False\n&#39;
+        &#39;Emergency lock key:    not set\n&#39;
+        &#39;Note: The environment is locked. Do not unlock environment!&#39;,
+&#39;success&#39;: False}
+</pre></div>
+</div>
+<p>The call fails (<code class="docutils literal notranslate"><span class="pre">'success':</span> <span class="pre">False</span></code>) and the error message indicates that the lock key is invalid.
+Try validating the valid key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key userlockkey lock info
+Arguments: [&#39;lock&#39;, &#39;info&#39;]
+10:00:42 - MESSAGE:
+{&#39;lock_info&#39;: {&#39;emergency_lock_key_is_set&#39;: False,
+              &#39;environment&#39;: True,
+              &#39;note&#39;: &#39;The environment is locked. Do not unlock environment!&#39;,
+              &#39;queue&#39;: False,
+              &#39;time&#39;: 1658494937.2947958,
+              &#39;time_str&#39;: &#39;07/22/2022 09:02:17&#39;,
+              &#39;uid&#39;: &#39;14425949-74e3-4a46-9e6d-8ea9123ea760&#39;,
+              &#39;user&#39;: &#39;qserver-cli&#39;},
+&#39;msg&#39;: &#39;&#39;,
+&#39;success&#39;: True}
+</pre></div>
+</div>
+<p>Since the environment is locked, all operations that change the state of environment, such as
+opening and closing the environment, starting the queue etc., can be executed only if a valid
+lock key is included in the call. Try opening the environment without the lock key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver environment open
+Arguments: [&#39;environment&#39;, &#39;open&#39;]
+10:05:29 - MESSAGE:
+{&#39;msg&#39;: &#39;Error: Invalid lock key: \n&#39;
+        &#39;RE Manager is locked by qserver-cli at 07/22/2022 09:02:17\n&#39;
+        &#39;Environment is locked: True\n&#39;
+        &#39;Queue is locked:       False\n&#39;
+        &#39;Emergency lock key:    not set\n&#39;
+        &#39;Note: The environment is locked. Do not unlock environment!&#39;,
+&#39;success&#39;: False}
+</pre></div>
+</div>
+<p>Now try opening the environment with the lock key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key userlockkey environment open
+Arguments: [&#39;environment&#39;, &#39;open&#39;]
+10:06:11 - MESSAGE:
+{&#39;msg&#39;: &#39;&#39;, &#39;success&#39;: True}
+</pre></div>
+</div>
+<p>The operation succeeded. Now close the environment with the lock key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key userlockkey environment close
+Arguments: [&#39;environment&#39;, &#39;close&#39;]
+10:07:39 - MESSAGE:
+{&#39;msg&#39;: &#39;&#39;, &#39;success&#39;: True}
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">qserver</span> <span class="pre">lock</span></code> also allows to lock the queue (blocks access to queue operations)
+or both the environment and the queue. Try to lock the queue (optionally add the note):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key userlockkey lock queue
+Arguments: [&#39;lock&#39;, &#39;queue&#39;]
+11:38:52 - MESSAGE:
+{&#39;lock_info&#39;: {&#39;emergency_lock_key_is_set&#39;: False,
+              &#39;environment&#39;: False,
+              &#39;note&#39;: None,
+              &#39;queue&#39;: True,
+              &#39;time&#39;: 1658504332.600997,
+              &#39;time_str&#39;: &#39;07/22/2022 11:38:52&#39;,
+              &#39;uid&#39;: &#39;fb68edde-2b81-4afa-87fe-ca823d1462c0&#39;,
+              &#39;user&#39;: &#39;qserver-cli&#39;},
+&#39;msg&#39;: &#39;&#39;,
+&#39;success&#39;: True}
+</pre></div>
+</div>
+<p>and add plans to the queue with and without the <code class="docutils literal notranslate"><span class="pre">--lock-key</span></code> parameter, then
+lock the environment and the queue:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key userlockkey lock all
+Arguments: [&#39;lock&#39;, &#39;all&#39;]
+11:39:36 - MESSAGE:
+{&#39;lock_info&#39;: {&#39;emergency_lock_key_is_set&#39;: False,
+              &#39;environment&#39;: True,
+              &#39;note&#39;: None,
+              &#39;queue&#39;: True,
+              &#39;time&#39;: 1658504376.2635381,
+              &#39;time_str&#39;: &#39;07/22/2022 11:39:36&#39;,
+              &#39;uid&#39;: &#39;3fe32305-885b-4e02-b7dd-84ee0055ea1c&#39;,
+              &#39;user&#39;: &#39;qserver-cli&#39;},
+&#39;msg&#39;: &#39;&#39;,
+&#39;success&#39;: True}
+</pre></div>
+</div>
+<p>The lock may be applied repeatedly to the locked manager to change the lock options as long as
+the valid lock key is passed. The lock key can not be changed without unlocking the manager.</p>
+<p>To unlock the manager run <code class="docutils literal notranslate"><span class="pre">qserver</span> <span class="pre">unlock</span></code> with the valid lock key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ qserver --lock-key userlockkey unlock
+Arguments: [&#39;unlock&#39;]
+11:29:52 - MESSAGE:
+{&#39;lock_info&#39;: {&#39;emergency_lock_key_is_set&#39;: False,
+              &#39;environment&#39;: False,
+              &#39;note&#39;: None,
+              &#39;queue&#39;: False,
+              &#39;time&#39;: None,
+              &#39;time_str&#39;: &#39;&#39;,
+              &#39;uid&#39;: &#39;5b11f439-b297-449e-b7e8-c96fd264460c&#39;,
+              &#39;user&#39;: None},
+&#39;msg&#39;: &#39;&#39;,
+&#39;success&#39;: True}
+</pre></div>
+</div>
+<p>The lock status is stored in Redis and persists between sessions, i.e. restarting RE Manager
+does not clear the lock. If the key is lost, then the manager can be unlocked using
+an optional emergency lock key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span># Start RE Manager with the emergency lock key
+QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER=emlockkey start-re-manager
+
+# Lock the environment
+$ qserver --lock-key key-to-forget lock environment
+
+# Assume that the key is lost. Unlock the manager with the emergency key.
+$ qserver --lock-key emlockkey unlock
+
+# Check lock status. The manager should be unlocked.
+$ qserver lock info
+</pre></div>
+</div>
+<p>If the emergency key is not set, then the lock can be
+cleared by running <a class="reference internal" href="cli_tools.html#qserver-clear-lock-cli"><span class="std std-ref">qserver-clear-lock</span></a> CLI tool and then restarting RE Manager
+service or application. The tool requires access to Redis server used by RE Manager.
+The following steps illustrate the procedure:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span># Start RE Manager.
+
+# Lock the environment
+$ qserver --lock-key key-to-forget lock environment
+
+# Check lock status
+$ qserver lock info
+
+# Assume that the key is lost. Clear the lock in Redis. Pass &#39;--redis-addr&#39; if needed.
+qserver-clear-lock
+
+# Stop and restart RE Manager application.
+
+# Check lock status. The manager should be unlocked.
+$ qserver lock info
+</pre></div>
+</div>
+<p>API used in this tutorial: <a class="reference internal" href="re_manager_api.html#method-lock"><span class="std std-ref">‘lock’</span></a>, <a class="reference internal" href="re_manager_api.html#method-lock-info"><span class="std std-ref">‘lock_info’</span></a>, <a class="reference internal" href="re_manager_api.html#method-unlock"><span class="std std-ref">‘unlock’</span></a>,
+<a class="reference internal" href="re_manager_api.html#method-status"><span class="std std-ref">‘status’</span></a>, <a class="reference internal" href="re_manager_api.html#method-environment-open"><span class="std std-ref">‘environment_open’</span></a>, <a class="reference internal" href="re_manager_api.html#method-environment-close"><span class="std std-ref">‘environment_close’</span></a>.</p>
 </section>
 <section id="running-re-manager-with-custom-startup-code">
 <span id="tutorial-running-custom-startup-code"></span><h2>Running RE Manager with Custom Startup Code<a class="headerlink" href="#running-re-manager-with-custom-startup-code" title="Permalink to this heading">¶</a></h2>
