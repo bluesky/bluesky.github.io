@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver_api.api_base &mdash; Bluesky Queue Server API 0.post1+g9139bc2 documentation</title>
+  <title>bluesky_queueserver_api.api_base &mdash; Bluesky Queue Server API 0.post1+gaaf3ea9 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../index.html" class="icon icon-home"> Bluesky Queue Server API
           </a>
               <div class="version">
-                0.post1+g9139bc2
+                0.post1+gaaf3ea9
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -74,6 +74,10 @@
 <span></span><span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Iterable</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">getpass</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">secrets</span>
+
 
 <span class="kn">from</span> <span class="nn">.item</span> <span class="kn">import</span> <span class="n">BItem</span>
 
@@ -261,6 +265,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_devices_existing_uid</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_current_run_list_uid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_lock_info</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_current_lock_info_uid</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock_key</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_default_lock_key_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">(),</span> <span class="s2">&quot;.config&quot;</span><span class="p">,</span> <span class="s2">&quot;qserver&quot;</span><span class="p">,</span> <span class="s2">&quot;default_lock_key.txt&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_enable_locked_api</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">_check_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">name_in_msg</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -692,6 +702,198 @@
         <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_add_request_param</span><span class="p">(</span><span class="n">request_params</span><span class="p">,</span> <span class="s2">&quot;option&quot;</span><span class="p">,</span> <span class="n">option</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_validate_lock_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lock_key</span><span class="p">):</span>
+        <span class="c1"># lock key may be a non-empty string or None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">lock_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lock_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">lock_key</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Parameter &#39;lock_key&#39; must be non-empty string or None: lock_key=</span><span class="si">{</span><span class="n">lock_key</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_lock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">environment</span><span class="p">,</span> <span class="n">queue</span><span class="p">,</span> <span class="n">lock_key</span><span class="p">,</span> <span class="n">note</span><span class="p">):</span>
+        <span class="c1"># Lock key may be None. Use self.lock_key in this case.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_lock_key</span><span class="p">(</span><span class="n">lock_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">lock_key</span><span class="p">:</span>
+            <span class="n">lock_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lock_key</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">lock_key</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to format the &#39;lock&#39; request: Lock key is not set&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">note</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="kc">None</span><span class="p">))):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Parameter &#39;note&#39; must be a string or None: note=</span><span class="si">{</span><span class="n">note</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">environment</span><span class="p">,</span> <span class="n">queue</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">environment</span><span class="p">),</span> <span class="nb">bool</span><span class="p">(</span><span class="n">queue</span><span class="p">)</span>
+
+        <span class="n">request_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">environment</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;environment&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">environment</span>
+        <span class="k">if</span> <span class="n">queue</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;queue&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">queue</span>
+        <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;lock_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">lock_key</span>
+        <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user</span>
+        <span class="k">if</span> <span class="n">note</span><span class="p">:</span>
+            <span class="n">request_params</span><span class="p">[</span><span class="s2">&quot;note&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">note</span>
+
+        <span class="k">return</span> <span class="n">request_params</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_unlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">lock_key</span><span class="p">):</span>
+        <span class="c1"># Lock key may be None. Use self.lock_key in this case.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_lock_key</span><span class="p">(</span><span class="n">lock_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">lock_key</span><span class="p">:</span>
+            <span class="n">lock_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lock_key</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">lock_key</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to format the &#39;unlock&#39; request: Lock key is not set&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;lock_key&quot;</span><span class="p">:</span> <span class="n">lock_key</span><span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_lock_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">lock_key</span><span class="p">):</span>
+        <span class="c1"># Lock key may be None.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_lock_key</span><span class="p">(</span><span class="n">lock_key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;lock_key&quot;</span><span class="p">:</span> <span class="n">lock_key</span><span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_process_response_lock_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``lock_info``: process response</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_lock_info</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;lock_info&quot;</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_current_lock_info_uid</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="s2">&quot;lock_info_uid&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">_generate_response_lock_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        ``lock_info``: generate response based on cached data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;success&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;lock_info_uid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_current_lock_info_uid</span><span class="p">,</span>
+            <span class="s2">&quot;lock_info&quot;</span><span class="p">:</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_current_lock_info</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">response</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">default_lock_key_path</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_lock_key_path</span>
+
+    <span class="nd">@default_lock_key_path</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">default_lock_key_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lock_key_path</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get/set path of the file with the default lock key. The default path is</span>
+<span class="sd">        ``&lt;user-home-dir&gt;.config/qserver/default_lock_key.txt``. In some workflows</span>
+<span class="sd">        it may be useful to set a different path.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_default_lock_key_path</span> <span class="o">=</span> <span class="n">lock_key_path</span>
+
+    <span class="k">def</span> <span class="nf">get_default_lock_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_key</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the default lock key. The key is stored in a file ``.config/qserver/default_lock_key.txt``.</span>
+<span class="sd">        The key is load from disk each time the method is called. If the key (the file) does not exist</span>
+<span class="sd">        or the method parameter ``new_key`` is ``True``, then the new key is generated and saved to file.</span>
+<span class="sd">        A specific default key may be manually set and saved to file using ``set_default_lock_key()`` API.</span>
+
+<span class="sd">        The default lock key is used for storage of the key so that it could be reused between</span>
+<span class="sd">        sessions. The default key is not used directly by other API. Typically the initialization</span>
+<span class="sd">        script for the session should initialize the current lock key with the default lock key::</span>
+
+<span class="sd">          RM.lock_key = RM.get_default_lock_key()</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_key: boolean</span>
+<span class="sd">            Set this parameter ``True`` to generate a new default lock key.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            The default lock key.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_lock_key_path</span><span class="p">)</span> <span class="ow">or</span> <span class="n">new_key</span><span class="p">:</span>
+            <span class="n">lock_key</span> <span class="o">=</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_urlsafe</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_default_lock_key</span><span class="p">(</span><span class="n">lock_key</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_lock_key_path</span><span class="p">,</span> <span class="s2">&quot;rt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">lock_key</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">lock_key</span>
+
+    <span class="k">def</span> <span class="nf">set_default_lock_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lock_key</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set the default lock key. The lock key must be a non-empty string. The key is saved</span>
+<span class="sd">        to a file on disk and loaded each time ``get_default_lock_key()`` method is called.</span>
+<span class="sd">        See the description for ``get_default_lock_key()`` for more information.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        lock_key: str</span>
+<span class="sd">            The new lock key.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        None</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        IOError</span>
+<span class="sd">            Error while saving the lock key to disk or the lock key is invalid.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">lock_key</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lock_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;lock_key&#39; must be a non-empty string: lock_key=</span><span class="si">{</span><span class="n">lock_key</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">lock_key_path</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_lock_key_path</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">lock_key_path</span><span class="p">):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">lock_key_path</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Path </span><span class="si">{</span><span class="n">lock_key_path</span><span class="si">!r}</span><span class="s2"> exists, but it is not a directory&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">lock_key_path</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_lock_key_path</span><span class="p">,</span> <span class="s2">&quot;wt&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">lock_key</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to save the default lock key: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">lock_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get/set current lock key. The current lock key is used for locking/unlocking RE Manager</span>
+<span class="sd">        unless the key is explicitly passed as ``lock_key`` parameter. The current key is also</span>
+<span class="sd">        passed with other API if locked API are enabled (``enable_locked_api`` is ``True``).</span>
+<span class="sd">        Setting the current lock key to ``None`` clears the lock key and disables access to</span>
+<span class="sd">        locked API. A valid current lock key must be set before access to locked API is enabled.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            Invalid lock key. The key must be a non-empty string or ``None``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock_key</span>
+
+    <span class="nd">@lock_key</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">lock_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lock_key</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_lock_key</span><span class="p">(</span><span class="n">lock_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">lock_key</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">enable_locked_api</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock_key</span> <span class="o">=</span> <span class="n">lock_key</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">enable_locked_api</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Enable/disable access to locked API. When access to locked API is enabled, the current</span>
+<span class="sd">        lock key (``RM.lock_key``) is automatically sent with API requests. The locked API</span>
+<span class="sd">        may be called without enabling automatic access by explicitly sending the lock key</span>
+<span class="sd">        with each request. A valid current lock key must be set before access could be enabled.</span>
+<span class="sd">        The access is disabled when the lock key is cleared.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            Attempt to set to a value of non-boolean type.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            Current lock key is not set.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enable_locked_api</span>
+
+    <span class="nd">@enable_locked_api</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">enable_locked_api</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">enable_locked_api</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">enable_locked_api</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;The property may be set only to boolean values&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">lock_key</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Failed to enable locked API: current lock key is not set&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_enable_locked_api</span> <span class="o">=</span> <span class="n">enable_locked_api</span>
 </pre></div>
 
            </div>
