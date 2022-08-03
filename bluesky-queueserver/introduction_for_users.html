@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Introduction &mdash; bluesky-queueserver 0.post1+g783b950 documentation</title>
+  <title>Introduction &mdash; bluesky-queueserver 0.post1444+gec473a3 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -33,7 +33,7 @@
             <a href="index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.post1+g783b950
+                0.post1444+gec473a3
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -45,12 +45,18 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Basic Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="release_history.html">Release History</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/bluesky/bluesky-queueserver">Source Code on GitHub</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">User's Guide</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Introduction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Introduction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-bluesky-queue-server">What is Bluesky Queue Server?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#features-of-bluesky-queue-server">Features of Bluesky Queue Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#integration-of-bluesky-queue-server-in-data-acquisition-system">Integration of Bluesky Queue Server in Data Acquisition System</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="features_and_config.html">Features and Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="workflow.html">Submitting and Managing Plans</a></li>
 <li class="toctree-l1"><a class="reference internal" href="startup_code.html">Organizing Bluesky Startup Code</a></li>
@@ -91,7 +97,122 @@
              
   <section id="introduction">
 <h1>Introduction<a class="headerlink" href="#introduction" title="Permalink to this heading">¶</a></h1>
-<p>Documentation is coming soon …</p>
+<section id="what-is-bluesky-queue-server">
+<h2>What is Bluesky Queue Server?<a class="headerlink" href="#what-is-bluesky-queue-server" title="Permalink to this heading">¶</a></h2>
+<p>Bluesky Queue Server is a set of tools that provide alternative method for executing
+<a class="reference external" href="https://blueskyproject.io/bluesky">Bluesky</a> plans. The Queue Server includes the core
+<a class="reference external" href="https://github.com/bluesky/bluesky-queueserver">bluesky-queueserver</a> package and
+<a class="reference external" href="https://github.com/bluesky/bluesky-queueserver-api">bluesky-queueserver-api</a>,
+<a class="reference external" href="https://github.com/bluesky/bluesky-httpserver">bluesky-httpserver</a> and
+<a class="reference external" href="https://github.com/bluesky/bluesky-widgets">bluesky-widgets</a> packages that implement
+additional functionality. Traditionally Bluesky was used interactively
+from IPython environment as demonstrated in
+<a class="reference external" href="https://blueskyproject.io/bluesky/tutorial.html">Bluesky tutorials</a>.
+A session would start by loading startup scripts that define beamline-specific devices and plans
+(see a typical example of Bluesky startup code used by
+<a class="reference external" href="https://github.com/NSLS-II-SRX/profile_collection/tree/master/startup">NSLS2 SRX beamline</a>)
+and then interactively running plans one-by-one from IPython prompt or executing a script that
+runs a sequence of plans. Interactive IPython workflow is currently the most common way to
+use Bluesky.</p>
+<p>Alternatively, the Queue Server allows to run Bluesky in a dedicated Python process
+(Run Engine worker environment). The worker environment is created and managed by Run Engine (RE)
+Manager (see <a class="reference internal" href="cli_tools.html#start-re-manager-cli"><span class="std std-ref">start-re-manager</span></a>), which could be run as an application or a service.
+As in IPython workflow, the startup code is loaded into the environment and
+the beamline devices and plans are available in the environment namespace. Bluesky plans
+are executed by populating and starting the plan queue maintained by RE Manager. The queue is
+editable and can be modified by users at any time: queue items may be added to the queue,
+replaced (edited), moved to different positions and removed from the queue.</p>
+<p>Queue Server is designed to accept startup scripts developed for interative IPython
+workflow after minor modifications. It is acknowledged that the maintenance of
+startup scripts takes a lot of effort. The startup scripts adapted for Queue Server
+can always be loaded in IPython environment used in both Queue Server and interactive
+IPython workflows without modifications.</p>
+<p>RE Manager is fully controlled over 0MQ using a <a class="reference internal" href="re_manager_api.html#run-engine-manager-api"><span class="std std-ref">comprehensive set of API</span></a>,
+which allows to open and close the worker environment, control the plan queue, monitor the state of RE Manager,
+execute scripts and functions, etc. The API-controlled execution environment does not provide flexibility
+of IPython-based workflow, but it is more convenient for the development of GUI applications or autonomous
+agents for local or remote control of experiments. RE Manager is designed to be self-sufficient and
+may complete execution of populated plan queue without user intervention, allowing to decouple control GUI
+or agent from the plan execution engine: in case of failure, the higher level control software could be restarted
+without interfering with the running experiment. User applications or control agents may access RE Manager
+remotely using 0MQ API on the local network (as long as RE Manager may be accessed from the machine running
+the control software). <a class="reference external" href="https://blueskyproject.io/bluesky-httpserver/">Bluesky HTTP Server</a> is designed to
+control RE Manager from outside the local network and provides a matching set of REST API and basic authentication,
+authorization and access control. The HTTP Server communicates with RE Manager over 0MQ and needs access to
+the local network.</p>
+<p>Using low-level 0MQ API (RE Manager) or REST API (HTTP Server) in Python client applications
+or scripts may not be convenient: the API are not user-friendly and proper use of API
+may require understanding of internals of RE Manager. Also 0MQ and REST API are implemented using
+different incompatible libraries, therefore two versions of communication code need to be developed and
+maintained to support both protocols (e.g. an application that can work locally via 0MQ and remotely via HTTP).
+The higher level Python API package
+(<a class="reference external" href="https://blueskyproject.io/bluesky-queueserver-api">Bluesky Queue Server API</a>)
+was developed to support more convenient and universal interface for communication with
+RE Manager. The package contains API for synchronous and asynchronous (<em>asyncio</em>) communication over 0MQ and HTTP.
+The API hides many low-level communication details and allows to write the code that works identically with both
+protocols (except initialization parameters, which are different for 0MQ and HTTP).</p>
+<p>The <em>bluesky-queueserver</em> package provides a simple CLI application (<a class="reference internal" href="cli_tools.html#qserver-cli"><span class="std std-ref">qserver</span></a>)
+for controlling RE Manager over 0MQ. The application may be useful for testing
+RE Manager, troubleshooting issues and simple demos. The <a class="reference internal" href="tutorial.html#tutorials-queue-server"><span class="std std-ref">tutorials</span></a>
+explore the features of the Queue Server using <em>qserver</em> CLI tool.</p>
+<p>The <em>bluesky-widgets</em> package contains implementations of reusable Qt widgets for controlling RE Manager and
+manipulating the queue and ready to use <em>queue-monitor</em> GUI application based on the widgets.</p>
+</section>
+<section id="features-of-bluesky-queue-server">
+<h2>Features of Bluesky Queue Server<a class="headerlink" href="#features-of-bluesky-queue-server" title="Permalink to this heading">¶</a></h2>
+<p>The core component of the Queue Server is Run Engine (RE) Manager, which supports the following features:</p>
+<ul class="simple">
+<li><p>Run Engine (RE) Worker environment, which could be opened/closed/destroyed via API requests. The Bluesky startup code
+is loaded as the environment is opened. The RE Worker process is closed/killed as the environment is closed/destroyed.</p></li>
+<li><p>Support for startup code represented in IPython format (a startup directory with alphabetically ordered code files),
+as a Python script or a module.</p></li>
+<li><p>Fully editable queue of plans and instructions. The API support for adding/replacing/moving/removing individual
+queue items and batches of items. The instructions are executed by RE Manager and control execution of the queue.
+Only one instruction (<cite>queue_stop</cite>) is currently supported.</p></li>
+<li><p>API for controlling execution of the queue (<a class="reference internal" href="re_manager_api.html#method-queue-start"><span class="std std-ref">start</span></a>/<a class="reference internal" href="re_manager_api.html#method-queue-stop"><span class="std std-ref">stop</span></a>
+the queue) and the plans (<a class="reference internal" href="re_manager_api.html#method-re-pause"><span class="std std-ref">pause</span></a>/<a class="reference internal" href="re_manager_api.html#method-re-resume-stop-abort-halt"><span class="std std-ref">resume/stop/abort/halt</span></a>).</p></li>
+<li><p>API for monitoring of status of RE Manager, Worker and Run Engine (see <a class="reference internal" href="re_manager_api.html#method-status"><span class="std std-ref">‘status’</span></a>)</p></li>
+<li><p>Locking access to API for controlling RE Worker environment and/or the plan queue (see <a class="reference internal" href="features_and_config.html#locking-re-manager"><span class="std std-ref">Locking RE Manager</span></a>).</p></li>
+<li><p>Submit and immediately start execution of a plan (see <a class="reference internal" href="re_manager_api.html#method-queue-item-execute"><span class="std std-ref">‘queue_item_execute’</span></a>).</p></li>
+<li><p>Execute a function defined in RE Worker namespace (see <a class="reference internal" href="re_manager_api.html#method-function-execute"><span class="std std-ref">‘function_execute’</span></a>).</p></li>
+<li><p>Uploading and executing Python scripts, which may define new or modify existing devices, plans or functions
+(see <a class="reference internal" href="re_manager_api.html#method-script-upload"><span class="std std-ref">‘script_upload’</span></a>).</p></li>
+<li><p>Restricting user access to plans and devices. Users may be assigned to groups and each group may restricted in which plans
+users may submit to the queue and which devices users may pass with plan parameters (see <a class="reference internal" href="features_and_config.html#managing-user-group-permissions"><span class="std std-ref">Managing User Group Permissions</span></a>
+and <a class="reference internal" href="features_and_config.html#configuring-user-group-permissions"><span class="std std-ref">Configuring User Group Permissions</span></a>).</p></li>
+<li><p>Annotations for Bluesky plans (see <a class="reference internal" href="plan_annotation.html#annotating-bluesky-plans"><span class="std std-ref">Annotating Bluesky Plans</span></a>).</p></li>
+<li><p>Validation of submitted queue items (see <a class="reference internal" href="item_validation.html#validation-of-queue-items"><span class="std std-ref">Validation of Queue Items</span></a>).</p></li>
+<li><p>Remote monitoring of RE Manager console output (see <a class="reference internal" href="features_and_config.html#remote-monitoring-of-console-output"><span class="std std-ref">Remote Monitoring of Console Output</span></a>).</p></li>
+<li><p>Encryption of 0MQ control communication channel (fixed public-private key pair).</p></li>
+<li><p>Functions for writing startup code compatible with interactive IPython workflow
+(see <a class="reference internal" href="startup_code.html#organizing-bluesky-startup-code"><span class="std std-ref">Organizing Bluesky Startup Code</span></a>).</p></li>
+<li><p><em>qserver</em> CLI tool for controlling RE Manager (intended for simple operations, system evaluation and demos, see
+<a class="reference internal" href="cli_tools.html#qserver-cli"><span class="std std-ref">qserver</span></a>).</p></li>
+</ul>
+</section>
+<section id="integration-of-bluesky-queue-server-in-data-acquisition-system">
+<h2>Integration of Bluesky Queue Server in Data Acquisition System<a class="headerlink" href="#integration-of-bluesky-queue-server-in-data-acquisition-system" title="Permalink to this heading">¶</a></h2>
+<p>This section illustrates the role of the Queue Server in generic Data Acquisition system. The system collects
+small data and scan metadata in the form of Bluesky documents to MongoDB (directly or via Kafka) and large data files
+from detectors to the File Store. Data acquistion is controlled by local and/or remote clients.</p>
+<img alt="Diagram of Bluesky Queue Server" src="_images/qserver-diagram.png" />
+<p>The Queue Server (started as Run Engine Manager application or service) is running two processes: RE Manager process
+and RE Worker process. RE Manager process is responsible for maintaining and controlling the plan queue and
+0MQ communication with clients. The process is expected to be running for the duration of the session, but it
+can be restarted without closing the application or disrupting queue execution in case of failure.
+RE Worker process is created as the worker environment is opened and closed/killed when the environment is
+closed/destroyed. Operations of opening, closing and destroying the environment are controlled using the API
+and may be performed as often as necessary for the workflow. The Worker process is used to run the Bluesky code.</p>
+<p>The queue is stored outside RE Manager (in Redis) and persists between restarts. The local clients (with access to
+the local network) communicate with the Queue Server using 0MQ API. Remote clients connect to HTTP server and
+use REST API to control the Queue Server. The HTTP Server must be able to reach RE Manager over the local network.
+All the clients are able to subscribe and remotely monitor the console output of RE Manager.</p>
+<p>The Bluesky stack, including Bluesky and Ophyd, is running in RE Worker process. The startup code is loaded into RE Worker
+namespace as the environment is opened, beamline-specific set of devices, plans and functions become available in
+RE Worker namespace and could be started by clients using control API. As the plans are executed, the Ophyd code
+communicates with EPICS IOCs (to control hardware) over the network and Bluesky code generates documents that are
+saved into MongoDB and/or published to Kafka depending on the Run Engine subscriptions.</p>
+</section>
 </section>
 
 
