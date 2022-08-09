@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.plan_stubs &mdash; bluesky 1.8.3.post26+g494e5722 documentation</title>
+  <title>bluesky.plan_stubs &mdash; bluesky 1.8.3.post31+ge13e4735 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -29,7 +29,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.8.3.post26+g494e5722
+                1.8.3.post31+ge13e4735
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -1001,6 +1001,7 @@
 <span class="sd">    msg : Msg</span>
 <span class="sd">        messages to &#39;trigger&#39;, &#39;wait&#39; and &#39;read&#39;</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">.preprocessors</span> <span class="kn">import</span> <span class="n">contingency_wrapper</span>
     <span class="c1"># If devices is empty, don&#39;t emit &#39;create&#39;/&#39;save&#39; messages.</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">devices</span><span class="p">:</span>
         <span class="k">yield from</span> <span class="n">null</span><span class="p">()</span>
@@ -1018,13 +1019,29 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">no_wait</span><span class="p">:</span>
             <span class="k">yield from</span> <span class="n">wait</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">grp</span><span class="p">)</span>
         <span class="k">yield from</span> <span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
-        <span class="n">ret</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># collect and return readings to give plan access to them</span>
-        <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">:</span>
-            <span class="n">reading</span> <span class="o">=</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">read</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">reading</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">ret</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">reading</span><span class="p">)</span>
-        <span class="k">yield from</span> <span class="n">save</span><span class="p">()</span>
+
+        <span class="k">def</span> <span class="nf">read_plan</span><span class="p">():</span>
+            <span class="n">ret</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># collect and return readings to give plan access to them</span>
+            <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">:</span>
+                <span class="n">reading</span> <span class="o">=</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">read</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">reading</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">ret</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">reading</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">ret</span>
+
+        <span class="k">def</span> <span class="nf">standard_path</span><span class="p">():</span>
+            <span class="k">yield from</span> <span class="n">save</span><span class="p">()</span>
+
+        <span class="k">def</span> <span class="nf">exception_path</span><span class="p">(</span><span class="n">exp</span><span class="p">):</span>
+            <span class="k">yield from</span> <span class="n">drop</span><span class="p">()</span>
+            <span class="k">raise</span> <span class="n">exp</span>
+
+        <span class="n">ret</span> <span class="o">=</span> <span class="k">yield from</span> <span class="n">contingency_wrapper</span><span class="p">(</span>
+            <span class="n">read_plan</span><span class="p">(),</span>
+            <span class="n">except_plan</span><span class="o">=</span><span class="n">exception_path</span><span class="p">,</span>
+            <span class="n">else_plan</span><span class="o">=</span><span class="n">standard_path</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">ret</span>
+
     <span class="kn">from</span> <span class="nn">.preprocessors</span> <span class="kn">import</span> <span class="n">rewindable_wrapper</span>
     <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">rewindable_wrapper</span><span class="p">(</span><span class="n">inner_trigger_and_read</span><span class="p">(),</span>
                                           <span class="n">rewindable</span><span class="p">))</span></div>
