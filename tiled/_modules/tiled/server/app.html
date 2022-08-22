@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a70.post2+gb6bb615 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a70.post3+gdf32eb5 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a70.post2+gb6bb615
+                0.1.0a70.post3+gdf32eb5
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -147,10 +147,16 @@
     <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">SHARE_TILED_PATH</span>
+<span class="kn">from</span> <span class="nn">..validation_registration</span> <span class="kn">import</span> <span class="n">validation_registry</span> <span class="k">as</span> <span class="n">default_validation_registry</span>
 <span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">get_current_principal</span>
 <span class="kn">from</span> <span class="nn">.compression</span> <span class="kn">import</span> <span class="n">CompressionMiddleware</span>
 <span class="kn">from</span> <span class="nn">.core</span> <span class="kn">import</span> <span class="n">PatchedStreamingResponse</span>
-<span class="kn">from</span> <span class="nn">.dependencies</span> <span class="kn">import</span> <span class="n">get_query_registry</span><span class="p">,</span> <span class="n">get_root_tree</span><span class="p">,</span> <span class="n">get_serialization_registry</span>
+<span class="kn">from</span> <span class="nn">.dependencies</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">get_query_registry</span><span class="p">,</span>
+    <span class="n">get_root_tree</span><span class="p">,</span>
+    <span class="n">get_serialization_registry</span><span class="p">,</span>
+    <span class="n">get_validation_registry</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.object_cache</span> <span class="kn">import</span> <span class="n">NO_CACHE</span><span class="p">,</span> <span class="n">ObjectCache</span>
 <span class="kn">from</span> <span class="nn">.object_cache</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">object_cache_logger</span>
 <span class="kn">from</span> <span class="nn">.object_cache</span> <span class="kn">import</span> <span class="n">set_object_cache</span>
@@ -214,6 +220,7 @@
     <span class="n">query_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">serialization_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">compression_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">validation_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Serve a Tree</span>
@@ -236,6 +243,7 @@
     <span class="n">server_settings</span> <span class="o">=</span> <span class="n">server_settings</span> <span class="ow">or</span> <span class="p">{}</span>
     <span class="n">query_registry</span> <span class="o">=</span> <span class="n">query_registry</span> <span class="ow">or</span> <span class="n">get_query_registry</span><span class="p">()</span>
     <span class="n">compression_registry</span> <span class="o">=</span> <span class="n">compression_registry</span> <span class="ow">or</span> <span class="n">default_compression_registry</span>
+    <span class="n">validation_registry</span> <span class="o">=</span> <span class="n">validation_registry</span> <span class="ow">or</span> <span class="n">default_validation_registry</span>
 
     <span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">()</span>
 
@@ -673,6 +681,16 @@
         <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span>
             <span class="n">get_serialization_registry</span>
         <span class="p">]</span> <span class="o">=</span> <span class="n">override_get_serialization_registry</span>
+
+    <span class="k">if</span> <span class="n">validation_registry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+
+        <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">override_get_validation_registry</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">validation_registry</span>
+
+        <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span>
+            <span class="n">get_validation_registry</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">override_get_validation_registry</span>
 
     <span class="n">metrics_config</span> <span class="o">=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metrics&quot;</span><span class="p">,</span> <span class="p">{})</span>
     <span class="k">if</span> <span class="n">metrics_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prometheus&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
