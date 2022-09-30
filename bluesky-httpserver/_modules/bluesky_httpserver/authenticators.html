@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bluesky_httpserver.authenticators &mdash; Bluesky HTTP Server 0.post1+gebfa5cc documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> Bluesky HTTP Server
+          </a>
+              <div class="version">
+                0.post1+gebfa5cc
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../release-history.html">Release History</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User's Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Starting and Using the Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../control_re_manager.html">Controlling Run Engine Manager</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Server Configuration</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Related Projects</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-queueserver">Bluesky Queue Server</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-queueserver-api">Bluesky Queue Server API</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-widgets">Bluesky Widgets</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky">Bluesky</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/ophyd">Ophyd</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/databroker">Data Broker</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Bluesky HTTP Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>bluesky_httpserver.authenticators</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bluesky_httpserver.authenticators</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">Request</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">from</span> <span class="nn">jose</span> <span class="kn">import</span> <span class="n">JWTError</span><span class="p">,</span> <span class="n">jwk</span><span class="p">,</span> <span class="n">jwt</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">secrets</span>
+<span class="kn">from</span> <span class="nn">starlette.responses</span> <span class="kn">import</span> <span class="n">RedirectResponse</span>
+
+<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">Mode</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">modules_available</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">DummyAuthenticator</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For test and demo purposes only!</span>
+
+<span class="sd">    Accept any username and any password.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">username</span>
+
+
+<div class="viewcode-block" id="DictionaryAuthenticator"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator">[docs]</a><span class="k">class</span> <span class="nc">DictionaryAuthenticator</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For test and demo purposes only!</span>
+
+<span class="sd">    Check passwords from a dictionary of usernames mapped to passwords.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    users_to_passwords: dict(str, str)</span>
+<span class="sd">        Mapping of usernames to passwords.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
+    <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  users_to_password:</span>
+<span class="s2">    type: object</span>
+<span class="s2">  description: |</span>
+<span class="s2">    Mapping usernames to password. Environment variable expansion should be</span>
+<span class="s2">    used to avoid placing passwords directly in configuration.</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="DictionaryAuthenticator.__init__"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">users_to_passwords</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_users_to_passwords</span> <span class="o">=</span> <span class="n">users_to_passwords</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">true_password</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_users_to_passwords</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">true_password</span><span class="p">:</span>
+            <span class="c1"># Username is not valid.</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">secrets</span><span class="o">.</span><span class="n">compare_digest</span><span class="p">(</span><span class="n">true_password</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">username</span></div>
+
+
+<span class="k">class</span> <span class="nc">PAMAuthenticator</span><span class="p">:</span>
+
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
+    <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  service:</span>
+<span class="s2">    type: string</span>
+<span class="s2">    description: PAM service. Default is &#39;login&#39;.</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">service</span><span class="o">=</span><span class="s2">&quot;login&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;pamela&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This PAMAuthenticator requires the module &#39;pamela&#39; to be installed.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">service</span> <span class="o">=</span> <span class="n">service</span>
+        <span class="c1"># TODO Try to open a PAM session.</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pamela</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pamela</span><span class="o">.</span><span class="n">authenticate</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">,</span> <span class="n">service</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">service</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">pamela</span><span class="o">.</span><span class="n">PAMError</span><span class="p">:</span>
+            <span class="c1"># Authentication failed.</span>
+            <span class="k">return</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">username</span>
+
+
+<span class="k">class</span> <span class="nc">OIDCAuthenticator</span><span class="p">:</span>
+
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span>
+    <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  client_id:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  client_secret:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  redirect_uri:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  token_uri:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  authorization_endpoint:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  public_keys:</span>
+<span class="s2">    type: array</span>
+<span class="s2">    item:</span>
+<span class="s2">      type: object</span>
+<span class="s2">      properties:</span>
+<span class="s2">        - alg:</span>
+<span class="s2">            type: string</span>
+<span class="s2">        - e</span>
+<span class="s2">            type: string</span>
+<span class="s2">        - kid</span>
+<span class="s2">            type: string</span>
+<span class="s2">        - kty</span>
+<span class="s2">            type: string</span>
+<span class="s2">        - n</span>
+<span class="s2">            type: string</span>
+<span class="s2">        - use</span>
+<span class="s2">            type: string</span>
+<span class="s2">      required:</span>
+<span class="s2">        - alg</span>
+<span class="s2">        - e</span>
+<span class="s2">        - kid</span>
+<span class="s2">        - kty</span>
+<span class="s2">        - n</span>
+<span class="s2">        - use</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="p">,</span>
+        <span class="n">client_secret</span><span class="p">,</span>
+        <span class="n">redirect_uri</span><span class="p">,</span>
+        <span class="n">public_keys</span><span class="p">,</span>
+        <span class="n">token_uri</span><span class="p">,</span>
+        <span class="n">authorization_endpoint</span><span class="p">,</span>
+        <span class="n">confirmation_message</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span> <span class="o">=</span> <span class="n">client_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client_secret</span> <span class="o">=</span> <span class="n">client_secret</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">confirmation_message</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span> <span class="o">=</span> <span class="n">redirect_uri</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">public_keys</span> <span class="o">=</span> <span class="n">public_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">token_uri</span> <span class="o">=</span> <span class="n">token_uri</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">authorization_endpoint</span> <span class="o">=</span> <span class="n">authorization_endpoint</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">client_id</span><span class="o">=</span><span class="n">client_id</span><span class="p">,</span> <span class="n">redirect_uri</span><span class="o">=</span><span class="n">redirect_uri</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">]</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">exchange_code</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_uri</span><span class="p">,</span> <span class="n">code</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_secret</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span><span class="p">)</span>
+        <span class="n">response_body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">is_error</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Authentication error: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_body</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">response_body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="n">id_token</span> <span class="o">=</span> <span class="n">response_body</span><span class="p">[</span><span class="s2">&quot;id_token&quot;</span><span class="p">]</span>
+        <span class="n">access_token</span> <span class="o">=</span> <span class="n">response_body</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
+        <span class="c1"># Match the kid in id_token to a key in the list of public_keys.</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">find_key</span><span class="p">(</span><span class="n">id_token</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">public_keys</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">verified_body</span> <span class="o">=</span> <span class="n">jwt</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">id_token</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">access_token</span><span class="o">=</span><span class="n">access_token</span><span class="p">,</span> <span class="n">audience</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">JWTError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span>
+                <span class="s2">&quot;Authentication error. Unverified token: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">jwt</span><span class="o">.</span><span class="n">get_unverified_claims</span><span class="p">(</span><span class="n">id_token</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">verified_body</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]</span>
+
+
+<span class="k">class</span> <span class="nc">KeyNotFoundError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">def</span> <span class="nf">find_key</span><span class="p">(</span><span class="n">token</span><span class="p">,</span> <span class="n">keys</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Find a key from the configured keys based on the kid claim of the token</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    token : token to search for the kid from</span>
+<span class="sd">    keys:  list of keys</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    KeyNotFoundError:</span>
+<span class="sd">        returned if the token does not have a kid claim</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    ------</span>
+<span class="sd">    key: found key object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">unverified</span> <span class="o">=</span> <span class="n">jwt</span><span class="o">.</span><span class="n">get_unverified_header</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
+    <span class="n">kid</span> <span class="o">=</span> <span class="n">unverified</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kid&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">kid</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">KeyNotFoundError</span><span class="p">(</span><span class="s2">&quot;No &#39;kid&#39; in token&quot;</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">key</span><span class="p">[</span><span class="s2">&quot;kid&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">kid</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">jwk</span><span class="o">.</span><span class="n">construct</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">KeyNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Token specifies </span><span class="si">{</span><span class="n">kid</span><span class="si">}</span><span class="s2"> but we have </span><span class="si">{</span><span class="p">[</span><span class="n">k</span><span class="p">[</span><span class="s1">&#39;kid&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">exchange_code</span><span class="p">(</span><span class="n">token_uri</span><span class="p">,</span> <span class="n">auth_code</span><span class="p">,</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">client_secret</span><span class="p">,</span> <span class="n">redirect_uri</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Method that talks to an IdP to exchange a code for an access_token and/or id_token</span>
+<span class="sd">    Args:</span>
+<span class="sd">        token_url ([type]): [description]</span>
+<span class="sd">        auth_code ([type]): [description]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;httpx&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This authenticator requires &#39;httpx&#39;. (pip install httpx)&quot;</span><span class="p">)</span>
+    <span class="kn">import</span> <span class="nn">httpx</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+        <span class="n">url</span><span class="o">=</span><span class="n">token_uri</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;authorization_code&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="n">client_id</span><span class="p">,</span>
+            <span class="s2">&quot;redirect_uri&quot;</span><span class="p">:</span> <span class="n">redirect_uri</span><span class="p">,</span>
+            <span class="s2">&quot;code&quot;</span><span class="p">:</span> <span class="n">auth_code</span><span class="p">,</span>
+            <span class="s2">&quot;client_secret&quot;</span><span class="p">:</span> <span class="n">client_secret</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">response</span>
+
+
+<span class="k">class</span> <span class="nc">SAMLAuthenticator</span><span class="p">:</span>
+
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">saml_settings</span><span class="p">,</span>  <span class="c1"># See EXAMPLE_SAML_SETTINGS below.</span>
+        <span class="n">attribute_name</span><span class="p">,</span>  <span class="c1"># which SAML attribute to use as &#39;id&#39; for Idenity</span>
+        <span class="n">confirmation_message</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">saml_settings</span> <span class="o">=</span> <span class="n">saml_settings</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attribute_name</span> <span class="o">=</span> <span class="n">attribute_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">confirmation_message</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">authorization_endpoint</span> <span class="o">=</span> <span class="s2">&quot;/login&quot;</span>
+
+        <span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;onelogin&quot;</span><span class="p">):</span>
+            <span class="c1"># The PyPI package name is &#39;python3-saml&#39;</span>
+            <span class="c1"># but it imports as &#39;onelogin&#39;.</span>
+            <span class="c1"># https://github.com/onelogin/python3-saml</span>
+            <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This SAMLAuthenticator requires &#39;python3-saml&#39; to be installed.&quot;</span><span class="p">)</span>
+
+        <span class="kn">from</span> <span class="nn">onelogin.saml2.auth</span> <span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
+
+        <span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/login&quot;</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">saml_login</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+            <span class="n">req</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+            <span class="n">auth</span> <span class="o">=</span> <span class="n">OneLogin_Saml2_Auth</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">saml_settings</span><span class="p">)</span>
+            <span class="c1"># saml_settings = auth.get_settings()</span>
+            <span class="c1"># metadata = saml_settings.get_sp_metadata()</span>
+            <span class="c1"># errors = saml_settings.validate_metadata(metadata)</span>
+            <span class="c1"># if len(errors) == 0:</span>
+            <span class="c1">#   print(metadata)</span>
+            <span class="c1"># else:</span>
+            <span class="c1">#   print(&quot;Error found on Metadata: %s&quot; % (&#39;, &#39;.join(errors)))</span>
+            <span class="n">callback_url</span> <span class="o">=</span> <span class="n">auth</span><span class="o">.</span><span class="n">login</span><span class="p">()</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">RedirectResponse</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">callback_url</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_routers</span> <span class="o">=</span> <span class="p">[</span><span class="n">router</span><span class="p">]</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;onelogin&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This SAMLAuthenticator requires the module &#39;oneline&#39; to be installed.&quot;</span><span class="p">)</span>
+        <span class="kn">from</span> <span class="nn">onelogin.saml2.auth</span> <span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
+
+        <span class="n">req</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">auth</span> <span class="o">=</span> <span class="n">OneLogin_Saml2_Auth</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">saml_settings</span><span class="p">)</span>
+        <span class="n">auth</span><span class="o">.</span><span class="n">process_response</span><span class="p">()</span>  <span class="c1"># Process IdP response</span>
+        <span class="n">errors</span> <span class="o">=</span> <span class="n">auth</span><span class="o">.</span><span class="n">get_errors</span><span class="p">()</span>  <span class="c1"># This method receives an array with the errors</span>
+        <span class="k">if</span> <span class="n">errors</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                <span class="s2">&quot;Error when processing SAML Response: </span><span class="si">%s</span><span class="s2"> </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">errors</span><span class="p">),</span> <span class="n">auth</span><span class="o">.</span><span class="n">get_last_error_reason</span><span class="p">())</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">auth</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">():</span>
+            <span class="c1"># Return a string that the Identity can use as id.</span>
+            <span class="n">attribute_as_list</span> <span class="o">=</span> <span class="n">auth</span><span class="o">.</span><span class="n">get_attributes</span><span class="p">()[</span><span class="bp">self</span><span class="o">.</span><span class="n">attribute_name</span><span class="p">]</span>
+            <span class="c1"># Confused in what situation this would have more than one item....</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">attribute_as_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+            <span class="k">return</span> <span class="n">attribute_as_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="n">form_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">()</span>
+    <span class="n">rv</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;http_host&quot;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
+        <span class="s2">&quot;server_port&quot;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
+        <span class="s2">&quot;script_name&quot;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
+        <span class="s2">&quot;post_data&quot;</span><span class="p">:</span> <span class="p">{},</span>
+        <span class="s2">&quot;get_data&quot;</span><span class="p">:</span> <span class="p">{}</span>
+        <span class="c1"># Advanced request options</span>
+        <span class="c1"># &quot;https&quot;: &quot;&quot;,</span>
+        <span class="c1"># &quot;request_uri&quot;: &quot;&quot;,</span>
+        <span class="c1"># &quot;query_string&quot;: &quot;&quot;,</span>
+        <span class="c1"># &quot;validate_signature_from_qs&quot;: False,</span>
+        <span class="c1"># &quot;lowercase_urlencoding&quot;: False</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="p">:</span>
+        <span class="n">rv</span><span class="p">[</span><span class="s2">&quot;get_data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="p">,)</span>
+    <span class="k">if</span> <span class="s2">&quot;SAMLResponse&quot;</span> <span class="ow">in</span> <span class="n">form_data</span><span class="p">:</span>
+        <span class="n">SAMLResponse</span> <span class="o">=</span> <span class="n">form_data</span><span class="p">[</span><span class="s2">&quot;SAMLResponse&quot;</span><span class="p">]</span>
+        <span class="n">rv</span><span class="p">[</span><span class="s2">&quot;post_data&quot;</span><span class="p">][</span><span class="s2">&quot;SAMLResponse&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SAMLResponse</span>
+    <span class="k">if</span> <span class="s2">&quot;RelayState&quot;</span> <span class="ow">in</span> <span class="n">form_data</span><span class="p">:</span>
+        <span class="n">RelayState</span> <span class="o">=</span> <span class="n">form_data</span><span class="p">[</span><span class="s2">&quot;RelayState&quot;</span><span class="p">]</span>
+        <span class="n">rv</span><span class="p">[</span><span class="s2">&quot;post_data&quot;</span><span class="p">][</span><span class="s2">&quot;RelayState&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">RelayState</span>
+    <span class="k">return</span> <span class="n">rv</span>
+
+
+<div class="viewcode-block" id="LDAPAuthenticator"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator">[docs]</a><span class="k">class</span> <span class="nc">LDAPAuthenticator</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    LDAP authenticator.</span>
+<span class="sd">    The authenticator code is based on https://github.com/jupyterhub/ldapauthenticator</span>
+<span class="sd">    The parameter ``use_tls`` was added for convenience of testing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    server_address: str or list(str)</span>
+<span class="sd">        Address(es) of the LDAP server(s) to contact. A string value may represent a single</span>
+<span class="sd">        server, a list of strings may represent one or more servers. If a server address</span>
+<span class="sd">        includes port, then the value of ``server_port`` is ignored, otherwise ``server_port``</span>
+<span class="sd">        or the default port is used to access the server.</span>
+
+<span class="sd">        Could be an IP address or hostname.</span>
+<span class="sd">    server_port: int or None</span>
+<span class="sd">        Port on which to contact the LDAP server. Default port is used if ``None``.</span>
+
+<span class="sd">        Defaults to ``636`` if ``use_ssl`` is set, ``389`` otherwise.</span>
+<span class="sd">    use_ssl: boolean</span>
+<span class="sd">        Use SSL to communicate with the LDAP server.</span>
+
+<span class="sd">        Deprecated in version 3 of LDAP. Your LDAP server must be configured to support this, however.</span>
+<span class="sd">    use_tls: boolean</span>
+<span class="sd">        Enable/disable TLS if ``use_ssl`` is False. By default TLS is enabled. It should not be disabled</span>
+<span class="sd">        in production systems.</span>
+
+<span class="sd">    connect_timeout: float</span>
+<span class="sd">        Timeout used for connecting to the LDAP server. Default: 5.</span>
+
+<span class="sd">    receive_timeout: float</span>
+<span class="sd">        Timeout used for communication with the LDAP server, e.g. this timeout is used to wait for</span>
+<span class="sd">        completion of 2FA. For smooth operation it should probably exceed timeout set at LDAP server.</span>
+<span class="sd">        Default: 60.</span>
+
+<span class="sd">    bind_dn_template: list or str</span>
+<span class="sd">        Template from which to construct the full dn</span>
+<span class="sd">        when authenticating to LDAP. ``{username}`` is replaced</span>
+<span class="sd">        with the actual username used to log in.</span>
+
+<span class="sd">        If your LDAP is set in such a way that the userdn can not</span>
+<span class="sd">        be formed from a template, but must be looked up with an attribute</span>
+<span class="sd">        (such as uid or ``sAMAccountName``), please see ``lookup_dn``. It might</span>
+<span class="sd">        be particularly relevant for ActiveDirectory installs.</span>
+
+<span class="sd">        Unicode Example:</span>
+
+<span class="sd">        .. code-block::</span>
+
+<span class="sd">            &quot;uid={username},ou=people,dc=wikimedia,dc=org&quot;</span>
+
+<span class="sd">        List Example:</span>
+
+<span class="sd">        .. code-block::</span>
+
+<span class="sd">            [</span>
+<span class="sd">                &quot;uid={username},ou=people,dc=wikimedia,dc=org&quot;,</span>
+<span class="sd">                &quot;uid={username},ou=Developers,dc=wikimedia,dc=org&quot;</span>
+<span class="sd">                ]</span>
+<span class="sd">    allowed_groups: list or None</span>
+<span class="sd">        List of LDAP group DNs that users could be members of to be granted access.</span>
+
+<span class="sd">        If a user is in any one of the listed groups, then that user is granted access.</span>
+<span class="sd">        Membership is tested by fetching info about each group and looking for the User&#39;s</span>
+<span class="sd">        dn to be a value of one of `member` or `uniqueMember`, *or* if the username being</span>
+<span class="sd">        used to log in with is value of the `uid`.</span>
+
+<span class="sd">        Set to an empty list or None to allow all users that have an LDAP account to log in,</span>
+<span class="sd">        without performing any group membership checks.</span>
+<span class="sd">    valid_username_regex: str</span>
+<span class="sd">        Regex for validating usernames - those that do not match this regex will be rejected.</span>
+
+<span class="sd">        This is primarily used as a measure against LDAP injection, which has fatal security</span>
+<span class="sd">        considerations. The default works for most LDAP installations, but some users might need</span>
+<span class="sd">        to modify it to fit their custom installs. If you are modifying it, be sure to understand</span>
+<span class="sd">        the implications of allowing additional characters in usernames and what that means for</span>
+<span class="sd">        LDAP injection issues. See https://www.owasp.org/index.php/LDAP_injection for an overview</span>
+<span class="sd">        of LDAP injection.</span>
+<span class="sd">    lookup_dn: boolean</span>
+<span class="sd">        Form user&#39;s DN by looking up an entry from directory</span>
+
+<span class="sd">        By default, LDAPAuthenticator finds the user&#39;s DN by using `bind_dn_template`.</span>
+<span class="sd">        However, in some installations, the user&#39;s DN does not contain the username, and</span>
+<span class="sd">        hence needs to be looked up. You can set this to True and then use ``user_search_base``</span>
+<span class="sd">        and ``user_attribute`` to accomplish this.</span>
+<span class="sd">    user_search_base: str</span>
+<span class="sd">        Base for looking up user accounts in the directory, if `lookup_dn` is set to True.</span>
+
+<span class="sd">        LDAPAuthenticator will search all objects matching under this base where the `user_attribute`</span>
+<span class="sd">        is set to the current username to form the userdn.</span>
+
+<span class="sd">        For example, if all users objects existed under the base ou=people,dc=wikimedia,dc=org, and</span>
+<span class="sd">        the username users use is set with the attribute `uid`, you can use the following config:</span>
+
+<span class="sd">        .. code-block::</span>
+
+<span class="sd">            c.LDAPAuthenticator.lookup_dn = True</span>
+<span class="sd">            c.LDAPAuthenticator.lookup_dn_search_filter = &#39;({login_attr}={login})&#39;</span>
+<span class="sd">            c.LDAPAuthenticator.lookup_dn_search_user = &#39;ldap_search_user_technical_account&#39;</span>
+<span class="sd">            c.LDAPAuthenticator.lookup_dn_search_password = &#39;secret&#39;</span>
+<span class="sd">            c.LDAPAuthenticator.user_search_base = &#39;ou=people,dc=wikimedia,dc=org&#39;</span>
+<span class="sd">            c.LDAPAuthenticator.user_attribute = &#39;sAMAccountName&#39;</span>
+<span class="sd">            c.LDAPAuthenticator.lookup_dn_user_dn_attribute = &#39;cn&#39;</span>
+<span class="sd">            c.LDAPAuthenticator.bind_dn_template = &#39;{username}&#39;</span>
+<span class="sd">    user_attribute: str</span>
+<span class="sd">        Attribute containing user&#39;s name, if ``lookup_dn`` is set to True.</span>
+
+<span class="sd">        See ``user_search_base`` for info on how this attribute is used.</span>
+
+<span class="sd">        For most LDAP servers, this is uid.  For Active Directory, it is</span>
+<span class="sd">        sAMAccountName.</span>
+<span class="sd">    lookup_dn_search_filter: str or None</span>
+<span class="sd">        How to query LDAP for user name lookup, if ``lookup_dn`` is set to True.</span>
+<span class="sd">    lookup_dn_search_user: str or None</span>
+<span class="sd">        Technical account for user lookup, if ``lookup_dn`` is set to True.</span>
+
+<span class="sd">        If both lookup_dn_search_user and lookup_dn_search_password are None,</span>
+<span class="sd">        then anonymous LDAP query will be done.</span>
+<span class="sd">    lookup_dn_search_password: str or None</span>
+<span class="sd">        Technical account for user lookup, if ``lookup_dn`` is set to True.</span>
+<span class="sd">    lookup_dn_user_dn_attribute: str or None</span>
+<span class="sd">        Attribute containing user&#39;s name needed for  building DN string, if ``lookup_dn`` is set to True.</span>
+
+<span class="sd">        See ``user_search_base`` for info on how this attribute is used.</span>
+
+<span class="sd">        For most LDAP servers, this is username.  For Active Directory, it is cn.</span>
+<span class="sd">    escape_userdn: boolean</span>
+<span class="sd">        If set to True, escape special chars in userdn when authenticating in LDAP.</span>
+
+<span class="sd">        On some LDAP servers, when userdn contains chars like &#39;(&#39;, &#39;)&#39;, &#39;\&#39;</span>
+<span class="sd">        authentication may fail when those chars</span>
+<span class="sd">        are not escaped.</span>
+<span class="sd">    search_filter: str</span>
+<span class="sd">        LDAP3 Search Filter whose results are allowed access</span>
+<span class="sd">    attributes: list or None</span>
+<span class="sd">        List of attributes to be searched</span>
+<span class="sd">    auth_state_attributes: list or None</span>
+<span class="sd">        List of attributes to be returned in auth_state for a user</span>
+<span class="sd">    use_lookup_dn_username: boolean</span>
+<span class="sd">        If set to true uses the ``lookup_dn_user_dn_attribute`` attribute as username instead of</span>
+<span class="sd">        the supplied one.</span>
+
+<span class="sd">        This can be useful in an heterogeneous environment, when supplying a UNIX username</span>
+<span class="sd">        to authenticate against AD.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+
+<span class="sd">    Using the authenticator class (the code runs in ``asyncio`` loop):</span>
+
+<span class="sd">    .. code-block::</span>
+
+<span class="sd">        from bluesky_httpserver.authenticators import LDAPAuthenticator</span>
+<span class="sd">        authenticator = LDAPAuthenticator(</span>
+<span class="sd">            &quot;localhost&quot;, 1389, bind_dn_template=&quot;cn={username},ou=users,dc=example,dc=org&quot;, use_tls=False</span>
+<span class="sd">        )</span>
+<span class="sd">        await authenticator.authenticate(&quot;user01&quot;, &quot;password1&quot;)</span>
+<span class="sd">        await authenticator.authenticate(&quot;user02&quot;, &quot;password2&quot;)</span>
+
+
+<span class="sd">    Simple example of a config file (e.g. ``config_ldap.yml``):</span>
+
+<span class="sd">    .. code-block::</span>
+
+<span class="sd">        uvicorn:</span>
+<span class="sd">            host: localhost</span>
+<span class="sd">            port: 60610</span>
+<span class="sd">        authentication:</span>
+<span class="sd">            providers:</span>
+<span class="sd">                - provider: ldap_local</span>
+<span class="sd">                authenticator: bluesky_httpserver.authenticators:LDAPAuthenticator</span>
+<span class="sd">                args:</span>
+<span class="sd">                    server_address: localhost</span>
+<span class="sd">                    server_port: 1389</span>
+<span class="sd">                    bind_dn_template: &quot;cn={username},ou=users,dc=example,dc=org&quot;</span>
+<span class="sd">                    use_tls: false</span>
+<span class="sd">                    use_ssl: false</span>
+<span class="sd">            tiled_admins:</span>
+<span class="sd">                - provider: ldap_local</span>
+<span class="sd">                id: user02</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
+
+<div class="viewcode-block" id="LDAPAuthenticator.__init__"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">server_address</span><span class="p">,</span>
+        <span class="n">server_port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">use_ssl</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_tls</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">connect_timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+        <span class="n">receive_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+        <span class="n">bind_dn_template</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">allowed_groups</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">valid_username_regex</span><span class="o">=</span><span class="sa">r</span><span class="s2">&quot;^[a-z][.a-z0-9_-]*$&quot;</span><span class="p">,</span>
+        <span class="n">lookup_dn</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">user_search_base</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">user_attribute</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">lookup_dn_search_filter</span><span class="o">=</span><span class="s2">&quot;(</span><span class="si">{login_attr}</span><span class="s2">=</span><span class="si">{login}</span><span class="s2">)&quot;</span><span class="p">,</span>
+        <span class="n">lookup_dn_search_user</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">lookup_dn_search_password</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">lookup_dn_user_dn_attribute</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">escape_userdn</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">search_filter</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">attributes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">auth_state_attributes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_lookup_dn_username</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span> <span class="o">=</span> <span class="n">use_ssl</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_tls</span> <span class="o">=</span> <span class="n">use_tls</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect_timeout</span> <span class="o">=</span> <span class="n">connect_timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">receive_timeout</span> <span class="o">=</span> <span class="n">receive_timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bind_dn_template</span> <span class="o">=</span> <span class="n">bind_dn_template</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allowed_groups</span> <span class="o">=</span> <span class="n">allowed_groups</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">valid_username_regex</span> <span class="o">=</span> <span class="n">valid_username_regex</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn</span> <span class="o">=</span> <span class="n">lookup_dn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">user_search_base</span> <span class="o">=</span> <span class="n">user_search_base</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">user_attribute</span> <span class="o">=</span> <span class="n">user_attribute</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_filter</span> <span class="o">=</span> <span class="n">lookup_dn_search_filter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_user</span> <span class="o">=</span> <span class="n">lookup_dn_search_user</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_password</span> <span class="o">=</span> <span class="n">lookup_dn_search_password</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_user_dn_attribute</span> <span class="o">=</span> <span class="n">lookup_dn_user_dn_attribute</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">escape_userdn</span> <span class="o">=</span> <span class="n">escape_userdn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">search_filter</span> <span class="o">=</span> <span class="n">search_filter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attributes</span> <span class="o">=</span> <span class="n">attributes</span> <span class="k">if</span> <span class="n">attributes</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auth_state_attributes</span> <span class="o">=</span> <span class="n">auth_state_attributes</span> <span class="k">if</span> <span class="n">auth_state_attributes</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_lookup_dn_username</span> <span class="o">=</span> <span class="n">use_lookup_dn_username</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">server_address</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">server_address_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">server_address</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">server_address</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
+            <span class="n">server_address_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">server_address</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported type of `server_address` (list): server_address=</span><span class="si">{</span><span class="n">server_address</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;type(server_address)=</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">server_address</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">server_address_list</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No servers are specified: &#39;server_address&#39; is an empty list&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_address_list</span> <span class="o">=</span> <span class="n">server_address_list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span> <span class="o">=</span> <span class="n">server_port</span> <span class="k">if</span> <span class="n">server_port</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_port_default</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">_server_port_default</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">636</span>  <span class="c1"># default SSL port for LDAP</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">389</span>  <span class="c1"># default plaintext port for LDAP</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">resolve_username</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username_supplied_by_user</span><span class="p">):</span>
+
+        <span class="kn">import</span> <span class="nn">ldap3</span>
+
+        <span class="n">search_dn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_user</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">escape_userdn</span><span class="p">:</span>
+            <span class="n">search_dn</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">conv</span><span class="o">.</span><span class="n">escape_filter_chars</span><span class="p">(</span><span class="n">search_dn</span><span class="p">)</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span>
+            <span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_connection</span><span class="p">,</span> <span class="n">search_dn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_password</span>
+        <span class="p">)</span>
+        <span class="n">is_bound</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">.</span><span class="n">bind</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_bound</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Failed to connect to LDAP server with search user &#39;</span><span class="si">{search_dn}</span><span class="s2">&#39;&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">search_dn</span><span class="o">=</span><span class="n">search_dn</span><span class="p">))</span>
+            <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">search_filter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_filter</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">login_attr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_attribute</span><span class="p">,</span> <span class="n">login</span><span class="o">=</span><span class="n">username_supplied_by_user</span>
+        <span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="s2">&quot;Looking up user with:&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;    search_base = &#39;</span><span class="si">{search_base}</span><span class="s2">&#39;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;    search_filter = &#39;</span><span class="si">{search_filter}</span><span class="s2">&#39;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;    attributes = &#39;</span><span class="si">{attributes}</span><span class="s2">&#39;&quot;</span><span class="p">,</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">search_base</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_search_base</span><span class="p">,</span>
+                <span class="n">search_filter</span><span class="o">=</span><span class="n">search_filter</span><span class="p">,</span>
+                <span class="n">attributes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_attribute</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">search_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+            <span class="n">conn</span><span class="o">.</span><span class="n">search</span><span class="p">,</span>
+            <span class="n">search_base</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_search_base</span><span class="p">,</span>
+            <span class="n">search_scope</span><span class="o">=</span><span class="n">ldap3</span><span class="o">.</span><span class="n">SUBTREE</span><span class="p">,</span>
+            <span class="n">search_filter</span><span class="o">=</span><span class="n">search_filter</span><span class="p">,</span>
+            <span class="n">attributes</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_user_dn_attribute</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">search_func</span><span class="p">)</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">response</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="s2">&quot;attributes&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;No entry found for user &#39;</span><span class="si">{username}</span><span class="s2">&#39; &quot;</span> <span class="s2">&quot;when looking up attribute &#39;</span><span class="si">{attribute}</span><span class="s2">&#39;&quot;</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">username_supplied_by_user</span><span class="p">,</span> <span class="n">attribute</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_attribute</span><span class="p">))</span>
+            <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">user_dn</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_user_dn_attribute</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">user_dn</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">user_dn</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">user_dn</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">user_dn</span> <span class="o">=</span> <span class="n">user_dn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="s2">&quot;A lookup of the username &#39;</span><span class="si">{username}</span><span class="s2">&#39; returned a list &quot;</span>
+                    <span class="s2">&quot;of entries for the attribute &#39;</span><span class="si">{attribute}</span><span class="s2">&#39;. Only the &quot;</span>
+                    <span class="s2">&quot;first among these (&#39;</span><span class="si">{first_entry}</span><span class="s2">&#39;) was used. The other &quot;</span>
+                    <span class="s2">&quot;entries (</span><span class="si">{other_entries}</span><span class="s2">) were ignored.&quot;</span>
+                <span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">username</span><span class="o">=</span><span class="n">username_supplied_by_user</span><span class="p">,</span>
+                        <span class="n">attribute</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_user_dn_attribute</span><span class="p">,</span>
+                        <span class="n">first_entry</span><span class="o">=</span><span class="n">user_dn</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                        <span class="n">other_entries</span><span class="o">=</span><span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">user_dn</span><span class="p">[</span><span class="mi">1</span><span class="p">:]),</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">user_dn</span> <span class="o">=</span> <span class="n">user_dn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="n">user_dn</span><span class="p">,</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;dn&quot;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">userdn</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
+
+        <span class="kn">import</span> <span class="nn">ldap3</span>
+
+        <span class="c1"># NOTE: setting &#39;acitve=False&#39; essentially disables exclusion of inactive servers from the pool.</span>
+        <span class="c1"># It probably does not matter if the pool contains only one server, but it could have implications</span>
+        <span class="c1"># when there are multiple servers in the pool. It is not clear what those implications are.</span>
+        <span class="c1"># But using the default &#39;activate=True&#39; results in the thread being blocked indefinitely</span>
+        <span class="c1"># at the step of creating &#39;ldap3.Connection&#39; regardless of timeouts in case all the servers are</span>
+        <span class="c1"># inactive (e.g. the pool has one server and it is unaccessible), which is unacceptable.</span>
+        <span class="c1"># Further investigation may be needed in the future.</span>
+        <span class="n">server_pool</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">ServerPool</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">RANDOM</span><span class="p">,</span> <span class="n">active</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">address</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_address_list</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;.+:\d+&quot;</span><span class="p">,</span> <span class="n">address</span><span class="p">):</span>
+                <span class="c1"># Port is found in the address</span>
+                <span class="n">address_split</span> <span class="o">=</span> <span class="n">address</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
+                <span class="n">server_addr</span> <span class="o">=</span> <span class="s2">&quot;:&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">address_split</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">server_port</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">address_split</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Use the default port</span>
+                <span class="n">server_addr</span> <span class="o">=</span> <span class="n">address</span>
+                <span class="n">server_port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span>
+
+            <span class="n">server</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">Server</span><span class="p">(</span>
+                <span class="n">server_addr</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">server_port</span><span class="p">,</span> <span class="n">use_ssl</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span><span class="p">,</span> <span class="n">connect_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">connect_timeout</span>
+            <span class="p">)</span>
+            <span class="n">server_pool</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">server</span><span class="p">)</span>
+
+        <span class="n">auto_bind_no_ssl</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">AUTO_BIND_TLS_BEFORE_BIND</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_tls</span> <span class="k">else</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">AUTO_BIND_NO_TLS</span>
+        <span class="n">auto_bind</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">AUTO_BIND_NO_TLS</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span> <span class="k">else</span> <span class="n">auto_bind_no_ssl</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">Connection</span><span class="p">(</span>
+            <span class="n">server_pool</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">userdn</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">auto_bind</span><span class="o">=</span><span class="n">auto_bind</span><span class="p">,</span> <span class="n">receive_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">receive_timeout</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">conn</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_user_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">,</span> <span class="n">userdn</span><span class="p">):</span>
+        <span class="n">attrs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">auth_state_attributes</span><span class="p">:</span>
+            <span class="n">search_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">search</span><span class="p">,</span> <span class="n">userdn</span><span class="p">,</span> <span class="s2">&quot;(objectClass=*)&quot;</span><span class="p">,</span> <span class="n">attributes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auth_state_attributes</span>
+            <span class="p">)</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">search_func</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">found</span><span class="p">:</span>
+                <span class="n">attrs</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">entries</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">entry_attributes_as_dict</span>
+        <span class="k">return</span> <span class="n">attrs</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+
+        <span class="kn">import</span> <span class="nn">ldap3</span>
+
+        <span class="n">username_saved</span> <span class="o">=</span> <span class="n">username</span>  <span class="c1"># Save the user name passed as a parameter</span>
+
+        <span class="c1"># Protect against invalid usernames as well as LDAP injection attacks</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">valid_username_regex</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;username:</span><span class="si">%s</span><span class="s2"> Illegal characters in username, must match regex </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">username</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">valid_username_regex</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># No empty passwords!</span>
+        <span class="k">if</span> <span class="n">password</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">password</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;username:</span><span class="si">%s</span><span class="s2"> Login denied for blank password&quot;</span><span class="p">,</span> <span class="n">username</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># bind_dn_template should be of type List[str]</span>
+        <span class="n">bind_dn_template</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_dn_template</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">bind_dn_template</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">bind_dn_template</span> <span class="o">=</span> <span class="p">[</span><span class="n">bind_dn_template</span><span class="p">]</span>
+
+        <span class="c1"># sanity check</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">bind_dn_template</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Login not allowed, please configure &#39;lookup_dn&#39; or &#39;bind_dn_template&#39;.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn</span><span class="p">:</span>
+            <span class="n">username</span><span class="p">,</span> <span class="n">resolved_dn</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">resolve_username</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">username</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_user_dn_attribute</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;CN&quot;</span><span class="p">:</span>
+                <span class="c1"># Only escape commas if the lookup attribute is CN</span>
+                <span class="n">username</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">subn</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;([^</span><span class="se">\\</span><span class="s2">]),&quot;</span><span class="p">,</span> <span class="sa">r</span><span class="s2">&quot;\1\,&quot;</span><span class="p">,</span> <span class="n">username</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">bind_dn_template</span><span class="p">:</span>
+                <span class="n">bind_dn_template</span> <span class="o">=</span> <span class="p">[</span><span class="n">resolved_dn</span><span class="p">]</span>
+
+        <span class="n">is_bound</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">dn</span> <span class="ow">in</span> <span class="n">bind_dn_template</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">dn</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Ignoring blank &#39;bind_dn_template&#39; entry!&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">userdn</span> <span class="o">=</span> <span class="n">dn</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">escape_userdn</span><span class="p">:</span>
+                <span class="n">userdn</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">conv</span><span class="o">.</span><span class="n">escape_filter_chars</span><span class="p">(</span><span class="n">userdn</span><span class="p">)</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Attempting to bind </span><span class="si">{username}</span><span class="s2"> with </span><span class="si">{userdn}</span><span class="s2">&quot;</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">userdn</span><span class="o">=</span><span class="n">userdn</span><span class="p">))</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Status of user bind </span><span class="si">{username}</span><span class="s2"> with </span><span class="si">{userdn}</span><span class="s2"> : </span><span class="si">{is_bound}</span><span class="s2">&quot;</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">conn</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span>
+                    <span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_connection</span><span class="p">,</span> <span class="n">userdn</span><span class="p">,</span> <span class="n">password</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">LDAPBindError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="n">is_bound</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">msg</span> <span class="o">+=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="si">{exc_type}</span><span class="s2">: </span><span class="si">{exc_msg}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">exc_type</span><span class="o">=</span><span class="n">exc</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                    <span class="n">exc_msg</span><span class="o">=</span><span class="n">exc</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">exc</span><span class="o">.</span><span class="n">args</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">bound</span><span class="p">:</span>
+                    <span class="n">is_bound</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">is_bound</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">.</span><span class="n">bind</span><span class="p">)</span>
+
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">userdn</span><span class="o">=</span><span class="n">userdn</span><span class="p">,</span> <span class="n">is_bound</span><span class="o">=</span><span class="n">is_bound</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_bound</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_bound</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Invalid password for user &#39;</span><span class="si">{username}</span><span class="s2">&#39;&quot;</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">))</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">search_filter</span><span class="p">:</span>
+            <span class="n">search_filter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">search_filter</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">userattr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_attribute</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">)</span>
+
+            <span class="n">search_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">search</span><span class="p">,</span>
+                <span class="n">search_base</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_search_base</span><span class="p">,</span>
+                <span class="n">search_scope</span><span class="o">=</span><span class="n">ldap3</span><span class="o">.</span><span class="n">SUBTREE</span><span class="p">,</span>
+                <span class="n">search_filter</span><span class="o">=</span><span class="n">search_filter</span><span class="p">,</span>
+                <span class="n">attributes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">attributes</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">search_func</span><span class="p">)</span>
+
+            <span class="n">n_users</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">n_users</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;User with &#39;</span><span class="si">{userattr}</span><span class="s2">=</span><span class="si">{username}</span><span class="s2">&#39; not found in directory&quot;</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">userattr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_attribute</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">))</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">n_users</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Duplicate users found! &quot;</span> <span class="s2">&quot;</span><span class="si">{n_users}</span><span class="s2"> users found with &#39;</span><span class="si">{userattr}</span><span class="s2">=</span><span class="si">{username}</span><span class="s2">&#39;&quot;</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">userattr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_attribute</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span> <span class="n">n_users</span><span class="o">=</span><span class="n">n_users</span><span class="p">))</span>
+                <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">allowed_groups</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;username:</span><span class="si">%s</span><span class="s2"> Using dn </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">userdn</span><span class="p">)</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">allowed_groups</span><span class="p">:</span>
+                <span class="n">group_filter</span> <span class="o">=</span> <span class="s2">&quot;(|&quot;</span> <span class="s2">&quot;(member=</span><span class="si">{userdn}</span><span class="s2">)&quot;</span> <span class="s2">&quot;(uniqueMember=</span><span class="si">{userdn}</span><span class="s2">)&quot;</span> <span class="s2">&quot;(memberUid=</span><span class="si">{uid}</span><span class="s2">)&quot;</span> <span class="s2">&quot;)&quot;</span>
+                <span class="n">group_filter</span> <span class="o">=</span> <span class="n">group_filter</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">userdn</span><span class="o">=</span><span class="n">userdn</span><span class="p">,</span> <span class="n">uid</span><span class="o">=</span><span class="n">username</span><span class="p">)</span>
+                <span class="n">group_attributes</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;member&quot;</span><span class="p">,</span> <span class="s2">&quot;uniqueMember&quot;</span><span class="p">,</span> <span class="s2">&quot;memberUid&quot;</span><span class="p">]</span>
+
+                <span class="n">search_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
+                    <span class="n">conn</span><span class="o">.</span><span class="n">search</span><span class="p">,</span>
+                    <span class="n">group</span><span class="p">,</span>
+                    <span class="n">search_scope</span><span class="o">=</span><span class="n">ldap3</span><span class="o">.</span><span class="n">BASE</span><span class="p">,</span>
+                    <span class="n">search_filter</span><span class="o">=</span><span class="n">group_filter</span><span class="p">,</span>
+                    <span class="n">attributes</span><span class="o">=</span><span class="n">group_attributes</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">found</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">search_func</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">found</span><span class="p">:</span>
+                    <span class="k">break</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="p">:</span>
+                <span class="c1"># If we reach here, then none of the groups matched</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;username:</span><span class="si">{username}</span><span class="s2"> User not in any of the allowed groups&quot;</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">))</span>
+                <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_lookup_dn_username</span><span class="p">:</span>
+            <span class="n">username</span> <span class="o">=</span> <span class="n">username_saved</span>
+
+        <span class="n">user_info</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user_attributes</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">userdn</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">user_info</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;username:</span><span class="si">%s</span><span class="s2"> attributes:</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">user_info</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s2">&quot;auth_state&quot;</span><span class="p">:</span> <span class="n">user_info</span><span class="p">}</span>
+        <span class="k">return</span> <span class="n">username</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Brookhaven National Laboratory.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

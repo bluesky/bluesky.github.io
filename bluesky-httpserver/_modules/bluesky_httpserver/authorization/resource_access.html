@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bluesky_httpserver.authorization.resource_access &mdash; Bluesky HTTP Server 0.post1+gebfa5cc documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../../index.html" class="icon icon-home"> Bluesky HTTP Server
+          </a>
+              <div class="version">
+                0.post1+gebfa5cc
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../release-history.html">Release History</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User's Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Starting and Using the Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../control_re_manager.html">Controlling Run Engine Manager</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Server Configuration</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Related Projects</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-queueserver">Bluesky Queue Server</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-queueserver-api">Bluesky Queue Server API</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-widgets">Bluesky Widgets</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky">Bluesky</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/ophyd">Ophyd</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/databroker">Data Broker</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Bluesky HTTP Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+      <li>bluesky_httpserver.authorization.resource_access</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bluesky_httpserver.authorization.resource_access</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">jsonschema</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="kn">from</span> <span class="nn">..config_schemas.loading</span> <span class="kn">import</span> <span class="n">ConfigError</span>
+<span class="kn">from</span> <span class="nn">._defaults</span> <span class="kn">import</span> <span class="n">_DEFAULT_RESOURCE_ACCESS_GROUP</span>
+
+
+<span class="n">_schema_DefaultResourceAccessControl</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  default_group:</span>
+<span class="s2">    oneOf:</span>
+<span class="s2">      - type: string</span>
+<span class="s2">        pattern: &quot;^[a-zA-Z_][0-9a-zA-Z_]*$&quot;</span>
+<span class="s2">      - type: &quot;null&quot;</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="DefaultResourceAccessControl"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.DefaultResourceAccessControl.html#bluesky_httpserver.authorization.DefaultResourceAccessControl">[docs]</a><span class="k">class</span> <span class="nc">DefaultResourceAccessControl</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Default resource access policy.</span>
+<span class="sd">    The resource access policy associates users with user groups. The groups</span>
+<span class="sd">    define the resources, such as plans and devices users can access. The</span>
+<span class="sd">    default policy assumes that all uses belong to a singe group (default user group).</span>
+<span class="sd">    The name of the group is returned by ``get_resource_name()`` method for any</span>
+<span class="sd">    submitted ``username``. The hard-coded name for the default user group can be</span>
+<span class="sd">    modified by passing the parameter ``default_group`` to the class constructor.</span>
+<span class="sd">    The arguments of the class constructor are specified in the configuration</span>
+<span class="sd">    file as shown in the example below.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    default_group: str</span>
+<span class="sd">        The name of the group returned by the access manager by default.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Configure ``DefaultResourceAccessControl`` policy to use different group</span>
+<span class="sd">    name for all the users. The new default group name is ``test_user``.</span>
+
+<span class="sd">    .. code-block::</span>
+
+<span class="sd">        resource_access:</span>
+<span class="sd">          policy: bluesky_httpserver.authorization:DefaultResourceAccessControl</span>
+<span class="sd">          args:</span>
+<span class="sd">            default_group: test_user</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="DefaultResourceAccessControl.__init__"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.DefaultResourceAccessControl.html#bluesky_httpserver.authorization.DefaultResourceAccessControl.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">default_group</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;default_group&quot;</span><span class="p">:</span> <span class="n">default_group</span><span class="p">}</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">_schema_DefaultResourceAccessControl</span><span class="p">)</span>
+            <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">jsonschema</span><span class="o">.</span><span class="n">ValidationError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;ValidationError while validating parameters DefaultResourceAccessControl: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+
+        <span class="n">default_group</span> <span class="o">=</span> <span class="n">default_group</span> <span class="ow">or</span> <span class="n">_DEFAULT_RESOURCE_ACCESS_GROUP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_default_group</span> <span class="o">=</span> <span class="n">default_group</span></div>
+
+    <span class="k">def</span> <span class="nf">get_resource_group</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the name of the user group based on the user name.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        username: str</span>
+<span class="sd">            User name.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Name of the user group.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_group</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Brookhaven National Laboratory.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bluesky_httpserver.authorization.api_access &mdash; Bluesky HTTP Server 0.post1+gebfa5cc documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../../index.html" class="icon icon-home"> Bluesky HTTP Server
+          </a>
+              <div class="version">
+                0.post1+gebfa5cc
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../release-history.html">Release History</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User's Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Starting and Using the Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../control_re_manager.html">Controlling Run Engine Manager</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Server Configuration</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Related Projects</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-queueserver">Bluesky Queue Server</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-queueserver-api">Bluesky Queue Server API</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky-widgets">Bluesky Widgets</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/bluesky">Bluesky</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/ophyd">Ophyd</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://blueskyproject.io/databroker">Data Broker</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Bluesky HTTP Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+      <li>bluesky_httpserver.authorization.api_access</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bluesky_httpserver.authorization.api_access</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">import</span> <span class="nn">jsonschema</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="kn">from</span> <span class="nn">._defaults</span> <span class="kn">import</span> <span class="n">_DEFAULT_ROLES</span><span class="p">,</span> <span class="n">_DEFAULT_USER_INFO</span>
+<span class="kn">from</span> <span class="nn">..config_schemas.loading</span> <span class="kn">import</span> <span class="n">ConfigError</span>
+
+<span class="n">_schema_BasicAPIAccessControl</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  roles:</span>
+<span class="s2">    oneOf:</span>
+<span class="s2">      - type: object</span>
+<span class="s2">        additionalProperties: false</span>
+<span class="s2">        patternProperties:</span>
+<span class="s2">          &quot;^[a-zA-Z_][0-9a-zA-Z_]*$&quot;:</span>
+<span class="s2">            oneOf:</span>
+<span class="s2">              - type: object</span>
+<span class="s2">                additionalProperties: false</span>
+<span class="s2">                properties:</span>
+<span class="s2">                  scopes_set:</span>
+<span class="s2">                    $ref: &#39;#/components/schemas/scope_list&#39;</span>
+<span class="s2">                  scopes_add:</span>
+<span class="s2">                    $ref: &#39;#/components/schemas/scope_list&#39;</span>
+<span class="s2">                  scopes_remove:</span>
+<span class="s2">                    $ref: &#39;#/components/schemas/scope_list&#39;</span>
+<span class="s2">              - type: &quot;null&quot;</span>
+<span class="s2">      - type: &quot;null&quot;</span>
+<span class="s2">components:</span>
+<span class="s2">  schemas:</span>
+<span class="s2">    scope_list:</span>
+<span class="s2">      oneOf:</span>
+<span class="s2">        - type: array</span>
+<span class="s2">          items:</span>
+<span class="s2">            type: string</span>
+<span class="s2">            pattern: &quot;^[0-9a-zA-Z:_]+$&quot;</span>
+<span class="s2">        - type: string</span>
+<span class="s2">          pattern: &quot;^[0-9a-zA-Z:_]+$&quot;</span>
+<span class="s2">        - type: &quot;null&quot;</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="BasicAPIAccessControl"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.BasicAPIAccessControl.html#bluesky_httpserver.authorization.BasicAPIAccessControl">[docs]</a><span class="k">class</span> <span class="nc">BasicAPIAccessControl</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Basic API access policy. The policy is used by HTTP server</span>
+<span class="sd">    by default. The basic policy supports two default users: ``UNAUTHENTICATED_SINGLE_USER``</span>
+<span class="sd">    (user authorized with single-user API key) and ``UNAUTHENTICATED_PUBLIC`` (unauthorized user,</span>
+<span class="sd">    sending no token or API key with the request). The default users are assigned to</span>
+<span class="sd">    ``unauthenticated_single_user`` and ``unauthenticated_public`` roles respectively.</span>
+<span class="sd">    In additon, five roles are defined by the policy and available to subclassed policies:</span>
+<span class="sd">    ``admin``, ``expert``, ``advanced``, ``user`` and ``observer``.</span>
+
+<span class="sd">    Each of the seven roles is assigned a reasonable set of default scopes, which may be</span>
+<span class="sd">    customized for practical deployments. The parameter ``roles`` allows to replace or modify</span>
+<span class="sd">    sets of scopes assigned to default roles or add new custom roles recognized by policies.</span>
+<span class="sd">    Note, that the basic API access policy support only unauthenticated access and uses</span>
+<span class="sd">    only two roles. The other default roles and custom roles are intended for use in subclasses</span>
+<span class="sd">    that define more sophysticated policies.</span>
+
+<span class="sd">    The optional parameter ``roles`` accepts a dictionary, which maps role names to operations</span>
+<span class="sd">    on the respective sets of scopes. The operations include ``scopes_set`` (replaces the existing</span>
+<span class="sd">    scopes by the new scopes or sets scopes for a new custom role), ``scopes_add`` (adds</span>
+<span class="sd">    scopes to the existing scopes) and ``scopes_remove`` (remove scopes from the set).</span>
+<span class="sd">    Multiple operations for a given role are executed in the following order: ``scopes_set``,</span>
+<span class="sd">    ``scopes_add`` followed by ``scopes_remove``.</span>
+
+<span class="sd">    The following examples illustrate how modify API access for the default ``user`` role.</span>
+<span class="sd">    Access to API may be disabled by mapping the role name to ``None`` or setting scopes to the</span>
+<span class="sd">    empty list::</span>
+
+<span class="sd">      # &#39;user&#39; can not access any API.</span>
+<span class="sd">      {&quot;user&quot;: None}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_set&quot;: []}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_set&quot;: None}}</span>
+
+<span class="sd">    In the following examples, the scopes are not changed, since no operations are specified or</span>
+<span class="sd">    the operations do not modify the scopes::</span>
+
+<span class="sd">      # Scopes are not changed</span>
+<span class="sd">      {&quot;user&quot;: {}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: []}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: None}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_remove&quot;: []}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_remove&quot;: None}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: [], &quot;scopes_remove&quot;: []}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: None, &quot;scopes_remove&quot;: None}}</span>
+
+<span class="sd">    The scopes are replaces by specifying a list of scopes with ``scopes_set``::</span>
+
+<span class="sd">      # Replace the scopes with the new set: &#39;user&#39; can now only read status and the queue.</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_set&quot;: [&quot;read:status&quot;, &quot;read:queue&quot;]}}</span>
+
+<span class="sd">      # Replace the scopes: &#39;user&#39; can now only read status.</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_set&quot;: [&quot;read:status&quot;]}}</span>
+<span class="sd">      # A single scope may be specified as a string (more convenient in YML config file).</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_set&quot;: &quot;read:status&quot;}}</span>
+
+<span class="sd">    Additional scopes can be added to the default scopes::</span>
+
+<span class="sd">      # In addition to default scopes, &#39;user&#39; can now upload and execute scripts.</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: [&quot;write:scripts&quot;]}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: &quot;write:scripts&quot;}}</span>
+
+<span class="sd">    Scopes can be removed from the default scopes::</span>
+
+<span class="sd">      # &#39;user&#39; is assigned the default scopes except API for editing the queue.</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_remove&quot;: [&quot;write:queue:edit&quot;]}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_remove&quot;: &quot;write:queue:edit&quot;}}</span>
+
+<span class="sd">    Multiple operations may be specified::</span>
+
+<span class="sd">      # Now the &#39;user&#39; can execute scripts, but not edit the queue.</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: [&quot;write:scripts&quot;], &quot;remove&quot;: [&quot;write:queue:edit&quot;]}}</span>
+<span class="sd">      {&quot;user&quot;: {&quot;scopes_add&quot;: &quot;write:scripts&quot;, &quot;remove&quot;: &quot;write:queue:edit&quot;}}</span>
+
+<span class="sd">    In practical deployments, the policy arguments are defined in config YML files.</span>
+<span class="sd">    The following is an example of configuration that modifies the scopes for</span>
+<span class="sd">    the ``user`` role and creates a new ``test_role``::</span>
+
+<span class="sd">      api_access:</span>
+<span class="sd">        policy: bluesky_httpserver.authorization:BasicAPIAccessControl</span>
+<span class="sd">        args:</span>
+<span class="sd">          roles:</span>
+<span class="sd">            user:</span>
+<span class="sd">              scopes_add: write:scripts</span>
+<span class="sd">              scopes_remove:</span>
+<span class="sd">                - write:queue:edit</span>
+<span class="sd">                - read:queue:edit</span>
+<span class="sd">            test_role:</span>
+<span class="sd">              scopes_add:</span>
+<span class="sd">                - read:status</span>
+<span class="sd">                - read:queue</span>
+<span class="sd">                - read:history</span>
+<span class="sd">                - read:resources</span>
+<span class="sd">                - read:config</span>
+<span class="sd">                - read:monitor</span>
+<span class="sd">                - read:console</span>
+<span class="sd">                - read:lock</span>
+<span class="sd">                - read:testing</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    roles: dict, None</span>
+<span class="sd">        The dictionary that maps role names to operations that modify assigned role scopes.</span>
+<span class="sd">        If ``None``, then the default roles with default unmodified scopes are used.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="BasicAPIAccessControl.__init__"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.BasicAPIAccessControl.html#bluesky_httpserver.authorization.BasicAPIAccessControl.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">roles</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;roles&quot;</span><span class="p">:</span> <span class="n">roles</span><span class="p">}</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">_schema_BasicAPIAccessControl</span><span class="p">)</span>
+            <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">jsonschema</span><span class="o">.</span><span class="n">ValidationError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ValidationError while validating parameters BasicAPIAccessControl: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+
+        <span class="n">roles</span> <span class="o">=</span> <span class="n">roles</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_roles</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">_DEFAULT_ROLES</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">role</span><span class="p">,</span> <span class="n">params</span> <span class="ow">in</span> <span class="n">roles</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">role_scopes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_roles</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">role</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span>
+            <span class="c1"># If &#39;params&#39; is None, then the role has no access (scopes is an empty set)</span>
+            <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;scopes_set&quot;</span><span class="p">:</span> <span class="p">[]}</span>
+            <span class="k">if</span> <span class="s2">&quot;scopes_set&quot;</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
+                <span class="n">role_scopes</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+                <span class="n">role_scopes</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_scope_list</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s2">&quot;scopes_set&quot;</span><span class="p">]))</span>
+            <span class="k">if</span> <span class="s2">&quot;scopes_add&quot;</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
+                <span class="n">role_scopes</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_create_scope_list</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s2">&quot;scopes_add&quot;</span><span class="p">]))</span>
+            <span class="k">if</span> <span class="s2">&quot;scopes_remove&quot;</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
+                <span class="n">scopes_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_scope_list</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="s2">&quot;scopes_remove&quot;</span><span class="p">])</span>
+                <span class="k">for</span> <span class="n">scope</span> <span class="ow">in</span> <span class="n">scopes_list</span><span class="p">:</span>
+                    <span class="n">role_scopes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">scope</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">_DEFAULT_USER_INFO</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_create_scope_list</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scopes</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scopes</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">scopes</span><span class="o">.</span><span class="n">lower</span><span class="p">()]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scopes</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">_</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">scopes</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">scopes</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported type of scope list: scopes = </span><span class="si">{</span><span class="n">scopes</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_is_user_known</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">username</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span>
+
+    <span class="k">def</span> <span class="nf">_collect_scopes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">role</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns an empty set if the role is not defined.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_roles</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">role</span><span class="p">,</span> <span class="nb">set</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">_collect_user_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns an empty dictionary if user data is found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="p">{})</span>
+
+    <span class="k">def</span> <span class="nf">_collect_role_scopes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">roles</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        &#39;roles&#39; is a role name (string) or a list of roles (list of strings).</span>
+<span class="sd">        Returns a set of scopes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">roles</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">scopes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collect_scopes</span><span class="p">(</span><span class="n">roles</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scopes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_collect_scopes</span><span class="p">(</span><span class="n">_</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">roles</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">scopes</span>
+
+    <span class="k">def</span> <span class="nf">is_user_known</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Performs quick check whether the user is known. In many cases it does not make sense to</span>
+<span class="sd">        perform any further authorization steps if the user is unknown. If the user is known, but</span>
+<span class="sd">        not assigned to any groups or assigned to groups with empty scopes, then the user still</span>
+<span class="sd">        can not access any API.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        username: str</span>
+<span class="sd">            User name</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        boolean</span>
+<span class="sd">            Indicates if the user is known (``True``) or not (``False``).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_user_known</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_user_roles</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a set of roles assigned to the user.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        username: str</span>
+<span class="sd">            User name</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set(str)</span>
+<span class="sd">            A set of roles assigned to the user. The set of roles is empty if the user is not found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">principal_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collect_user_info</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+        <span class="n">roles</span> <span class="o">=</span> <span class="n">principal_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;roles&quot;</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">roles</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">roles</span> <span class="o">=</span> <span class="p">[</span><span class="n">roles</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="n">roles</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_user_scopes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a set of scopes assigned to the user. The scopes are based on the user roles.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        username: str</span>
+<span class="sd">            User name</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set(str)</span>
+<span class="sd">            A set of scopes assigned to the user. The set of scopes is empty if the user is not found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">roles</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user_roles</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collect_role_scopes</span><span class="p">(</span><span class="n">roles</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_displayed_user_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the displayed user name for the user. The displayed user name is assembled from</span>
+<span class="sd">        ``username``, full &#39;displayed&#39; user name and user&#39;s email. The formatting depends on</span>
+<span class="sd">        the available data, i.e. if no additional data is available, then ``username`` is returned.</span>
+<span class="sd">        If the user is not found, then ``username`` is returned. The following output is possible</span>
+<span class="sd">        for the user *&#39;jdoe&#39;*::</span>
+
+<span class="sd">          jdoe</span>
+<span class="sd">          jdoe &lt;jdoe@gmail.com&gt;</span>
+<span class="sd">          jdoe &quot;John Doe&quot;</span>
+<span class="sd">          jdoe &quot;John Doe &lt;jdoe@gmail.com&gt;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        username: str</span>
+<span class="sd">            User name</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Formatted displayed user name.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">user_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collect_user_info</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+        <span class="n">mail</span> <span class="o">=</span> <span class="n">user_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;mail&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">displayed_name</span> <span class="o">=</span> <span class="n">user_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;displayed_name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">mail</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">displayed_name</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">username</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">displayed_name</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2"> &lt;</span><span class="si">{</span><span class="n">mail</span><span class="si">}</span><span class="s2">&gt;&quot;</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">mail</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s1"> &quot;</span><span class="si">{</span><span class="n">displayed_name</span><span class="si">}</span><span class="s1">&quot;&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s1"> &quot;</span><span class="si">{</span><span class="n">displayed_name</span><span class="si">}</span><span class="s1"> &lt;</span><span class="si">{</span><span class="n">mail</span><span class="si">}</span><span class="s1">&gt;&quot;&#39;</span>
+
+    <span class="k">def</span> <span class="nf">get_user_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns complete user information, including a set of roles, set of scopes and displayed user name.</span>
+<span class="sd">        This operation is more efficient that getting those items one by one.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        username: str</span>
+<span class="sd">            User name</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            The dictionary with full user information. The keys: ``roles`` (see ``get_user_roles()``),</span>
+<span class="sd">            ``scopes`` (see ``get_user_scopes()``) and ``displayed_name`` (see ``get_displayed_user_name()``).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">roles</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user_roles</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+        <span class="n">scopes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collect_role_scopes</span><span class="p">(</span><span class="n">roles</span><span class="p">)</span>
+        <span class="n">displayed_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_displayed_user_name</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;roles&quot;</span><span class="p">:</span> <span class="n">roles</span><span class="p">,</span> <span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;displayed_name&quot;</span><span class="p">:</span> <span class="n">displayed_name</span><span class="p">}</span></div>
+
+
+<span class="n">_schema_DictionaryAPIAccessControl</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  roles:  # Detailed validation is performed elsewhere</span>
+<span class="s2">    description: The value is passed to BasicAPIAccessControl object</span>
+<span class="s2">  users:</span>
+<span class="s2">    oneOf:</span>
+<span class="s2">      - type: object</span>
+<span class="s2">        additionalProperties: false</span>
+<span class="s2">        patternProperties:</span>
+<span class="s2">          &quot;^[0-9a-zA-Z_]+$&quot;:</span>
+<span class="s2">            oneOf:</span>
+<span class="s2">              - type: object</span>
+<span class="s2">                additionalProperties: false</span>
+<span class="s2">                properties:</span>
+<span class="s2">                  roles:</span>
+<span class="s2">                    oneOf:</span>
+<span class="s2">                      - type: array</span>
+<span class="s2">                        items:</span>
+<span class="s2">                          type: string</span>
+<span class="s2">                          pattern: &quot;^[a-zA-Z_][0-9a-zA-Z_]*$&quot;</span>
+<span class="s2">                      - type: string</span>
+<span class="s2">                        pattern: &quot;^[a-zA-Z_][0-9a-zA-Z_]*$&quot;</span>
+<span class="s2">                      - type: &quot;null&quot;</span>
+<span class="s2">                  displayed_name:</span>
+<span class="s2">                    oneOf:</span>
+<span class="s2">                      - type: string</span>
+<span class="s2">                        pattern: &quot;^.+$&quot;</span>
+<span class="s2">                      - type: &quot;null&quot;</span>
+<span class="s2">                  mail:</span>
+<span class="s2">                    oneOf:</span>
+<span class="s2">                      - type: string</span>
+<span class="s2">                        pattern: &quot;^.+@.+$&quot;</span>
+<span class="s2">                      - type: &quot;null&quot;</span>
+<span class="s2">              - type: &quot;null&quot;</span>
+<span class="s2">      - type: &quot;null&quot;</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="DictionaryAPIAccessControl"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.DictionaryAPIAccessControl.html#bluesky_httpserver.authorization.DictionaryAPIAccessControl">[docs]</a><span class="k">class</span> <span class="nc">DictionaryAPIAccessControl</span><span class="p">(</span><span class="n">BasicAPIAccessControl</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Dictionary-based API access policy.</span>
+<span class="sd">    Simple extension of ``BasicAPIAccessControl`` that provides an option to provide user information,</span>
+<span class="sd">    including assigned roles, displayed name and email. The policy is primarily intended for use in demos</span>
+<span class="sd">    and testing. Production deployments are expected to use more secure authorization policies.</span>
+
+<span class="sd">    User information is passed using ``users`` parameter, which accepts a dictionary. If the parameter</span>
+<span class="sd">    is ``None``, then no user information is passed to the policy and no users are allowed to access any API.</span>
+<span class="sd">    The dictionary maps usernames to user information dictionaries, containing roles, displayed names (optional)</span>
+<span class="sd">    and emails (optional). The policy arguments are specified as part of config YML files as illustrated</span>
+<span class="sd">    in the following examples::</span>
+
+<span class="sd">        # No users are allowed to access any API.</span>
+<span class="sd">        api_access:</span>
+<span class="sd">          policy: bluesky_httpserver.authorization:DictionaryAPIAccessControl</span>
+<span class="sd">          args:</span>
+<span class="sd">              users: None</span>
+
+<span class="sd">        # User &#39;bob&#39; is defined, but he is not allowed to use any API.</span>
+<span class="sd">        api_access:</span>
+<span class="sd">          policy: bluesky_httpserver.authorization:DictionaryAPIAccessControl</span>
+<span class="sd">          args:</span>
+<span class="sd">            users:</span>
+<span class="sd">              bob: None</span>
+
+<span class="sd">        # User &#39;bob&#39; is assigned to &#39;admin&#39; and &#39;expert&#39; groups, &#39;jdoe&#39; is assigned to the &#39;advanced&#39; group.</span>
+<span class="sd">        # Note: a single role may be represented as a list or a string.</span>
+<span class="sd">        api_access:</span>
+<span class="sd">          policy: bluesky_httpserver.authorization:DictionaryAPIAccessControl</span>
+<span class="sd">          args:</span>
+<span class="sd">            users:</span>
+<span class="sd">              bob:</span>
+<span class="sd">                roles:</span>
+<span class="sd">                  - admin</span>
+<span class="sd">                  - expert</span>
+<span class="sd">                mail: bob@gmail.com</span>
+<span class="sd">              jdoe:</span>
+<span class="sd">                roles: advanced</span>
+<span class="sd">                dislayed_name: Doe, John</span>
+<span class="sd">                mail: jdoe@gmail.com</span>
+
+<span class="sd">    The policy arguments may also include ``roles`` parameter, which is handled by ``BasicAPIAccessControl``.</span>
+<span class="sd">    See docstring for ``BasicAPIAccessControl`` for more detailed information.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    roles: dict or None</span>
+<span class="sd">        The dictionary configuration parameters that modifies the default or create new roles. The parameter</span>
+<span class="sd">        is passed to ``BasicAPIAccessControl``.</span>
+<span class="sd">    users: dict or None</span>
+<span class="sd">        The dictionary that maps user name to user information.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="DictionaryAPIAccessControl.__init__"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.DictionaryAPIAccessControl.html#bluesky_httpserver.authorization.DictionaryAPIAccessControl.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">roles</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">users</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">roles</span><span class="o">=</span><span class="n">roles</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;roles&quot;</span><span class="p">:</span> <span class="n">roles</span><span class="p">,</span> <span class="s2">&quot;users&quot;</span><span class="p">:</span> <span class="n">users</span><span class="p">}</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">_schema_DictionaryAPIAccessControl</span><span class="p">)</span>
+            <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">jsonschema</span><span class="o">.</span><span class="n">ValidationError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ValidationError while validating parameters BasicAPIAccessControl: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+
+        <span class="n">users</span> <span class="o">=</span> <span class="n">users</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">user_info</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">users</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">user_info</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">user_info</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">user_info</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">user_info</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">user_info</span><span class="p">[</span><span class="n">k</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">user_info</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">v</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;roles&quot;</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="k">if</span> <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">user_info</span><span class="p">)</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Brookhaven National Laboratory.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
