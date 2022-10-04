@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.mapping &mdash; tiled 0.1.0a74.post5+g9570366 documentation</title>
+  <title>tiled.adapters.mapping &mdash; tiled 0.1.0a74.post6+g2841bfd documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -17,6 +17,7 @@
         <script src="../../../_static/underscore.js"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
         <script src="../../../_static/clipboard.min.js"></script>
         <script src="../../../_static/copybutton.js"></script>
     <script src="../../../_static/js/theme.js"></script>
@@ -32,7 +33,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a74.post5+g9570366
+                0.1.0a74.post6+g2841bfd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -135,6 +136,7 @@
     <span class="n">Eq</span><span class="p">,</span>
     <span class="n">FullText</span><span class="p">,</span>
     <span class="n">In</span><span class="p">,</span>
+    <span class="n">KeysFilter</span><span class="p">,</span>
     <span class="n">NotEq</span><span class="p">,</span>
     <span class="n">NotIn</span><span class="p">,</span>
     <span class="n">Regex</span><span class="p">,</span>
@@ -142,7 +144,7 @@
     <span class="n">StructureFamily</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">..query_registration</span> <span class="kn">import</span> <span class="n">QueryTranslationRegistry</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">SpecialUsers</span><span class="p">,</span> <span class="n">import_object</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">IndexersMixin</span>
 
 
@@ -153,7 +155,6 @@
 
     <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span>
         <span class="s2">&quot;_access_policy&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;_principal&quot;</span><span class="p">,</span>
         <span class="s2">&quot;_mapping&quot;</span><span class="p">,</span>
         <span class="s2">&quot;_metadata&quot;</span><span class="p">,</span>
         <span class="s2">&quot;_sorting&quot;</span><span class="p">,</span>
@@ -180,7 +181,6 @@
         <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">sorting</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">principal</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">entries_stale_after</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">metadata_stale_after</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">must_revalidate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -195,7 +195,6 @@
 <span class="sd">        specs : List[str], optional</span>
 <span class="sd">        sorting : List[Tuple[str, int]], optional</span>
 <span class="sd">        access_policy : AccessPolicy, optional</span>
-<span class="sd">        principal : str, optional</span>
 <span class="sd">        entries_stale_after: timedelta</span>
 <span class="sd">            This server uses this to communite to the client how long</span>
 <span class="sd">            it should rely on a local cache before checking back for changes.</span>
@@ -214,14 +213,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_sorting</span> <span class="o">=</span> <span class="n">sorting</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">specs</span> <span class="o">=</span> <span class="n">specs</span> <span class="ow">or</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">access_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
-            <span class="ow">not</span> <span class="n">access_policy</span><span class="o">.</span><span class="n">check_compatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Access policy </span><span class="si">{</span><span class="n">access_policy</span><span class="si">}</span><span class="s2"> is not compatible with this Adapter.&quot;</span>
-            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_access_policy</span> <span class="o">=</span> <span class="n">access_policy</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_principal</span> <span class="o">=</span> <span class="n">principal</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_must_revalidate</span> <span class="o">=</span> <span class="n">must_revalidate</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">include_routers</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">background_tasks</span> <span class="o">=</span> <span class="p">[]</span>
@@ -244,10 +236,6 @@
     <span class="nd">@access_policy</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span> <span class="nf">access_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_access_policy</span> <span class="o">=</span> <span class="n">value</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">principal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_principal</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -296,22 +284,12 @@
             <span class="k">return</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">entries_stale_after</span> <span class="o">+</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">authenticated_as</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_principal</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Already authenticated as </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">principal</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_access_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">tree</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_access_policy</span><span class="o">.</span><span class="n">filter_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">tree</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">principal</span><span class="o">=</span><span class="n">principal</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">tree</span>
-
     <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">,</span>
         <span class="n">mapping</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">sorting</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
-        <span class="n">principal</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="n">must_revalidate</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
@@ -321,8 +299,6 @@
             <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span>
         <span class="k">if</span> <span class="n">sorting</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
             <span class="n">sorting</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sorting</span>
-        <span class="k">if</span> <span class="n">principal</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
-            <span class="n">principal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_principal</span>
         <span class="k">if</span> <span class="n">must_revalidate</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
             <span class="n">must_revalidate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">must_revalidate</span>
         <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span>
@@ -332,7 +308,6 @@
             <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">specs</span><span class="p">,</span>
             <span class="n">access_policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span>
-            <span class="n">principal</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">principal</span><span class="p">,</span>
             <span class="n">entries_stale_after</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">entries_stale_after</span><span class="p">,</span>
             <span class="n">metadata_stale_after</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">entries_stale_after</span><span class="p">,</span>
             <span class="n">must_revalidate</span><span class="o">=</span><span class="n">must_revalidate</span><span class="p">,</span>
@@ -618,75 +593,15 @@
 <span class="n">MapAdapter</span><span class="o">.</span><span class="n">register_query</span><span class="p">(</span><span class="n">StructureFamily</span><span class="p">,</span> <span class="n">structure_family</span><span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">DummyAccessPolicy</span><span class="p">:</span>
-    <span class="s2">&quot;Impose no access restrictions.&quot;</span>
-
-    <span class="k">def</span> <span class="nf">check_compatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tree</span><span class="p">):</span>
-        <span class="c1"># This only works on in-memory Adapter or subclases.</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">MapAdapter</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">modify_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queries</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">queries</span>
-
-    <span class="k">def</span> <span class="nf">filter_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tree</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">tree</span><span class="p">)(</span>
-            <span class="n">mapping</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_mapping</span><span class="p">,</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">tree</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-            <span class="n">access_policy</span><span class="o">=</span><span class="n">tree</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span>
-            <span class="n">principal</span><span class="o">=</span><span class="n">principal</span><span class="p">,</span>
-        <span class="p">)</span>
+<span class="k">def</span> <span class="nf">keys_filter</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">tree</span><span class="p">):</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">tree</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">keys</span><span class="p">:</span>
+            <span class="n">matches</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">tree</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">mapping</span><span class="o">=</span><span class="n">matches</span><span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">SimpleAccessPolicy</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A mapping of user names to lists of entries they can access.</span>
-
-<span class="sd">    &gt;&gt;&gt; SimpleAccessPolicy({&quot;alice&quot;: [&quot;A&quot;, &quot;B&quot;], &quot;bob&quot;: [&quot;B&quot;]}, provider=&quot;toy&quot;)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">ALL</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>  <span class="c1"># sentinel</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">access_lists</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">provider</span><span class="p">,</span> <span class="n">public</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">access_lists</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">provider</span> <span class="o">=</span> <span class="n">provider</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">public</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">public</span> <span class="ow">or</span> <span class="p">[])</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">access_lists</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">access_lists</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-
-    <span class="k">def</span> <span class="nf">check_compatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tree</span><span class="p">):</span>
-        <span class="c1"># This only works on MapAdapter or subclases.</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">MapAdapter</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">modify_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queries</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">queries</span>
-
-    <span class="k">def</span> <span class="nf">filter_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tree</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
-        <span class="c1"># Get the id (i.e. username) of this Principal for the</span>
-        <span class="c1"># associated authentication provider.</span>
-        <span class="k">for</span> <span class="n">identity</span> <span class="ow">in</span> <span class="n">principal</span><span class="o">.</span><span class="n">identities</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">identity</span><span class="o">.</span><span class="n">provider</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">provider</span><span class="p">:</span>
-                <span class="nb">id</span> <span class="o">=</span> <span class="n">identity</span><span class="o">.</span><span class="n">id</span>
-                <span class="k">break</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Principcal </span><span class="si">{</span><span class="n">principal</span><span class="si">}</span><span class="s2"> has no identity from provider </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">provider</span><span class="si">}</span><span class="s2">. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Its identities are: </span><span class="si">{</span><span class="n">principal</span><span class="o">.</span><span class="n">identities</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-        <span class="n">access_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">access_lists</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="p">[])</span>
-
-        <span class="k">if</span> <span class="p">(</span><span class="n">principal</span> <span class="ow">is</span> <span class="n">SpecialUsers</span><span class="o">.</span><span class="n">admin</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">access_list</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">ALL</span><span class="p">):</span>
-            <span class="n">mapping</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">_mapping</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">allowed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">access_list</span> <span class="ow">or</span> <span class="p">[])</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">public</span>
-            <span class="n">mapping</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">tree</span><span class="o">.</span><span class="n">_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">allowed</span><span class="p">}</span>
-        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="n">tree</span><span class="p">)(</span>
-            <span class="n">mapping</span><span class="o">=</span><span class="n">mapping</span><span class="p">,</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">tree</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-            <span class="n">access_policy</span><span class="o">=</span><span class="n">tree</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span>
-            <span class="n">principal</span><span class="o">=</span><span class="n">principal</span><span class="p">,</span>
-        <span class="p">)</span>
+<span class="n">MapAdapter</span><span class="o">.</span><span class="n">register_query</span><span class="p">(</span><span class="n">KeysFilter</span><span class="p">,</span> <span class="n">keys_filter</span><span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_HIGH_SORTER_CLASS</span><span class="p">:</span>

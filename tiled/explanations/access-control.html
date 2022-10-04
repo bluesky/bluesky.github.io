@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Access Control &mdash; tiled 0.1.0a74.post5+g9570366 documentation</title>
+  <title>Access Control &mdash; tiled 0.1.0a74.post6+g2841bfd documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -18,6 +18,7 @@
         <script src="../_static/underscore.js"></script>
         <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
         <script src="../_static/clipboard.min.js"></script>
         <script src="../_static/copybutton.js"></script>
     <script src="../_static/js/theme.js"></script>
@@ -35,7 +36,7 @@
             <a href="../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a74.post5+g9570366
+                0.1.0a74.post6+g2841bfd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -125,19 +126,20 @@
              
   <section id="access-control">
 <h1>Access Control<a class="headerlink" href="#access-control" title="Permalink to this heading">¶</a></h1>
-<p>Tiled offers extensible access control over which users can access
-which entries.</p>
-<p>This is implemented using an “Access Policy” object, which implements
-a given policy for certain types of Tree. It can do this in one of two ways:</p>
+<p>Tiled uses a programmable Access Control Policy to manage which
+users can access and perform actions on (read, write, delete) which entries.</p>
+<p>An Access Control Policy answers two questions:</p>
 <ol class="arabic simple">
-<li><p>Brute-force checking the entries one at a time</p></li>
-<li><p>Using a query to narrow down search results to those that
-the authenticated user is allowed to access.</p></li>
+<li><p>Given a Principal (user or service) and a Node, return a list of the scopes
+(actions) the Principal is allowed to perform on that Node.</p></li>
+<li><p>Given a Principal (user or service), a Node, and a list of scopes (actions),
+return a list of Query objects that, when applied to the Node, filters its
+children such that the Principal can do all of those actions on the remaining
+children (if any).</p></li>
 </ol>
-<p>(1) is easier to implement and suitable for small- to medium-sized Trees
-in memory or backed by a modestly-sized directory. (2) is necessary for large
-Trees backed by databases or other external services.</p>
-<p>This is an example of (1):</p>
+<p>This determination can be backed by a call to an external service or by a
+static configuration file. We demonstrate both here.</p>
+<p>First, the static configuration file. Consider this simple tree of data:</p>
 <div class="literal-block-wrapper docutils container" id="id1">
 <div class="code-block-caption"><span class="caption-text">tiled/examples/toy_authentication.py</span><a class="headerlink" href="#id1" title="Permalink to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
@@ -163,8 +165,9 @@ Trees backed by databases or other external services.</p>
 </pre></div>
 </div>
 </div>
+<p>protected by this simple Access Control Policy:</p>
 <div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">example_configs/toy_authentication.py</span><a class="headerlink" href="#id2" title="Permalink to this code">¶</a></div>
+<div class="code-block-caption"><span class="caption-text">example_configs/toy_authentication.yml</span><a class="headerlink" href="#id2" title="Permalink to this code">¶</a></div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
   providers:
   - provider: toy
@@ -178,14 +181,22 @@ Trees backed by databases or other external services.</p>
     - provider: toy
       id: alice
 access_control:
-  access_policy: tiled.adapters.mapping:SimpleAccessPolicy
+  access_policy: tiled.access_policies:SimpleAccessPolicy
   args:
     provider: toy  # matches provider above
     access_lists:
-      alice: [&quot;A&quot;, &quot;B&quot;]
-      bob: [&quot;A&quot;, &quot;C&quot;]
-      cara: tiled.adapters.mapping:SimpleAccessPolicy.ALL
-    public: [&quot;D&quot;]
+      alice:
+      - A
+      - B
+      bob:
+      - A
+      - C
+      cara: tiled.access_policies:SimpleAccessPolicy.ALL
+    scopes:
+    - &quot;read:metadata&quot;
+    - &quot;read:data&quot;
+    public:
+    - D
 trees:
   - path: /
     tree: tiled.examples.toy_authentication:tree
@@ -201,28 +212,18 @@ in the Tree.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALICE_PASSWORD</span><span class="o">=</span><span class="n">secret1</span> <span class="n">BOB_PASSWORD</span><span class="o">=</span><span class="n">secret2</span> <span class="n">CARA_PASSWORD</span><span class="o">=</span><span class="n">secret3</span> <span class="n">tiled</span> <span class="n">serve</span> <span class="n">config</span> <span class="n">example_configs</span><span class="o">/</span><span class="n">config</span><span class="o">.</span><span class="n">yml</span>
 </pre></div>
 </div>
-<p>Implementing (2) is highly situation dependent. Here is a sketch of the Access Policy
-used by NSLS-II to integrate with our proposal system and MongoDB database of metadata.</p>
+<p>For large-scale deployment, Tiled typically integrates with an existing access management
+system. This is sketch of the Access Control Policy used by NSLS-II to
+integrate with our proposal system.</p>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">cachetools</span>
-<span class="kn">from</span> <span class="nn">databroker.mongo_normalized</span> <span class="kn">import</span> <span class="n">Tree</span>
 <span class="kn">import</span> <span class="nn">httpx</span>
+<span class="kn">from</span> <span class="nn">tiled.queries</span> <span class="kn">import</span> <span class="n">In</span>
 
-<span class="c1"># Use a process-global cache that instances of PASSAccessPolicy share.</span>
+
+<span class="c1"># To reduce load on the external service and to expedite repeated lookups, use a</span>
+<span class="c1"># process-global cache with a timeout.</span>
 <span class="n">response_cache</span> <span class="o">=</span> <span class="n">cachetools</span><span class="o">.</span><span class="n">TTLCache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">10_000</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
 
-<span class="k">if</span> <span class="n">__debug__</span><span class="p">:</span>
-    <span class="kn">import</span> <span class="nn">logging</span>
-    <span class="kn">import</span> <span class="nn">os</span>
-
-    <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
-    <span class="n">handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">()</span>
-    <span class="n">handler</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
-    <span class="n">handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span><span class="s2">&quot;PASS ACCESS POLICY: </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">))</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">handler</span><span class="p">)</span>
-
-    <span class="n">log_level</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;PASS_ACCESS_POLICY_LOG_LEVEL&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">log_level</span><span class="p">:</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">log_level</span><span class="o">.</span><span class="n">upper</span><span class="p">())</span>
 
 <span class="k">class</span> <span class="nc">PASSAccessPolicy</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -233,43 +234,45 @@ used by NSLS-II to integrate with our proposal system and MongoDB database of me
 <span class="sd">        beamline: ...</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">beamline</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">beamline</span><span class="p">,</span> <span class="n">provider</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="n">url</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_beamline</span> <span class="o">=</span> <span class="n">beamline</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">provider</span> <span class="o">=</span> <span class="n">provider</span>
 
-    <span class="k">def</span> <span class="nf">check_compatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">catalog</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">catalog</span><span class="p">,</span> <span class="n">Tree</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">modify_queries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">queries</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="n">response_cache</span><span class="p">[</span><span class="n">principal</span><span class="p">]</span>
-        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Cache miss&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/data_session/</span><span class="si">{</span><span class="n">principal</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="n">response_cache</span><span class="p">[</span><span class="n">principal</span><span class="p">]</span> <span class="o">=</span> <span class="n">response</span>
+    <span class="k">def</span> <span class="nf">_get_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">identity</span> <span class="ow">in</span> <span class="n">principal</span><span class="o">.</span><span class="n">identities</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">identity</span><span class="o">.</span><span class="n">provider</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">provider</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">identity</span><span class="o">.</span><span class="n">id</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Cache hit&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
-            <span class="c1"># TODO Fast-path for access policy to say &quot;no access&quot;</span>
-            <span class="n">modified_queries</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span>
-            <span class="n">modified_queries</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;data_session&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$in&quot;</span><span class="p">:</span> <span class="p">[]}})</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
-            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: Failure&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">modified_queries</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Principcal </span><span class="si">{</span><span class="n">principal</span><span class="si">}</span><span class="s2"> has no identity from provider </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">provider</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Its identities are: </span><span class="si">{</span><span class="n">principal</span><span class="o">.</span><span class="n">identities</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">allowed_scopes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">principal</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;read:metadata&quot;</span><span class="p">,</span> <span class="s2">&quot;read:data&quot;</span><span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">filters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">principal</span><span class="p">,</span> <span class="n">scopes</span><span class="p">):</span>
+        <span class="n">queries</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="nb">id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_id</span><span class="p">(</span><span class="n">principal</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">scopes</span><span class="o">.</span><span class="n">issubset</span><span class="p">({</span><span class="s2">&quot;read:metadata&quot;</span><span class="p">,</span> <span class="s2">&quot;read:data&quot;</span><span class="p">}):</span>
+            <span class="k">return</span> <span class="n">NO_ACCESS</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">response_cache</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/data_session/</span><span class="si">{</span><span class="nb">id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">response_cache</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">response</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">is_error</span><span class="p">:</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="k">if</span> <span class="p">(</span><span class="s2">&quot;nsls2&quot;</span> <span class="ow">in</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;facility_all_access&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[]))</span> <span class="ow">or</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_beamline</span> <span class="ow">in</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;beamline_all_access&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[])</span>
         <span class="p">):</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: all access&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">queries</span>
-        <span class="n">modified_queries</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span>
-        <span class="n">modified_queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">{</span><span class="s2">&quot;data_session&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$in&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data_sessions&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[])}}</span>
+        <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">In</span><span class="p">(</span><span class="s2">&quot;data_session&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;data_sessions&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[])</span>
         <span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: access to </span><span class="si">%d</span><span class="s2"> data sessions&quot;</span><span class="p">,</span> <span class="n">principal</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;data_sessions&quot;</span><span class="p">]))</span>
-        <span class="k">return</span> <span class="n">modified_queries</span>
+        <span class="k">return</span> <span class="n">queries</span>
 </pre></div>
 </div>
 </section>
