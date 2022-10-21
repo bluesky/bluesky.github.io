@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a74.post24+gcec16fe documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a74.post64+g668de39 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -33,7 +33,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a74.post24+gcec16fe
+                0.1.0a74.post64+g668de39
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -123,162 +123,35 @@
              
   <h1>Source code for tiled.client.context</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">import</span> <span class="nn">enum</span>
 <span class="kn">import</span> <span class="nn">getpass</span>
 <span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">secrets</span>
-<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
-<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span><span class="p">,</span> <span class="n">PurePosixPath</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
-<span class="kn">import</span> <span class="nn">appdirs</span>
 <span class="kn">import</span> <span class="nn">httpx</span>
 <span class="kn">import</span> <span class="nn">msgpack</span>
 
 <span class="kn">from</span> <span class="nn">.._version</span> <span class="kn">import</span> <span class="n">get_versions</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span>
+<span class="kn">from</span> <span class="nn">.auth</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
+    <span class="n">CannotRefreshAuthentication</span><span class="p">,</span>
+    <span class="n">TiledAuth</span><span class="p">,</span>
+    <span class="n">build_refresh_request</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">.cache</span> <span class="kn">import</span> <span class="n">Revalidate</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">ASYNC_EVENT_HOOKS</span><span class="p">,</span>
     <span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">,</span>
     <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span>
+    <span class="n">EVENT_HOOKS</span><span class="p">,</span>
     <span class="n">NotAvailableOffline</span><span class="p">,</span>
     <span class="n">handle_error</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">DEFAULT_TOKEN_CACHE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
-    <span class="s2">&quot;TILED_TOKEN_CACHE&quot;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">appdirs</span><span class="o">.</span><span class="n">user_config_dir</span><span class="p">(</span><span class="s2">&quot;tiled&quot;</span><span class="p">),</span> <span class="s2">&quot;tokens&quot;</span><span class="p">)</span>
-<span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_token_directory</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="n">netloc</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span>
-        <span class="n">token_cache</span><span class="p">,</span>
-        <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">quote_plus</span><span class="p">(</span>
-            <span class="n">netloc</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
-        <span class="p">),</span>  <span class="c1"># Make a valid filename out of hostname:port.</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">logout</span><span class="p">(</span><span class="n">uri_or_profile</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Logout of a given session.</span>
-
-<span class="sd">    If not logged in, calling this function has no effect.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    uri_or_profile : str</span>
-<span class="sd">    token_directory : str or Path, optional</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    netloc : str</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
-        <span class="n">netloc</span> <span class="o">=</span> <span class="n">_netloc_from_uri_or_profile</span><span class="p">(</span><span class="n">uri_or_profile</span><span class="p">)</span>
-        <span class="n">directory</span> <span class="o">=</span> <span class="n">_token_directory</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="n">netloc</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">netloc</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># unknowable</span>
-    <span class="n">token_cache</span> <span class="o">=</span> <span class="n">TokenCache</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
-    <span class="n">token_cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">netloc</span>
-
-
-<div class="viewcode-block" id="sessions"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.sessions.html#tiled.client.context.sessions">[docs]</a><span class="k">def</span> <span class="nf">sessions</span><span class="p">(</span><span class="n">token_directory</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    List all sessions.</span>
-
-<span class="sd">    Note that this may include expired sessions. It does not confirm that</span>
-<span class="sd">    any cached tokens are still valid.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    token_directory : str or Path, optional</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    tokens : dict</span>
-<span class="sd">        Maps netloc to refresh_token</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">tokens</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">Path</span><span class="p">(</span><span class="n">token_directory</span><span class="p">)</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
-            <span class="c1"># Some stray file. Ignore it.</span>
-            <span class="k">continue</span>
-        <span class="n">refresh_token_file</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="s2">&quot;refresh_token&quot;</span>
-        <span class="n">netloc</span> <span class="o">=</span> <span class="n">directory</span><span class="o">.</span><span class="n">name</span>
-        <span class="k">if</span> <span class="n">refresh_token_file</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
-            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">refresh_token_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-                <span class="n">token</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-            <span class="n">tokens</span><span class="p">[</span><span class="n">netloc</span><span class="p">]</span> <span class="o">=</span> <span class="n">token</span>
-    <span class="k">return</span> <span class="n">tokens</span></div>
-
-
-<div class="viewcode-block" id="logout_all"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.logout_all.html#tiled.client.context.logout_all">[docs]</a><span class="k">def</span> <span class="nf">logout_all</span><span class="p">(</span><span class="n">token_directory</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Logout of a all sessions.</span>
-
-<span class="sd">    If not logged in to any sessions, calling this function has no effect.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    token_directory : str or Path, optional</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    logged_out_from : list</span>
-<span class="sd">        List of netloc of logged-out sessions</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">logged_out_from</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">Path</span><span class="p">(</span><span class="n">token_directory</span><span class="p">)</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
-            <span class="c1"># Some stray file. Ignore it.</span>
-            <span class="k">continue</span>
-        <span class="n">refresh_token_file</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="s2">&quot;refresh_token&quot;</span>
-        <span class="k">if</span> <span class="n">refresh_token_file</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
-            <span class="n">refresh_token_file</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
-            <span class="n">netloc</span> <span class="o">=</span> <span class="n">directory</span><span class="o">.</span><span class="n">name</span>
-            <span class="n">logged_out_from</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">netloc</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">logged_out_from</span></div>
-
-
-<span class="k">def</span> <span class="nf">_netloc_from_uri_or_profile</span><span class="p">(</span><span class="n">uri_or_profile</span><span class="p">):</span>
-    <span class="k">if</span> <span class="n">uri_or_profile</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;http://&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">uri_or_profile</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;https://&quot;</span><span class="p">):</span>
-        <span class="c1"># This looks like a URI.</span>
-        <span class="n">uri</span> <span class="o">=</span> <span class="n">uri_or_profile</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Is this a profile name?</span>
-        <span class="kn">from</span> <span class="nn">..profiles</span> <span class="kn">import</span> <span class="n">load_profiles</span>
-
-        <span class="n">profiles</span> <span class="o">=</span> <span class="n">load_profiles</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">uri_or_profile</span> <span class="ow">in</span> <span class="n">profiles</span><span class="p">:</span>
-            <span class="n">profile_name</span> <span class="o">=</span> <span class="n">uri_or_profile</span>
-            <span class="n">_</span><span class="p">,</span> <span class="n">profile_content</span> <span class="o">=</span> <span class="n">profiles</span><span class="p">[</span><span class="n">profile_name</span><span class="p">]</span>
-            <span class="k">if</span> <span class="s2">&quot;uri&quot;</span> <span class="ow">in</span> <span class="n">profile_content</span><span class="p">:</span>
-                <span class="n">uri</span> <span class="o">=</span> <span class="n">profile_content</span><span class="p">[</span><span class="s2">&quot;uri&quot;</span><span class="p">]</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Logout does not apply to profiles with inline (&#39;direct&#39;) &quot;</span>
-                    <span class="s2">&quot;server configuration.&quot;</span>
-                <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Not sure what to do with tree </span><span class="si">{</span><span class="n">uri_or_profile</span><span class="si">!r}</span><span class="s2">. &quot;</span>
-                <span class="s2">&quot;It does not look like a URI (it does not start with http[s]://) &quot;</span>
-                <span class="s2">&quot;and it does not match any profiles.&quot;</span>
-            <span class="p">)</span>
-    <span class="k">return</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span><span class="o">.</span><span class="n">netloc</span>
-
-
-<span class="k">class</span> <span class="nc">CannotRefreshAuthentication</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-    <span class="k">pass</span>
-
-
-<span class="k">class</span> <span class="nc">PromptForReauthentication</span><span class="p">(</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="n">AT_INIT</span> <span class="o">=</span> <span class="s2">&quot;at_init&quot;</span>
-    <span class="n">NEVER</span> <span class="o">=</span> <span class="s2">&quot;never&quot;</span>
-    <span class="n">ALWAYS</span> <span class="o">=</span> <span class="s2">&quot;always&quot;</span>
+<span class="n">USER_AGENT</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;python-tiled/</span><span class="si">{</span><span class="n">get_versions</span><span class="p">()[</span><span class="s1">&#39;version&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="n">API_KEY_AUTH_HEADER_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^Apikey (\w+)$&quot;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="Context"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.html#tiled.client.context.Context">[docs]</a><span class="k">class</span> <span class="nc">Context</span><span class="p">:</span>
@@ -288,130 +161,163 @@
 
 <div class="viewcode-block" id="Context.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.html#tiled.client.context.Context.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">client</span><span class="p">,</span>
+        <span class="n">uri</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">auth_provider</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
-        <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">AT_INIT</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">auth_provider</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Use api_key or username/auth_provider, not both.&quot;</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Check for an API key from the environment.</span>
-            <span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_API_KEY&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">client</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_WE_MUST</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="o">=</span> <span class="n">username</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_auth_provider</span> <span class="o">=</span> <span class="n">auth_provider</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>  <span class="c1"># property setter sets Authorization header</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache_or_root_directory</span> <span class="o">=</span> <span class="n">token_cache</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_prompt_for_reauthentication</span> <span class="o">=</span> <span class="n">PromptForReauthentication</span><span class="p">(</span>
-            <span class="n">prompt_for_reauthentication</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_refresh_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">)):</span>
-            <span class="n">directory</span> <span class="o">=</span> <span class="n">_token_directory</span><span class="p">(</span><span class="n">token_cache</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">base_url</span><span class="o">.</span><span class="n">netloc</span><span class="p">)</span>
-            <span class="n">token_cache</span> <span class="o">=</span> <span class="n">TokenCache</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">token_cache</span>
-        <span class="c1"># The token *cache* is optional. The tokens attrbiute is always present,</span>
-        <span class="c1"># and it isn&#39;t actually used for anything internally. It&#39;s just a view</span>
-        <span class="c1"># of the current tokens.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_app</span> <span class="o">=</span> <span class="n">app</span>
-
+        <span class="c1"># The uri is expected to reach the root API route.</span>
+        <span class="n">uri</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept-encoding&quot;</span><span class="p">,</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">))</span>
         <span class="c1"># Set the User Agent to help the server fail informatively if the client</span>
         <span class="c1"># version is too old.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;user-agent&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;python-tiled/</span><span class="si">{</span><span class="n">get_versions</span><span class="p">()[</span><span class="s1">&#39;version&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;user-agent&quot;</span><span class="p">,</span> <span class="n">USER_AGENT</span><span class="p">)</span>
 
-        <span class="c1"># Stash the URL of the original request. We will alter the base_url below</span>
-        <span class="c1"># if it is not aligned with root_path of the tiled server.</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">base_url</span><span class="p">)</span>
+        <span class="c1"># If ?api_key=... is present, move it from the query into a header.</span>
+        <span class="c1"># The server would accept it in the query parameter, but using</span>
+        <span class="c1"># a header is a little more secure (e.g. not logged).</span>
+        <span class="n">parsed_params</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">uri</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">decode</span><span class="p">())</span>
+        <span class="n">api_key_list</span> <span class="o">=</span> <span class="n">parsed_params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;api_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">api_key_list</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;api_key was provided as query parameter in URI and as keyword argument. Pick one.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">api_key_list</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot handle two api_key query parameters&quot;</span><span class="p">)</span>
+            <span class="p">(</span><span class="n">api_key</span><span class="p">,)</span> <span class="o">=</span> <span class="n">api_key_list</span>
+        <span class="k">if</span> <span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Check for an API key from the environment.</span>
+            <span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_API_KEY&quot;</span><span class="p">)</span>
+        <span class="c1"># We will set the API key via the `api_key` property below,</span>
+        <span class="c1"># after constructing the Client object.</span>
 
-        <span class="c1"># Make an initial &quot;safe&quot; request to let the server set the CSRF cookie.</span>
+        <span class="c1"># FastAPI redirects /api -&gt; /api/ so add it here to save a request.</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">uri</span><span class="o">.</span><span class="n">path</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">):</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">/&quot;</span>
+        <span class="c1"># Construct the uri *without* api_key param.</span>
+        <span class="c1"># Drop any params/fragments.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span>
+            <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlunsplit</span><span class="p">((</span><span class="n">uri</span><span class="o">.</span><span class="n">scheme</span><span class="p">,</span> <span class="n">uri</span><span class="o">.</span><span class="n">netloc</span><span class="o">.</span><span class="n">decode</span><span class="p">(),</span> <span class="n">path</span><span class="p">,</span> <span class="p">{},</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">timeout</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Timeout</span><span class="p">(</span><span class="o">**</span><span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
+                <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
+                <span class="n">event_hooks</span><span class="o">=</span><span class="n">EVENT_HOOKS</span><span class="p">,</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+                <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+                <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">atexit</span>
+
+            <span class="kn">from</span> <span class="nn">._testclient</span> <span class="kn">import</span> <span class="n">TestClient</span>
+
+            <span class="c1"># verify parameter is dropped, as there is no SSL in ASGI mode</span>
+            <span class="n">client</span> <span class="o">=</span> <span class="n">TestClient</span><span class="p">(</span>
+                <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
+                <span class="n">event_hooks</span><span class="o">=</span><span class="n">EVENT_HOOKS</span><span class="p">,</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+                <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">client</span><span class="o">.</span><span class="n">follow_redirects</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">client</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
+            <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span> <span class="o">=</span> <span class="n">client</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_WE_MUST</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">token_cache</span><span class="p">)</span>
+
+        <span class="c1"># Make an initial &quot;safe&quot; request to:</span>
+        <span class="c1"># (1) Get the server_info.</span>
+        <span class="c1"># (2) Let the server set the CSRF cookie.</span>
+        <span class="c1"># No authentication has been set up yet, so these requests will be unauthenticated.</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-        <span class="c1"># And, at the same time, obtain the &#39;root_path&#39;, the path to the root route</span>
-        <span class="c1"># of the Tiled application, which may or may not be the same as the URL that</span>
-        <span class="c1"># the user provided.</span>
         <span class="k">if</span> <span class="n">offline</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;root_path&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># We need a CSRF token.</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_cache</span><span class="p">(</span><span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-                <span class="c1"># Make this request manually to inject custom error handling.</span>
-                <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-                    <span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;root_path&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
-                <span class="p">)</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-                <span class="c1"># Handle case where user pastes in a link like</span>
-                <span class="c1"># https://example.com/some/subpath/node/metadata/a/b/c</span>
-                <span class="c1"># and it requires authentication. The 401 response includes a header</span>
-                <span class="c1"># that points us to https://examples.com/some/subpath where we</span>
-                <span class="c1"># can see the authentication providers and their endpoints.</span>
-                <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;x-tiled-root&quot;</span><span class="p">]</span>
-                <span class="c1"># Now try again.</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;root_path&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>  <span class="c1"># property setter sets Authorization header</span></div>
 
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="p">(</span><span class="ow">not</span> <span class="n">offline</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="p">(</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;required&quot;</span><span class="p">]</span>
-                <span class="ow">or</span> <span class="p">(</span><span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">]:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="sd">&quot;&quot;&quot;This server requires API key authentication.</span>
-<span class="sd">Set an api_key as in:</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_any_uri</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">uri</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
+        <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Accept a URI to a specific node.</span>
 
-<span class="sd">&gt;&gt;&gt; c = from_uri(&quot;...&quot;, api_key=&quot;...&quot;)</span>
-<span class="sd">&quot;&quot;&quot;</span>
-                <span class="p">)</span>
-            <span class="c1"># Authenticate. If a valid refresh_token is available in the token_cache,</span>
-            <span class="c1"># it will be used. Otherwise, this will prompt for input from the stdin</span>
-            <span class="c1"># or raise CannotRefreshAuthentication.</span>
-            <span class="n">prompt</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">prompt_for_reauthentication</span> <span class="o">==</span> <span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">AT_INIT</span>
-                <span class="ow">or</span> <span class="n">prompt_for_reauthentication</span> <span class="o">==</span> <span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">ALWAYS</span>
+<span class="sd">        For example, given URI &quot;https://example.com/api/node/metadata/a/b/c&quot;</span>
+<span class="sd">        return a Context connected to &quot;https://examples/api/&quot; and the list</span>
+<span class="sd">        [&quot;a&quot;, &quot;b&quot;, &quot;c&quot;].</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">uri</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+        <span class="n">node_path_parts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s2">&quot;/node/metadata&quot;</span> <span class="ow">in</span> <span class="n">uri</span><span class="o">.</span><span class="n">path</span><span class="p">:</span>
+            <span class="n">api_path</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">node_path</span> <span class="o">=</span> <span class="n">uri</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;/node/metadata&quot;</span><span class="p">)</span>
+            <span class="n">api_uri</span> <span class="o">=</span> <span class="n">uri</span><span class="o">.</span><span class="n">copy_with</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">api_path</span><span class="p">)</span>
+            <span class="n">node_path_parts</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">segment</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">node_path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">segment</span><span class="p">]</span>
             <span class="p">)</span>
-            <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reauthenticate</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span>
-            <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
-            <span class="n">client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="n">base_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;root_path&quot;</span><span class="p">]</span>
-        <span class="n">base_url</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlunsplit</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">scheme</span><span class="p">,</span> <span class="n">url</span><span class="o">.</span><span class="n">netloc</span><span class="o">.</span><span class="n">decode</span><span class="p">(),</span> <span class="n">base_path</span><span class="p">,</span> <span class="p">{},</span> <span class="n">url</span><span class="o">.</span><span class="n">fragment</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">api_uri</span> <span class="o">=</span> <span class="n">uri</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">api_uri</span><span class="p">,</span>
+            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+            <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
+            <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+            <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
+            <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
+            <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">client</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="n">base_url</span>
-        <span class="n">path_parts</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">PurePosixPath</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">base_path</span><span class="p">)</span><span class="o">.</span><span class="n">parts</span><span class="p">)</span>
-        <span class="c1"># Strip &quot;/node/metadata&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_path_parts</span> <span class="o">=</span> <span class="n">path_parts</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span></div>
+        <span class="k">return</span> <span class="n">context</span><span class="p">,</span> <span class="n">node_path_parts</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;A view of the current access and refresh tokens.&quot;</span>
-        <span class="k">return</span> <span class="n">DictView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DictView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">tokens</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_api_key</span>
+        <span class="c1"># Extract from header to ensure that there is one &quot;ground truth&quot; here</span>
+        <span class="c1"># and no possibility of state getting out of sync.</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">API_KEY_AUTH_HEADER_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
     <span class="nd">@api_key</span><span class="o">.</span><span class="n">setter</span>
     <span class="k">def</span> <span class="nf">api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">api_key</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Apikey&quot;</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Apikey &quot;</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Apikey </span><span class="si">{</span><span class="n">api_key</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_api_key</span> <span class="o">=</span> <span class="n">api_key</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Apikey </span><span class="si">{</span><span class="n">api_key</span><span class="si">}</span><span class="s2">&quot;</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -436,7 +342,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
             <span class="c1"># We need a CSRF token.</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_cache</span><span class="p">(</span><span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">which_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -444,7 +350,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Not API key is configured for the client.&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">])</span>
 
     <span class="k">def</span> <span class="nf">create_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scopes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">expires_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">note</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -463,36 +369,47 @@
 <span class="sd">            Description (for humans).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">post_json</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
             <span class="p">{</span><span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="n">expires_in</span><span class="p">,</span> <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="n">note</span><span class="p">},</span>
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">revoke_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">first_eight</span><span class="p">):</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
             <span class="s2">&quot;DELETE&quot;</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
+            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
             <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">first_eight</span><span class="p">},</span>
         <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">app</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_app</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">path_parts</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_parts</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;The &#39;app&#39; accessor on Context is deprecated. Use Context.http_client.app.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">app</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">base_url</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">base_url</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;The &#39;base_url&#39; accessor on Context is deprecated. Use Context.http_client.base_url.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">base_url</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">event_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;httpx.Client event hooks. This is exposed for testing.&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">event_hooks</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;The &#39;event_hooks&#39; accessor on Context is deprecated. Use Context.http_client.event_hooks.&quot;</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">event_hooks</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">revalidate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -540,11 +457,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_write</span> <span class="o">=</span> <span class="kc">False</span>
 
-<div class="viewcode-block" id="Context.get_content"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.get_content.html#tiled.client.context.Context.get_content">[docs]</a>    <span class="k">def</span> <span class="nf">get_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">revalidate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">get_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">revalidate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">send_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="s2">&quot;auth&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">send_kwargs</span><span class="p">[</span><span class="s2">&quot;auth&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auth&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">revalidate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Fallback to context default.</span>
             <span class="n">revalidate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">accept</span><span class="p">:</span>
             <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Accept&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">accept</span>
         <span class="n">url</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span>
@@ -565,7 +485,7 @@
             <span class="k">return</span> <span class="n">content</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># No cache, so we can use the client straightforwardly.</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
             <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content-encoding&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;blosc&quot;</span><span class="p">:</span>
                 <span class="kn">import</span> <span class="nn">blosc</span>
@@ -600,7 +520,7 @@
                     <span class="k">return</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span><span class="p">:</span>
                     <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;If-None-Match&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">etag</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="o">**</span><span class="n">send_kwargs</span><span class="p">)</span>
             <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">304</span><span class="p">:</span>  <span class="c1"># HTTP 304 Not Modified</span>
                 <span class="c1"># Update the expiration time.</span>
@@ -635,29 +555,29 @@
                 <span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">reservation</span><span class="o">.</span><span class="n">ensure_released</span><span class="p">()</span></div>
+                <span class="n">reservation</span><span class="o">.</span><span class="n">ensure_released</span><span class="p">()</span>
 
-<div class="viewcode-block" id="Context.get_json"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.get_json.html#tiled.client.context.Context.get_json">[docs]</a>    <span class="k">def</span> <span class="nf">get_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">get_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">get_content</span><span class="p">(</span>
                 <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
             <span class="p">),</span>
             <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">post_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
             <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
             <span class="n">path</span><span class="p">,</span>
             <span class="n">json</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
             <span class="c1"># Submit CSRF token in both header and cookie.</span>
             <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
             <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
-                <span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">],</span>
                 <span class="s2">&quot;accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
             <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
@@ -665,18 +585,18 @@
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">put_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
             <span class="s2">&quot;PUT&quot;</span><span class="p">,</span>
             <span class="n">path</span><span class="p">,</span>
             <span class="n">json</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
             <span class="c1"># Submit CSRF token in both header and cookie.</span>
             <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
             <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
-                <span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">],</span>
                 <span class="s2">&quot;accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
             <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
@@ -687,16 +607,16 @@
         <span class="c1"># Submit CSRF token in both header and cookie.</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
         <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">])</span>
+        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">])</span>
         <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept&quot;</span><span class="p">,</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">)</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
             <span class="s2">&quot;PUT&quot;</span><span class="p">,</span>
             <span class="n">path</span><span class="p">,</span>
             <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
             <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
             <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
@@ -707,102 +627,81 @@
         <span class="c1"># Submit CSRF token in both header and cookie.</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
         <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">])</span>
+        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">])</span>
         <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept&quot;</span><span class="p">,</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">)</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
             <span class="s2">&quot;DELETE&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span>
         <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
             <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
             <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">attempts</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        If sending results in an authentication error, reauthenticate.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">attempts</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
-            <span class="c1"># Try refreshing the token.</span>
-            <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reauthenticate</span><span class="p">()</span>
-            <span class="c1"># The line above updated self._client.headers[&quot;authorization&quot;]</span>
-            <span class="c1"># so we will have a fresh token for the next call to</span>
-            <span class="c1"># client.build_request(...), but we need to retroactively patch the</span>
-            <span class="c1"># authorization header for this request and then re-send.</span>
-            <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
-            <span class="n">auth_header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_header</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="n">attempts</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">response</span>
-
-<div class="viewcode-block" id="Context.authenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.authenticate.html#tiled.client.context.Context.authenticate">[docs]</a>    <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="Context.authenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.authenticate.html#tiled.client.context.Context.authenticate">[docs]</a>    <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="s2">&quot;Authenticate. Prompt for password or access code (refresh token).&quot;</span>
+        <span class="n">providers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">]</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">_choose_identity_provider</span><span class="p">(</span><span class="n">providers</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
+        <span class="n">provider</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;API key authentication is being used.&quot;</span><span class="p">)</span>
-        <span class="n">providers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">providers</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Check that API key authenticates us as this user,</span>
+            <span class="c1"># and then either return or raise.</span>
+            <span class="n">identities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">whoami</span><span class="p">()[</span><span class="s2">&quot;identities&quot;</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">identity</span> <span class="ow">in</span> <span class="n">identities</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">identity</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">provider</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">identity</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">username</span><span class="p">):</span>
+                    <span class="k">return</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="s2">&quot;The authenticate() method is not applicable. &quot;</span>
-                <span class="s2">&quot;This server does not support any authentication providers.&quot;</span>
+                <span class="s2">&quot;An API key is set, and it is not associated with the username/provider &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">. Unset the API key first.&quot;</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="n">provider</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">providers</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">provider</span><span class="p">:</span>
-                    <span class="k">break</span>
+
+        <span class="n">refresh_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;refresh_session&quot;</span><span class="p">]</span>
+        <span class="n">csrf_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]</span>
+
+        <span class="c1"># If we are passed a username, we can check whether we already have</span>
+        <span class="c1"># tokens stashed.</span>
+        <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">token_directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_directory</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="n">username</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span><span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">)</span>
+            <span class="c1"># This will either:</span>
+            <span class="c1"># * Use an access_token and succeed.</span>
+            <span class="c1"># * Use a refresh_token to attempt refresh flow and succeed.</span>
+            <span class="c1"># * Use a refresh_token to attempt refresh flow and fail, raise.</span>
+            <span class="c1"># * Find no tokens and raise.</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">whoami</span><span class="p">()</span>
+            <span class="k">except</span> <span class="n">CannotRefreshAuthentication</span><span class="p">:</span>
+                <span class="c1"># Continue below, where we will prompt for log in.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;No such provider </span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">. Choices are </span><span class="si">{</span><span class="p">[</span><span class="n">spec</span><span class="p">[</span><span class="s1">&#39;provider&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">providers</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">providers</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="c1"># There is only one choice, so no need to prompt the user.</span>
-                <span class="p">(</span><span class="n">spec</span><span class="p">,)</span> <span class="o">=</span> <span class="n">providers</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Authenticaiton providers:&quot;</span><span class="p">)</span>
-                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">providers</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
-                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> - </span><span class="si">{</span><span class="n">spec</span><span class="p">[</span><span class="s1">&#39;provider&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                    <span class="n">raw_choice</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span>
-                        <span class="s2">&quot;Choose an authentication provider (or press Enter to escape): &quot;</span>
-                    <span class="p">)</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">raw_choice</span><span class="p">:</span>
-                        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No authentication provider chosen. Failed.&quot;</span><span class="p">)</span>
-                        <span class="k">break</span>
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="n">choice</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">raw_choice</span><span class="p">)</span>
-                    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
-                        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Choice must be a number.&quot;</span><span class="p">)</span>
-                        <span class="k">continue</span>
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="n">spec</span> <span class="o">=</span> <span class="n">providers</span><span class="p">[</span><span class="n">choice</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
-                    <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
-                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Choice must be a number 1 through </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">providers</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
-                        <span class="k">continue</span>
-                    <span class="k">break</span>
+                <span class="c1"># We have a live session for the specified provider and username already.</span>
+                <span class="c1"># No need to log in again.</span>
+                <span class="k">return</span>
+
         <span class="n">mode</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;mode&quot;</span><span class="p">]</span>
         <span class="n">auth_endpoint</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;auth_endpoint&quot;</span><span class="p">]</span>
-        <span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;confirmation_message&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;password&quot;</span><span class="p">:</span>
-            <span class="n">username</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_username</span> <span class="ow">or</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Username: &quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">username</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Username </span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">username</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Username: &quot;</span><span class="p">)</span>
             <span class="n">password</span> <span class="o">=</span> <span class="n">getpass</span><span class="o">.</span><span class="n">getpass</span><span class="p">()</span>
             <span class="n">form_data</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;password&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span>
                 <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="n">password</span><span class="p">,</span>
             <span class="p">}</span>
-            <span class="n">token_request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
+            <span class="n">token_request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
                 <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
                 <span class="n">auth_endpoint</span><span class="p">,</span>
                 <span class="n">data</span><span class="o">=</span><span class="n">form_data</span><span class="p">,</span>
                 <span class="n">headers</span><span class="o">=</span><span class="p">{},</span>
             <span class="p">)</span>
             <span class="n">token_request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">token_request</span><span class="p">)</span>
+            <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">token_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
             <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
             <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-            <span class="n">refresh_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">]</span>
         <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;external&quot;</span><span class="p">:</span>
             <span class="nb">print</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -812,6 +711,9 @@
 
 <span class="s2">&quot;&quot;&quot;</span>
             <span class="p">)</span>
+            <span class="kn">import</span> <span class="nn">webbrowser</span>
+
+            <span class="n">webbrowser</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">)</span>
             <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
                 <span class="c1"># The proper term for this is &#39;refresh token&#39; but that may be</span>
                 <span class="c1"># confusing jargon to the end user, so we say &quot;access code&quot;.</span>
@@ -823,68 +725,111 @@
                 <span class="n">refresh_token</span> <span class="o">=</span> <span class="n">raw_refresh_token</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;&quot;&#39;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
                 <span class="c1"># Immediately refresh to (1) check that the copy/paste worked and</span>
                 <span class="c1"># (2) obtain an access token as well.</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_refresh</span><span class="p">(</span><span class="n">refresh_token</span><span class="o">=</span><span class="n">refresh_token</span><span class="p">)</span>
-                <span class="k">except</span> <span class="n">CannotRefreshAuthentication</span><span class="p">:</span>
+                <span class="n">refresh_request</span> <span class="o">=</span> <span class="n">build_refresh_request</span><span class="p">(</span>
+                    <span class="n">refresh_url</span><span class="p">,</span>
+                    <span class="n">refresh_token</span><span class="p">,</span>
+                    <span class="n">csrf_token</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">refresh_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">token_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">:</span>
                     <span class="nb">print</span><span class="p">(</span>
                         <span class="s2">&quot;That didn&#39;t work. Try pasting the access code again, or press Enter to escape.&quot;</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
+                    <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
                     <span class="k">break</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Server has unknown authentication mechanism </span><span class="si">{</span><span class="n">mode</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># We are using a token cache. Store the new refresh token.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">refresh_token</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-            <span class="n">refresh_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">],</span> <span class="n">access_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
+        <span class="c1"># We need to know the username in order to set the token_directory,</span>
+        <span class="c1"># so we manually build an authenticated request to &quot;whoami&quot; to get</span>
+        <span class="c1"># the username, and then configure TiledAuth to handle authentication</span>
+        <span class="c1"># going forward.</span>
+        <span class="n">whoami</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;whoami&quot;</span><span class="p">],</span>
+            <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">tokens</span><span class="p">[</span><span class="s1">&#39;access_token&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">},</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="n">confirmation_message</span><span class="p">:</span>
-            <span class="n">identities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">whoami</span><span class="p">()[</span><span class="s2">&quot;identities&quot;</span><span class="p">]</span>
-            <span class="n">identities_by_provider</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="n">identity</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]:</span> <span class="n">identity</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">identity</span> <span class="ow">in</span> <span class="n">identities</span>
-            <span class="p">}</span>
-            <span class="nb">print</span><span class="p">(</span>
-                <span class="n">confirmation_message</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">identities_by_provider</span><span class="p">[</span><span class="n">spec</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]])</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">tokens</span></div>
+        <span class="n">identities</span> <span class="o">=</span> <span class="n">whoami</span><span class="p">[</span><span class="s2">&quot;identities&quot;</span><span class="p">]</span>
+        <span class="n">identities_by_provider</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">identity</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]:</span> <span class="n">identity</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">identity</span> <span class="ow">in</span> <span class="n">identities</span>
+        <span class="p">}</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="n">identities_by_provider</span><span class="p">[</span><span class="n">provider</span><span class="p">]</span>
+        <span class="n">token_directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_directory</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="n">username</span><span class="p">)</span>
+        <span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span><span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">)</span>
+        <span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">])</span>
+        <span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">auth</span>
+        <span class="k">return</span> <span class="n">spec</span><span class="p">,</span> <span class="n">username</span></div>
 
-<div class="viewcode-block" id="Context.reauthenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.reauthenticate.html#tiled.client.context.Context.reauthenticate">[docs]</a>    <span class="k">def</span> <span class="nf">reauthenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_token_directory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">provider</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+        <span class="c1"># ~/.config/tiled/tokens/{host:port}/{provider}/{username}</span>
+        <span class="c1"># with each templated element URL-encoded so it is a valid filename.</span>
+        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">,</span>
+            <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">quote_plus</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)),</span>
+            <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">provider</span><span class="p">),</span>
+            <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">username</span><span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="Context.force_auth_refresh"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.force_auth_refresh.html#tiled.client.context.Context.force_auth_refresh">[docs]</a>    <span class="k">def</span> <span class="nf">force_auth_refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Refresh authentication.</span>
+<span class="sd">        Execute refresh flow.</span>
 
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        prompt : bool</span>
-<span class="sd">            If True, give interactive prompt for authentication when refreshing</span>
-<span class="sd">            tokens fails. If False raise an error. If None, fall back</span>
-<span class="sd">            to default `prompt_for_reauthentication` set in Context.__init__.</span>
+<span class="sd">        This method is exposed for testing and debugging uses.</span>
+
+<span class="sd">        It should never be necessary for the user to call. Refresh flow is</span>
+<span class="sd">        automatically executed by tiled.client.auth.TiledAuth when the current</span>
+<span class="sd">        access_token expires.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;API key authentication is being used.&quot;</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_refresh</span><span class="p">()</span>
-        <span class="k">except</span> <span class="n">CannotRefreshAuthentication</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">prompt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prompt_for_reauthentication</span>
-            <span class="k">if</span> <span class="n">prompt</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">authenticate</span><span class="p">()</span>
-            <span class="k">raise</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;No authentication has been set up. Cannot reauthenticate.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">refresh_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_get_token</span><span class="p">(</span>
+            <span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="n">reload_from_disk</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">refresh_token</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span><span class="s2">&quot;There is no refresh_token.&quot;</span><span class="p">)</span>
+        <span class="n">csrf_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]</span>
+        <span class="n">refresh_request</span> <span class="o">=</span> <span class="n">build_refresh_request</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">refresh_url</span><span class="p">,</span>
+            <span class="n">refresh_token</span><span class="p">,</span>
+            <span class="n">csrf_token</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">refresh_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">token_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
+                <span class="s2">&quot;Session cannot be refreshed. Log in again.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
+        <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">tokens</span></div>
 
     <span class="k">def</span> <span class="nf">whoami</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Return information about the currently-authenticated user or service.&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;whoami&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;whoami&quot;</span><span class="p">])</span>
 
 <div class="viewcode-block" id="Context.logout"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.logout.html#tiled.client.context.Context.logout">[docs]</a>    <span class="k">def</span> <span class="nf">logout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Clear the access token and the cached refresh token.</span>
+<span class="sd">        Log out of the current session (if any).</span>
 
 <span class="sd">        This method is idempotent.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Revoke the current session.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">auth/logout&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Clear on-disk state.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Clear in-memory state.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="kc">None</span></div>
 
     <span class="k">def</span> <span class="nf">revoke_session</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session_id</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -892,209 +837,53 @@
 
 <span class="sd">        This may be done to ensure that a possibly-leaked refresh token cannot be used.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
             <span class="s2">&quot;DELETE&quot;</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;revoke_session&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;revoke_session&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                 <span class="n">session_id</span><span class="o">=</span><span class="n">session_id</span>
             <span class="p">),</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
+            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
         <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">_refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">refresh_token</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_refresh_lock</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">refresh_token</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># We are not using a token cache.</span>
-                    <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
-                        <span class="s2">&quot;No token cache was given. &quot;</span>
-                        <span class="s2">&quot;Provide fresh credentials. &quot;</span>
-                        <span class="s2">&quot;For a given client c, use c.context.authenticate().&quot;</span>
-                    <span class="p">)</span>
-                <span class="c1"># We are using a token_cache.</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">refresh_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">]</span>
-                <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
-                        <span class="s2">&quot;No refresh token was found in token cache. &quot;</span>
-                        <span class="s2">&quot;Provide fresh credentials. &quot;</span>
-                        <span class="s2">&quot;For a given client c, use c.context.authenticate().&quot;</span>
-                    <span class="p">)</span>
-            <span class="n">token_request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-                <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_handshake_data</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;refresh_session&quot;</span><span class="p">],</span>
-                <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">:</span> <span class="n">refresh_token</span><span class="p">},</span>
-                <span class="c1"># Submit CSRF token in both header and cookie.</span>
-                <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
+
+<span class="k">def</span> <span class="nf">_choose_identity_provider</span><span class="p">(</span><span class="n">providers</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">provider</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">providers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">provider</span><span class="p">:</span>
+                <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;No such provider </span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">. Choices are </span><span class="si">{</span><span class="p">[</span><span class="n">spec</span><span class="p">[</span><span class="s1">&#39;provider&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">providers</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
-            <span class="n">token_request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">token_request</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">token_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">:</span>
-                <span class="c1"># Refreshing the token failed.</span>
-                <span class="c1"># Discard the expired (or otherwise invalid) refresh_token file.</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
-                    <span class="s2">&quot;Server rejected attempt to refresh token. &quot;</span>
-                    <span class="s2">&quot;Provide fresh credentials. &quot;</span>
-                    <span class="s2">&quot;For a given client c, use c.context.authenticate().&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">providers</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># There is only one choice, so no need to prompt the user.</span>
+            <span class="p">(</span><span class="n">spec</span><span class="p">,)</span> <span class="o">=</span> <span class="n">providers</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Authenticaiton providers:&quot;</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">spec</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">providers</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> - </span><span class="si">{</span><span class="n">spec</span><span class="p">[</span><span class="s1">&#39;provider&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">raw_choice</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span>
+                    <span class="s2">&quot;Choose an authentication provider (or press Enter to escape): &quot;</span>
                 <span class="p">)</span>
-            <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
-            <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-            <span class="c1"># If we get this far, reauthentication worked.</span>
-            <span class="c1"># Store the new refresh token.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">]</span>
-            <span class="c1"># Update the client&#39;s Authentication header.</span>
-            <span class="n">access_token</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
-            <span class="n">auth_header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;authorization&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_header</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_tokens</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-                <span class="n">refresh_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">],</span>
-                <span class="n">access_token</span><span class="o">=</span><span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">],</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">tokens</span></div>
-
-
-<span class="k">def</span> <span class="nf">context_from_tree</span><span class="p">(</span>
-    <span class="n">tree</span><span class="p">,</span>
-    <span class="n">authentication</span><span class="p">,</span>
-    <span class="n">server_settings</span><span class="p">,</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">query_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">serialization_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">compression_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">validation_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-    <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
-    <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">PromptForReauthentication</span><span class="o">.</span><span class="n">AT_INIT</span><span class="p">,</span>
-    <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">auth_provider</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-<span class="p">):</span>
-    <span class="kn">from</span> <span class="nn">..server.app</span> <span class="kn">import</span> <span class="n">build_app</span>
-
-    <span class="c1"># By default make it &quot;public&quot; because there is no way to</span>
-    <span class="c1"># secure access from inside the same process anyway.</span>
-    <span class="n">authentication</span> <span class="o">=</span> <span class="n">authentication</span> <span class="ow">or</span> <span class="p">{</span><span class="s2">&quot;allow_anonymous_access&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
-    <span class="n">server_settings</span> <span class="o">=</span> <span class="n">server_settings</span> <span class="ow">or</span> <span class="p">{}</span>
-    <span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
-    <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept-encoding&quot;</span><span class="p">,</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">))</span>
-    <span class="c1"># If a single-user API key will be used, generate the key here instead of</span>
-    <span class="c1"># letting build_app do it for us, so that we can give it to the client</span>
-    <span class="c1"># below.</span>
-    <span class="k">if</span> <span class="p">(</span>
-        <span class="p">(</span><span class="ow">not</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;providers&quot;</span><span class="p">))</span>
-        <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allow_anonymous_access&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
-        <span class="ow">and</span> <span class="p">(</span><span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;single_user_api_key&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="p">):</span>
-        <span class="n">single_user_api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
-            <span class="s2">&quot;TILED_SINGLE_USER_API_KEY&quot;</span><span class="p">,</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">authentication</span><span class="p">[</span><span class="s2">&quot;single_user_api_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">single_user_api_key</span>
-        <span class="n">params</span><span class="p">[</span><span class="s2">&quot;api_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">single_user_api_key</span>
-    <span class="n">app</span> <span class="o">=</span> <span class="n">build_app</span><span class="p">(</span>
-        <span class="n">tree</span><span class="p">,</span>
-        <span class="n">authentication</span><span class="p">,</span>
-        <span class="n">server_settings</span><span class="p">,</span>
-        <span class="n">query_registry</span><span class="o">=</span><span class="n">query_registry</span><span class="p">,</span>
-        <span class="n">serialization_registry</span><span class="o">=</span><span class="n">serialization_registry</span><span class="p">,</span>
-        <span class="n">compression_registry</span><span class="o">=</span><span class="n">compression_registry</span><span class="p">,</span>
-        <span class="n">validation_registry</span><span class="o">=</span><span class="n">validation_registry</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Only an AsyncClient can be used over ASGI.</span>
-    <span class="c1"># We wrap all the async methods in a call to asyncio.run(...).</span>
-    <span class="c1"># Someday we should explore asynchronous Tiled Client objects.</span>
-    <span class="kn">from</span> <span class="nn">._async_bridge</span> <span class="kn">import</span> <span class="n">AsyncClientBridge</span>
-
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">startup</span><span class="p">():</span>
-        <span class="c1"># Note: This is important. The Tiled server routes are defined lazily on</span>
-        <span class="c1"># startup.</span>
-        <span class="k">await</span> <span class="n">app</span><span class="o">.</span><span class="n">router</span><span class="o">.</span><span class="n">startup</span><span class="p">()</span>
-
-    <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">timeout</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Timeout</span><span class="p">(</span><span class="o">**</span><span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">)</span>
-
-    <span class="n">client</span> <span class="o">=</span> <span class="n">AsyncClientBridge</span><span class="p">(</span>
-        <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://local-tiled-app/api/&quot;</span><span class="p">,</span>
-        <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-        <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
-        <span class="n">_startup_hook</span><span class="o">=</span><span class="n">startup</span><span class="p">,</span>
-        <span class="n">event_hooks</span><span class="o">=</span><span class="n">ASYNC_EVENT_HOOKS</span><span class="p">,</span>
-        <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
-        <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="c1"># Block for application startup.</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">client</span><span class="o">.</span><span class="n">wait_until_ready</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;Application startup has timed out.&quot;</span><span class="p">)</span>
-    <span class="c1"># TODO How to close the httpx.AsyncClient more cleanly?</span>
-    <span class="kn">import</span> <span class="nn">atexit</span>
-
-    <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="n">close</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">Context</span><span class="p">(</span>
-        <span class="n">client</span><span class="p">,</span>
-        <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
-        <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
-        <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
-        <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span>
-        <span class="n">auth_provider</span><span class="o">=</span><span class="n">auth_provider</span><span class="p">,</span>
-        <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
-        <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">prompt_for_reauthentication</span><span class="p">,</span>
-        <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
-    <span class="p">)</span>
-
-
-<span class="k">class</span> <span class="nc">TokenCache</span><span class="p">:</span>
-    <span class="s2">&quot;A (partial) dict interface backed by files with restrictive permissions&quot;</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
-        <span class="n">filepath</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="n">key</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expected string value, got </span><span class="si">{value!r}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">filepath</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="n">key</span>
-        <span class="n">filepath</span><span class="o">.</span><span class="n">touch</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="mo">0o600</span><span class="p">)</span>  <span class="c1"># Set permissions.</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-            <span class="n">file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
-        <span class="n">filepath</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="n">key</span>
-        <span class="c1"># filepath.unlink(missing_ok=False)  # Python 3.8+</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">filepath</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
-            <span class="k">pass</span>
-
-    <span class="k">def</span> <span class="nf">pop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">filepath</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_directory</span> <span class="o">/</span> <span class="n">key</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
-            <span class="n">content</span> <span class="o">=</span> <span class="n">fallback</span>
-        <span class="c1"># filepath.unlink(missing_ok=True)  # Python 3.8+</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">filepath</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
-            <span class="k">pass</span>
-        <span class="k">return</span> <span class="n">content</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">raw_choice</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No authentication provider chosen. Failed.&quot;</span><span class="p">)</span>
+                    <span class="k">break</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">choice</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">raw_choice</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Choice must be a number.&quot;</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">spec</span> <span class="o">=</span> <span class="n">providers</span><span class="p">[</span><span class="n">choice</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+                <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Choice must be a number 1 through </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">providers</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">break</span>
+    <span class="k">return</span> <span class="n">spec</span>
 </pre></div>
 
            </div>
