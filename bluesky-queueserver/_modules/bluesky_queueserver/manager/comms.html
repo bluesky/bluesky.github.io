@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.comms &mdash; bluesky-queueserver 0.0.17.post6+g74c00f9 documentation</title>
+  <title>bluesky_queueserver.manager.comms &mdash; bluesky-queueserver 0.0.17.post17+g22b3d28 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             <a href="../../../index.html" class="icon icon-home"> bluesky-queueserver
           </a>
               <div class="version">
-                0.0.17.post6+g74c00f9
+                0.0.17.post17+g22b3d28
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -100,7 +100,6 @@
              
   <h1>Source code for bluesky_queueserver.manager.comms</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">threading</span>
-<span class="kn">import</span> <span class="nn">pprint</span>
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">asyncio</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
@@ -109,6 +108,7 @@
 <span class="kn">import</span> <span class="nn">zmq.asyncio</span>
 <span class="kn">from</span> <span class="nn">jsonrpc</span> <span class="kn">import</span> <span class="n">JSONRPCResponseManager</span>
 <span class="kn">from</span> <span class="nn">jsonrpc.dispatcher</span> <span class="kn">import</span> <span class="n">Dispatcher</span>
+<span class="kn">from</span> <span class="nn">.logging_setup</span> <span class="kn">import</span> <span class="n">PPrintForLogging</span> <span class="k">as</span> <span class="n">ppfl</span>
 
 <span class="kn">import</span> <span class="nn">logging</span>
 
@@ -235,8 +235,8 @@
         <span class="c1">#   would fill up and the sender process would get &#39;frozen&#39; (the &#39;send&#39; function</span>
         <span class="c1">#   would indefinitely block the event loop, e.g. the manager process would go into</span>
         <span class="c1">#   infinite cycle of restarts).</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_buffer_size</span> <span class="o">=</span> <span class="mi">100</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_buffer</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_msg_buffer_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_recv_buffer_size</span> <span class="o">=</span> <span class="mi">100</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_recv_buffer</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_msg_recv_buffer_size</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_conn_polling_timeout</span> <span class="o">=</span> <span class="mf">0.1</span>  <span class="c1"># in sec.</span>
 
@@ -244,8 +244,8 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Clear the message buffer.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_buffer</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_msg_buffer</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_recv_buffer</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_msg_recv_buffer</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">clear_buffer</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -294,7 +294,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread_proc</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread_conn</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
-                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_receive_conn_thread</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_thread_name</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_receive_conn_thread</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_thread_name</span> <span class="o">+</span> <span class="s2">&quot; R&quot;</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread_conn</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
@@ -304,16 +304,18 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_polling_timeout</span><span class="p">):</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_msg_buffer</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_msg_recv_buffer</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
                 <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
                     <span class="c1"># There is a major malfunction with the worker if you are here ...</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                         <span class="s2">&quot;The buffer is full. Message is discarded: </span><span class="si">%s</span><span class="s2">. Report the bug to the development team&quot;</span><span class="p">,</span>
-                        <span class="nb">str</span><span class="p">(</span><span class="n">msg</span><span class="p">),</span>
+                        <span class="n">msg</span><span class="p">,</span>
                     <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">EOFError</span><span class="p">:</span>
+                    <span class="k">pass</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span>
-                        <span class="s2">&quot;Exception occurred while waiting for a message or receiving a message: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span>
+                        <span class="s2">&quot;Exception occurred while waiting for a message or receiving a message: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ex</span>
                     <span class="p">)</span>
                     <span class="k">break</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span><span class="p">:</span>  <span class="c1"># Exit thread</span>
@@ -326,12 +328,12 @@
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_buffer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_polling_timeout</span><span class="p">)</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_recv_buffer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_polling_timeout</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_handle_msg</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
                 <span class="k">pass</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception occurred while processing the message </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">msg</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception occurred while processing the message </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">ex</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span><span class="p">:</span>  <span class="c1"># Exit thread</span>
                 <span class="k">break</span>
 
@@ -341,7 +343,7 @@
         <span class="c1">#     msg_json = json.loads(msg)</span>
         <span class="c1">#     We don&#39;t want to print &#39;heartbeat&#39; messages</span>
         <span class="c1">#     if not isinstance(msg_json, dict) or (msg_json[&quot;method&quot;] != &quot;heartbeat&quot;):</span>
-        <span class="c1">#         logger.debug(&quot;Command received RE Manager-&gt;Watchdog: %s&quot;, pprint.pformat(msg_json))</span>
+        <span class="c1">#         logger.debug(&quot;Command received RE Manager-&gt;Watchdog: %s&quot;, ppfl(msg_json))</span>
 
         <span class="n">response</span> <span class="o">=</span> <span class="n">JSONRPCResponseManager</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dispatcher</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">response</span><span class="p">:</span>
@@ -406,7 +408,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread_name</span> <span class="o">=</span> <span class="n">name</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_fut_comm</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Future for waiting for messages from watchdog</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fut_recv</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Future for waiting for incoming messages</span>
         <span class="c1"># Lock that prevents sending of the next message before response</span>
         <span class="c1">#   to the previous message is received.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock_comm</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
@@ -415,6 +417,9 @@
         <span class="c1"># Polling timeout for the pipe. The data will be read from the pipe instantly once it is available.</span>
         <span class="c1">#   The timeout determines how long it would take to stop the thread when needed.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_conn_polling_timeout</span> <span class="o">=</span> <span class="mf">0.1</span>
+
+        <span class="c1"># Buffer for moving outgoing messages to the background thread which sends the messages</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_send_buffer</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># True - thread is running</span>
 
@@ -441,10 +446,15 @@
         <span class="c1"># Start &#39;receive&#39; thread</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_pipe_receive_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
-                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pipe_receive</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_thread_name</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pipe_recv_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pipe_receive</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_thread_name</span> <span class="o">+</span> <span class="s2">&quot; R&quot;</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_pipe_receive_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pipe_send_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+                <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pipe_send</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_thread_name</span> <span class="o">+</span> <span class="s2">&quot; S&quot;</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pipe_recv_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_pipe_send_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">send_msg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">notification</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -461,9 +471,11 @@
 <span class="sd">            True - message is notification. The function returns immediately without</span>
 <span class="sd">            waiting of the response, which is never generated for notification.</span>
 <span class="sd">        timeout: float</span>
-<span class="sd">            Timeout in seconds. If no response is received at expiration of timeout,</span>
-<span class="sd">            `CommTimeoutError` is raised. If the response will be received later, it</span>
-<span class="sd">            will be ignored.</span>
+<span class="sd">            Timeout in seconds. The timeout is applied separately during sending and</span>
+<span class="sd">            receiving message. If timeout is exceeded during sending message or receiving</span>
+<span class="sd">            a response, `CommTimeoutError` is raised. The message is unlikely to be sent</span>
+<span class="sd">            if send timeout expires, and the response is ingored if it is received after</span>
+<span class="sd">            receive timeout expires.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -490,17 +502,26 @@
 
         <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock_comm</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="n">format_jsonrpc_msg</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">notification</span><span class="o">=</span><span class="n">notification</span><span class="p">)</span>
+
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">msg_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">msg_json</span><span class="p">)</span>
+
+                <span class="c1"># &#39;fut_send&#39; sent along with the message. If the thread is still sending the previous</span>
+                <span class="c1">#   message, the future is not going to be set until the current message is sent.</span>
+                <span class="n">fut_send</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">create_future</span><span class="p">()</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">notification</span><span class="p">:</span>
+                    <span class="c1"># &#39;self._fut_recv&#39; is set only when the response with the specific message UID is received.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_expected_msg_id</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_fut_recv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">create_future</span><span class="p">()</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_msg_send_buffer</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">msg</span><span class="p">,</span> <span class="n">fut_send</span><span class="p">),</span> <span class="n">block</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># Buffer is expected to be empty</span>
+                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">fut_send</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+                <span class="n">fut_send</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 
                 <span class="c1"># No response is expected if this is a notification</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">notification</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_expected_msg_id</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_fut_comm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">create_future</span><span class="p">()</span>
                     <span class="c1"># Waiting for the future may raise &#39;asyncio.TimeoutError&#39;</span>
-                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fut_comm</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
-                    <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fut_comm</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fut_recv</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fut_recv</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 
                     <span class="k">if</span> <span class="s2">&quot;result&quot;</span> <span class="ow">in</span> <span class="n">response</span><span class="p">:</span>
                         <span class="k">return</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">]</span>
@@ -519,8 +540,7 @@
                         <span class="k">raise</span> <span class="n">CommJsonRpcError</span><span class="p">(</span><span class="n">err_msg</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="n">err_code</span><span class="p">,</span> <span class="n">error_type</span><span class="o">=</span><span class="n">err_type</span><span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">err_msg</span> <span class="o">=</span> <span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Message </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;resulted in response with unknown format: </span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">response</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;Message </span><span class="si">{</span><span class="n">ppfl</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="sa">f</span><span class="s2">&quot;resulted in response with unknown format: </span><span class="si">{</span><span class="n">ppfl</span><span class="p">(</span><span class="n">response</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
                         <span class="p">)</span>
                         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">err_msg</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
@@ -528,9 +548,15 @@
                 <span class="k">return</span> <span class="n">response</span>
 
             <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">CommTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Timeout while waiting for response to message: </span><span class="se">\n</span><span class="si">{</span><span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="n">CommTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Timeout while waiting for response to message: </span><span class="se">\n</span><span class="si">{</span><span class="n">ppfl</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">CommTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The outgoing message buffer is full: </span><span class="se">\n</span><span class="si">{</span><span class="n">ppfl</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_fut_comm</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="c1"># Clear the &#39;send&#39; buffer</span>
+                <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_send_buffer</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_msg_send_buffer</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_fut_recv</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_expected_msg_id</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_response_received</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
@@ -546,23 +572,27 @@
                         <span class="s2">&quot;Received response with incorrect message ID: </span><span class="si">%s</span><span class="s2">. Expected </span><span class="si">%s</span><span class="s2">.</span><span class="se">\n</span><span class="s2">Message: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
                         <span class="n">response</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_expected_msg_id</span><span class="p">,</span>
-                        <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">response</span><span class="p">),</span>
+                        <span class="n">ppfl</span><span class="p">(</span><span class="n">response</span><span class="p">),</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="c1"># Accept the message. Otherwise wait for timeout</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_fut_comm</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_fut_recv</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_expected_msg_id</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Missing ID: ignore the message</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Received response with missing message ID: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">response</span><span class="p">))</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Received response with missing message ID: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ppfl</span><span class="p">(</span><span class="n">response</span><span class="p">))</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-                <span class="s2">&quot;Unsolicited message received: </span><span class="si">%s</span><span class="s2">. Message is ignored&quot;</span><span class="p">,</span>
-                <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">response</span><span class="p">),</span>
-            <span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Unexpected message received: </span><span class="si">%s</span><span class="s2">. The message is ignored&quot;</span><span class="p">,</span> <span class="n">ppfl</span><span class="p">(</span><span class="n">response</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">_conn_received</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
         <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_response_received</span><span class="p">(</span><span class="n">response</span><span class="p">))</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_response_sent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">fut_send</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fut_send</span><span class="o">.</span><span class="n">done</span><span class="p">():</span>
+            <span class="n">fut_send</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># The result value is not used</span>
+
+    <span class="k">def</span> <span class="nf">_conn_sent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">fut_send</span><span class="p">):</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_response_sent</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">fut_send</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">_pipe_receive</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
@@ -570,12 +600,28 @@
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">msg_json</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
                     <span class="n">msg</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">msg_json</span><span class="p">)</span>
-                    <span class="c1"># logger.debug(&quot;Message Watchdog-&gt;Manager received: &#39;%s&#39;&quot;, pprint.pformat(msg))</span>
+                    <span class="c1"># logger.debug(&quot;Message Watchdog-&gt;Manager received: &#39;%s&#39;&quot;, ppfl(msg))</span>
                     <span class="c1"># Messages should be handled in the event loop</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_received</span><span class="p">,</span> <span class="n">msg</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">EOFError</span><span class="p">:</span>
+                    <span class="k">pass</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception occurred while waiting for packet: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">))</span>
-                    <span class="k">break</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception occurred while waiting for packet: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ex</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span><span class="p">:</span>  <span class="c1"># Exit thread</span>
+                <span class="k">break</span>
+
+    <span class="k">def</span> <span class="nf">_pipe_send</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg</span><span class="p">,</span> <span class="n">fut_send</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_send_buffer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_polling_timeout</span><span class="p">)</span>
+                <span class="n">msg_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">msg_json</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">call_soon_threadsafe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn_sent</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">fut_send</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception occurred while sending the message </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ppfl</span><span class="p">(</span><span class="n">msg</span><span class="p">),</span> <span class="n">ex</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span><span class="p">:</span>  <span class="c1"># Exit thread</span>
                 <span class="k">break</span>
 
@@ -674,7 +720,7 @@
 <span class="sd">            msg = zmq_comm.send_message(method=&quot;some_method&quot;, params={&quot;some_value&quot;: n})</span>
 <span class="sd">            # Code that uses msg</span>
 <span class="sd">        except CommTimeoutError as ex:</span>
-<span class="sd">            logger.exception(&quot;Exception occurred: %s&quot;, str(ex)</span>
+<span class="sd">            logger.exception(&quot;Exception occurred: %s&quot;, ex)</span>
 
 <span class="sd">        # Non-blocking call (trivial example)</span>
 <span class="sd">        msg_received, msg_err_received = [], []</span>
@@ -709,20 +755,22 @@
         <span class="n">server_public_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 
-        <span class="k">if</span> <span class="n">server_public_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">validate_zmq_key</span><span class="p">(</span><span class="n">server_public_key</span><span class="p">)</span>
-
         <span class="n">zmq_server_address</span> <span class="o">=</span> <span class="n">zmq_server_address</span> <span class="ow">or</span> <span class="n">default_zmq_control_address</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_server_public_key</span> <span class="o">=</span> <span class="n">server_public_key</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive</span> <span class="o">=</span> <span class="n">timeout_recv</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_send</span> <span class="o">=</span> <span class="n">timeout_send</span>  <span class="c1"># # Timeout for &#39;send&#39; operation (ms)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_raise_exceptions</span> <span class="o">=</span> <span class="n">raise_exceptions</span>
 
         <span class="c1"># ZeroMQ communication</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span> <span class="o">=</span> <span class="n">zmq_server_address</span>
+
+        <span class="k">if</span> <span class="n">server_public_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">validate_zmq_key</span><span class="p">(</span><span class="n">server_public_key</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server_public_key</span> <span class="o">=</span> <span class="n">server_public_key</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive</span> <span class="o">=</span> <span class="n">timeout_recv</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Timeout used for last acquisition (ms)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_send</span> <span class="o">=</span> <span class="n">timeout_send</span>  <span class="c1"># # Timeout for &#39;send&#39; operation (ms)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_raise_exceptions</span> <span class="o">=</span> <span class="n">raise_exceptions</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket_open</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lock_zmq</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
@@ -753,7 +801,7 @@
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_event_wait_for_msg</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_polling_timeout</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">):</span>
                 <span class="n">msg</span><span class="p">,</span> <span class="n">msg_err</span> <span class="o">=</span> <span class="p">{},</span> <span class="s2">&quot;&quot;</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span><span class="p">):</span>
                         <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv_json</span><span class="p">()</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="c1"># This is very likely a timeout (RE Manager is not responding)</span>
@@ -767,7 +815,7 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">_cb</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">msg_err</span><span class="p">)</span>
                     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
                         <span class="c1"># Operation should continue even if there are problems with callback</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception occurred in ZMQ communication callback: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">))</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Exception occurred in ZMQ communication callback: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ex</span><span class="p">)</span>
 
                 <span class="bp">self</span><span class="o">.</span><span class="n">_event_wait_for_msg</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blocking_call</span><span class="p">:</span>
@@ -813,7 +861,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_received_data</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="n">msg</span><span class="p">,</span> <span class="s2">&quot;msg_err&quot;</span><span class="p">:</span> <span class="n">msg_err</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_event_msg_received</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_zmq_communicate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_out</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">cb</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_zmq_communicate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_out</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">cb</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Send message to the server and receive the response.</span>
 
@@ -825,6 +873,9 @@
 <span class="sd">            Reference to callback function. If callback function is specified, then</span>
 <span class="sd">            the `_zmq_communicate` sends outgoing message and exits. Callback function</span>
 <span class="sd">            is called once the response is received from the server or timeout occurs.</span>
+<span class="sd">        timeout: int or None</span>
+<span class="sd">            Timeout (in ms) used for the single request. If ``None``, then the default</span>
+<span class="sd">            timeout is used.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -853,6 +904,13 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cb</span> <span class="o">=</span> <span class="n">cb</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_blocking_call</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Compute timeout</span>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span> <span class="o">!=</span> <span class="n">timeout</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span> <span class="o">=</span> <span class="n">timeout</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">RCVTIMEO</span> <span class="o">=</span> <span class="n">timeout</span> <span class="o">+</span> <span class="mi">1</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">msg_out</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_event_wait_for_msg</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
@@ -902,7 +960,7 @@
         <span class="c1"># Successful connection does not mean that the socket exists</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span><span class="p">)</span>
 
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Connected to ZeroMQ server &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span><span class="p">))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Connected to ZeroMQ server &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;ZMQ encryption: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;disabled&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_public_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;enabled&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_zmq_socket_restart</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -926,7 +984,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span> <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span><span class="p">}</span>
 
-<div class="viewcode-block" id="ZMQCommSendThreads.send_message"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ZMQCommSendThreads.send_message.html#bluesky_queueserver.ZMQCommSendThreads.send_message">[docs]</a>    <span class="k">def</span> <span class="nf">send_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cb</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ZMQCommSendThreads.send_message"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ZMQCommSendThreads.send_message.html#bluesky_queueserver.ZMQCommSendThreads.send_message">[docs]</a>    <span class="k">def</span> <span class="nf">send_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cb</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Send message to ZMQ server and wait for the response. The message must contain</span>
 <span class="sd">        a name of a method supported by the server and a dictionary of parameters that</span>
@@ -942,6 +1000,9 @@
 <span class="sd">        params: dict or None</span>
 <span class="sd">            Dictionary of parameters passed to the method. If ``None``, then an empty dictionary</span>
 <span class="sd">            is passed to the server.</span>
+<span class="sd">        timeout: int or None</span>
+<span class="sd">            Read timeout (in ms) for the single request. If ``None``, then the default</span>
+<span class="sd">            timeout is used.</span>
 <span class="sd">        cb: callable or None</span>
 <span class="sd">            Callback function. If None, then the function blocks until communication is complete.</span>
 <span class="sd">            Otherwise the function exits after the message is sent to the server. The callback</span>
@@ -973,7 +1034,7 @@
 
         <span class="k">try</span><span class="p">:</span>
             <span class="n">msg_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_msg</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
-            <span class="n">msg_in</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_communicate</span><span class="p">(</span><span class="n">msg_out</span><span class="p">,</span> <span class="n">cb</span><span class="o">=</span><span class="n">cb</span><span class="p">)</span>
+            <span class="n">msg_in</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_communicate</span><span class="p">(</span><span class="n">msg_out</span><span class="p">,</span> <span class="n">cb</span><span class="o">=</span><span class="n">cb</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
             <span class="n">errmsg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;ZMQ communication error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="n">use_ex</span> <span class="o">=</span> <span class="n">raise_exceptions</span> <span class="k">if</span> <span class="p">(</span><span class="n">raise_exceptions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_raise_exceptions</span>
@@ -988,7 +1049,8 @@
 <span class="sd">        Close ZMQ socket. Call to close socket if the object is no longer needed, but may</span>
 <span class="sd">        not be destroyed for some time.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span> <span class="o">=</span> <span class="kc">False</span></div></div>
 
 
@@ -1053,7 +1115,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_server_public_key</span> <span class="o">=</span> <span class="n">server_public_key</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive</span> <span class="o">=</span> <span class="n">timeout_recv</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_send</span> <span class="o">=</span> <span class="n">timeout_send</span>  <span class="c1"># # Timeout for &#39;send&#39; operation (ms)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Timeout used for last acquisition (ms)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_send</span> <span class="o">=</span> <span class="n">timeout_send</span>  <span class="c1"># Timeout for &#39;send&#39; operation (ms)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_raise_exceptions</span> <span class="o">=</span> <span class="n">raise_exceptions</span>
 
         <span class="c1"># ZeroMQ communication</span>
@@ -1079,22 +1142,28 @@
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_zmq_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_zmq_receive</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_zmq_receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive</span><span class="p">):</span>
+            <span class="k">if</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">):</span>
                 <span class="n">msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv_json</span><span class="p">()</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># This is very likely a timeout (RE Manager is not responding)</span>
                 <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;timeout occurred&quot;</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
             <span class="c1"># Timeout occurred. Socket needs to be reset.</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;ZeroMQ communication failed: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">))</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;ZeroMQ communication failed: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ex</span><span class="p">)</span>
             <span class="k">raise</span>
         <span class="k">return</span> <span class="n">msg</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_zmq_communicate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_out</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_zmq_communicate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_out</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span> <span class="o">!=</span> <span class="n">timeout</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span> <span class="o">=</span> <span class="n">timeout</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">RCVTIMEO</span> <span class="o">=</span> <span class="n">timeout</span> <span class="o">+</span> <span class="mi">1</span>
+
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_send</span><span class="p">(</span><span class="n">msg_out</span><span class="p">)</span>
-        <span class="n">msg_in</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_receive</span><span class="p">()</span>
+        <span class="n">msg_in</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_receive</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">msg_in</span>
 
     <span class="k">def</span> <span class="nf">_zmq_socket_open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1117,7 +1186,7 @@
         <span class="c1"># Successful connection does not mean that the socket exists</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span><span class="p">)</span>
 
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Connected to ZeroMQ server &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span> <span class="o">%</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span><span class="p">))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Connected to ZeroMQ server &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;ZMQ encryption: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;disabled&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_public_key</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;enabled&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_zmq_socket_restart</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1127,7 +1196,7 @@
     <span class="k">def</span> <span class="nf">_create_msg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span> <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span><span class="p">}</span>
 
-<div class="viewcode-block" id="ZMQCommSendAsync.send_message"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ZMQCommSendAsync.send_message.html#bluesky_queueserver.ZMQCommSendAsync.send_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ZMQCommSendAsync.send_message"><a class="viewcode-back" href="../../../generated/bluesky_queueserver.ZMQCommSendAsync.send_message.html#bluesky_queueserver.ZMQCommSendAsync.send_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Send message to ZMQ server and wait for the response. The message must contain</span>
 <span class="sd">        a name of a method supported by the server and a dictionary of parameters that</span>
@@ -1143,6 +1212,9 @@
 <span class="sd">        params: dict or None</span>
 <span class="sd">            Dictionary of parameters passed to the method. If ``None``, then an empty dictionary</span>
 <span class="sd">            is passed to the server.</span>
+<span class="sd">        timeout: int or None</span>
+<span class="sd">            Read timeout (in ms) for the single request. If ``None``, then the default</span>
+<span class="sd">            timeout is used.</span>
 <span class="sd">        raise_exceptions: bool or None</span>
 <span class="sd">            The flag indicates if exception should be raised in case of communication error</span>
 <span class="sd">            (such as timeout). If ``False``, then error message is returned instead.</span>
@@ -1168,7 +1240,7 @@
         <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock_zmq</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">msg_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_msg</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
-                <span class="n">msg_in</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_communicate</span><span class="p">(</span><span class="n">msg_out</span><span class="p">)</span>
+                <span class="n">msg_in</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_communicate</span><span class="p">(</span><span class="n">msg_out</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
                 <span class="c1"># This is very likely a timeout (RE Manager is not responding)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket_restart</span><span class="p">()</span>
@@ -1188,7 +1260,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div></div>
 
 
-<span class="k">def</span> <span class="nf">zmq_single_request</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_server_address</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">server_public_key</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">zmq_single_request</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">zmq_server_address</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">server_public_key</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Send a single request to ZMQ server. The function opens the socket, sends</span>
 <span class="sd">    a single ZMQ request and closes the socket. The function is not expected</span>
@@ -1203,6 +1275,8 @@
 <span class="sd">    params: dict or None</span>
 <span class="sd">        Dictionary of parameters (payload of the message). If ``None`` then</span>
 <span class="sd">        the message is sent with empty payload: ``params = {}``.</span>
+<span class="sd">    timeout: int or None</span>
+<span class="sd">        Read timeout (in ms).</span>
 <span class="sd">    zmq_server_address: str or None</span>
 <span class="sd">        Address of the ZMQ control socket of RE Manager. Default address is used if the</span>
 <span class="sd">        value is ``None``.</span>
@@ -1230,7 +1304,9 @@
         <span class="n">zmq_to_manager</span> <span class="o">=</span> <span class="n">ZMQCommSendAsync</span><span class="p">(</span>
             <span class="n">zmq_server_address</span><span class="o">=</span><span class="n">zmq_server_address</span><span class="p">,</span> <span class="n">server_public_key</span><span class="o">=</span><span class="n">server_public_key</span>
         <span class="p">)</span>
-        <span class="n">msg_received</span> <span class="o">=</span> <span class="k">await</span> <span class="n">zmq_to_manager</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">msg_received</span> <span class="o">=</span> <span class="k">await</span> <span class="n">zmq_to_manager</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span>
+            <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
         <span class="n">zmq_to_manager</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
     <span class="k">try</span><span class="p">:</span>
@@ -1243,7 +1319,7 @@
         <span class="n">msg_err</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">ex</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">msg_err</span><span class="p">:</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Communication with RE Manager failed: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">msg_err</span><span class="p">))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Communication with RE Manager failed: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">msg_err</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">msg</span><span class="p">,</span> <span class="n">msg_err</span>
 </pre></div>
