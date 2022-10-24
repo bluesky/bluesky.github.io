@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a74.post64+g668de39 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a74.post67+gd10097b documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -33,7 +33,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a74.post64+g668de39
+                0.1.0a74.post67+gd10097b
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -126,6 +126,7 @@
 <span class="kn">import</span> <span class="nn">getpass</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
@@ -219,8 +220,6 @@
                 <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">atexit</span>
-
             <span class="kn">from</span> <span class="nn">._testclient</span> <span class="kn">import</span> <span class="n">TestClient</span>
 
             <span class="c1"># verify parameter is dropped, as there is no SSL in ASGI mode</span>
@@ -232,7 +231,28 @@
             <span class="p">)</span>
             <span class="n">client</span><span class="o">.</span><span class="n">follow_redirects</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="n">client</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
-            <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">)</span>
+            <span class="c1"># The TestClient is meant to be used only as a context manager,</span>
+            <span class="c1"># where the context starts and stops and the wrapped ASGI app.</span>
+            <span class="c1"># We are abusing it slightly to enable interactive use of the</span>
+            <span class="c1"># TestClient.</span>
+            <span class="c1">#</span>
+            <span class="c1"># Given a blank slate, we may not have chosen to support this at</span>
+            <span class="c1"># all; we may insist on using this only within a context manager.</span>
+            <span class="c1"># But for now it is necessary to suppot a smooth transition for</span>
+            <span class="c1"># databroker. We may revisit it later.</span>
+            <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">9</span><span class="p">):</span>
+                <span class="kn">import</span> <span class="nn">atexit</span>
+
+                <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># The threading module has its own (internal) atexit</span>
+                <span class="c1"># mechanism that runs at thread shutdown, prior to the atexit</span>
+                <span class="c1"># mechanism that runs at interpreter shutdown.</span>
+                <span class="c1"># We need to intervene at that layer to close the portal, or else</span>
+                <span class="c1"># we will wait forever for a thread run by the portal to join().</span>
+                <span class="kn">import</span> <span class="nn">threading</span>
+
+                <span class="n">threading</span><span class="o">.</span><span class="n">_register_atexit</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span> <span class="o">=</span> <span class="n">client</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
