@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a77 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a77.post1+ga89cc0a documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -33,7 +33,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a77
+                0.1.0a77.post1+ga89cc0a
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -110,9 +110,9 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
-          <li><a href="../../index.html">Module code</a> &raquo;</li>
-      <li>tiled.server.app</li>
+      <li><a href="../../../index.html" class="icon icon-home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">tiled.server.app</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -332,6 +332,10 @@
         <span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="p">(</span>
             <span class="n">base_authentication_router</span><span class="p">,</span>
             <span class="n">build_auth_code_route</span><span class="p">,</span>
+            <span class="n">build_device_code_authorize_route</span><span class="p">,</span>
+            <span class="n">build_device_code_token_route</span><span class="p">,</span>
+            <span class="n">build_device_code_user_code_form_route</span><span class="p">,</span>
+            <span class="n">build_device_code_user_code_submit_route</span><span class="p">,</span>
             <span class="n">build_handle_credentials_route</span><span class="p">,</span>
             <span class="n">oauth2_scheme</span><span class="p">,</span>
         <span class="p">)</span>
@@ -356,12 +360,29 @@
                     <span class="n">build_handle_credentials_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
                 <span class="p">)</span>
             <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span><span class="p">:</span>
+                <span class="c1"># Client starts here to create a PendingSession.</span>
+                <span class="n">authentication_router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/authorize&quot;</span><span class="p">)(</span>
+                    <span class="n">build_device_code_authorize_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="c1"># External OAuth redirects here with code, presenting form for user code.</span>
+                <span class="n">authentication_router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/device_code&quot;</span><span class="p">)(</span>
+                    <span class="n">build_device_code_user_code_form_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="c1"># User code and auth code are submitted here.</span>
+                <span class="n">authentication_router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/device_code&quot;</span><span class="p">)(</span>
+                    <span class="n">build_device_code_user_code_submit_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="c1"># Client polls here for token.</span>
+                <span class="n">authentication_router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/token&quot;</span><span class="p">)(</span>
+                    <span class="n">build_device_code_token_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="c1"># Normal code flow end point for web UIs</span>
                 <span class="n">authentication_router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/code&quot;</span><span class="p">)(</span>
                     <span class="n">build_auth_code_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
                 <span class="p">)</span>
-                <span class="n">authentication_router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/code&quot;</span><span class="p">)(</span>
-                    <span class="n">build_auth_code_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
-                <span class="p">)</span>
+                <span class="c1"># authentication_router.post(f&quot;/provider/{provider}/code&quot;)(</span>
+                <span class="c1">#     build_auth_code_route(authenticator, provider)</span>
+                <span class="c1"># )</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown authentication mode </span><span class="si">{</span><span class="n">mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">custom_router</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="s2">&quot;include_routers&quot;</span><span class="p">,</span> <span class="p">[]):</span>

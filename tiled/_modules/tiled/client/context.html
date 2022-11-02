@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a77 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a77.post1+ga89cc0a documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -33,7 +33,7 @@
             <a href="../../../index.html" class="icon icon-home"> tiled
           </a>
               <div class="version">
-                0.1.0a77
+                0.1.0a77.post1+ga89cc0a
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -110,9 +110,9 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
-          <li><a href="../../index.html">Module code</a> &raquo;</li>
-      <li>tiled.client.context</li>
+      <li><a href="../../../index.html" class="icon icon-home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">tiled.client.context</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -127,6 +127,7 @@
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
@@ -726,7 +727,9 @@
         <span class="p">)</span>
 
 <div class="viewcode-block" id="Context.authenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.authenticate.html#tiled.client.context.Context.authenticate">[docs]</a>    <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="s2">&quot;Authenticate. Prompt for password or access code (refresh token).&quot;</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        See login. This is for programmatic use.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">providers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">]</span>
         <span class="n">spec</span> <span class="o">=</span> <span class="n">_choose_identity_provider</span><span class="p">(</span><span class="n">providers</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
         <span class="n">provider</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span>
@@ -765,6 +768,7 @@
                 <span class="c1"># No need to log in again.</span>
                 <span class="k">return</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">mode</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;mode&quot;</span><span class="p">]</span>
         <span class="n">auth_endpoint</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;auth_endpoint&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;password&quot;</span><span class="p">:</span>
@@ -778,74 +782,89 @@
                 <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span>
                 <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="n">password</span><span class="p">,</span>
             <span class="p">}</span>
-            <span class="n">token_request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-                <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
-                <span class="n">auth_endpoint</span><span class="p">,</span>
-                <span class="n">data</span><span class="o">=</span><span class="n">form_data</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{},</span>
+            <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                <span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">form_data</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span>
             <span class="p">)</span>
-            <span class="n">token_request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">token_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
             <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
             <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;external&quot;</span><span class="p">:</span>
+            <span class="n">verification_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                <span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{},</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">handle_error</span><span class="p">(</span><span class="n">verification_response</span><span class="p">)</span>
+            <span class="n">verification</span> <span class="o">=</span> <span class="n">verification_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+            <span class="n">authorization_uri</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;authorization_uri&quot;</span><span class="p">]</span>
             <span class="nb">print</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">Navigate web browser to this address to obtain access code:</span>
+<span class="s2">You have </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s1">&#39;expires_in&#39;</span><span class="p">])</span> <span class="o">//</span> <span class="mi">60</span><span class="si">}</span><span class="s2"> minutes visit this URL</span>
 
-<span class="si">{</span><span class="n">auth_endpoint</span><span class="si">}</span><span class="s2"></span>
+<span class="si">{</span><span class="n">authorization_uri</span><span class="si">}</span><span class="s2"></span>
+
+<span class="s2">and enter the code: </span><span class="si">{</span><span class="n">verification</span><span class="p">[</span><span class="s1">&#39;user_code&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"></span>
 
 <span class="s2">&quot;&quot;&quot;</span>
             <span class="p">)</span>
             <span class="kn">import</span> <span class="nn">webbrowser</span>
 
-            <span class="n">webbrowser</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">)</span>
+            <span class="n">webbrowser</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">authorization_uri</span><span class="p">)</span>
+            <span class="n">deadline</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;expires_in&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Waiting...&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-                <span class="c1"># The proper term for this is &#39;refresh token&#39; but that may be</span>
-                <span class="c1"># confusing jargon to the end user, so we say &quot;access code&quot;.</span>
-                <span class="n">raw_refresh_token</span> <span class="o">=</span> <span class="n">getpass</span><span class="o">.</span><span class="n">getpass</span><span class="p">(</span><span class="s2">&quot;Access code (quotes optional): &quot;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">raw_refresh_token</span><span class="p">:</span>
-                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No access token given. Failed.&quot;</span><span class="p">)</span>
-                    <span class="k">break</span>
-                <span class="c1"># Remove any accidentally-included quotes.</span>
-                <span class="n">refresh_token</span> <span class="o">=</span> <span class="n">raw_refresh_token</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;&quot;&#39;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-                <span class="c1"># Immediately refresh to (1) check that the copy/paste worked and</span>
-                <span class="c1"># (2) obtain an access token as well.</span>
-                <span class="n">refresh_request</span> <span class="o">=</span> <span class="n">build_refresh_request</span><span class="p">(</span>
-                    <span class="n">refresh_url</span><span class="p">,</span>
-                    <span class="n">refresh_token</span><span class="p">,</span>
-                    <span class="n">csrf_token</span><span class="p">,</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">])</span>
+                <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">deadline</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Deadline expired.&quot;</span><span class="p">)</span>
+                <span class="n">access_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">],</span>
+                    <span class="n">json</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s2">&quot;device_code&quot;</span><span class="p">:</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;device_code&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:ietf:params:oauth:grant-type:device_code&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">refresh_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">token_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">:</span>
-                    <span class="nb">print</span><span class="p">(</span>
-                        <span class="s2">&quot;That didn&#39;t work. Try pasting the access code again, or press Enter to escape.&quot;</span>
-                    <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-                    <span class="k">break</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">access_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">400</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+                    <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;detail&quot;</span><span class="p">][</span><span class="s2">&quot;error&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;authorization_pending&quot;</span>
+                <span class="p">):</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="n">handle_error</span><span class="p">(</span><span class="n">access_response</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+                <span class="k">break</span>
+            <span class="n">tokens</span> <span class="o">=</span> <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Server has unknown authentication mechanism </span><span class="si">{</span><span class="n">mode</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="c1"># We need to know the username in order to set the token_directory,</span>
-        <span class="c1"># so we manually build an authenticated request to &quot;whoami&quot; to get</span>
-        <span class="c1"># the username, and then configure TiledAuth to handle authentication</span>
-        <span class="c1"># going forward.</span>
-        <span class="n">whoami</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;whoami&quot;</span><span class="p">],</span>
-            <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">tokens</span><span class="p">[</span><span class="s1">&#39;access_token&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">},</span>
-        <span class="p">)</span>
-        <span class="n">identities</span> <span class="o">=</span> <span class="n">whoami</span><span class="p">[</span><span class="s2">&quot;identities&quot;</span><span class="p">]</span>
-        <span class="n">identities_by_provider</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">identity</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]:</span> <span class="n">identity</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">identity</span> <span class="ow">in</span> <span class="n">identities</span>
-        <span class="p">}</span>
-        <span class="n">username</span> <span class="o">=</span> <span class="n">identities_by_provider</span><span class="p">[</span><span class="n">provider</span><span class="p">]</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;identity&quot;</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
         <span class="n">token_directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_directory</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="n">username</span><span class="p">)</span>
         <span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span><span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">)</span>
         <span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">])</span>
         <span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">auth</span>
+        <span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;confirmation_message&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">confirmation_message</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">confirmation_message</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">username</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">spec</span><span class="p">,</span> <span class="n">username</span></div>
+
+<div class="viewcode-block" id="Context.login"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.login.html#tiled.client.context.Context.login">[docs]</a>    <span class="k">def</span> <span class="nf">login</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Depending on the server&#39;s authentication method, this will prompt for username/password:</span>
+
+<span class="sd">        &gt;&gt;&gt; c.login()</span>
+<span class="sd">        Username: USERNAME</span>
+<span class="sd">        Password: &lt;input is hidden&gt;</span>
+
+<span class="sd">        or prompt you to open a link in a web browser to login with a third party:</span>
+
+<span class="sd">        &gt;&gt;&gt; c.login()</span>
+<span class="sd">        You have ... minutes visit this URL</span>
+
+<span class="sd">        https://...</span>
+
+<span class="sd">        and enter the code: XXXX-XXXX</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">authenticate</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
+        <span class="c1"># For programmatic access to the return values, use authenticate().</span>
+        <span class="c1"># This returns None in order to provide a clean UX in an interpreter.</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
 
     <span class="k">def</span> <span class="nf">_token_directory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">provider</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
         <span class="c1"># ~/.config/tiled/tokens/{host:port}/{provider}/{username}</span>
