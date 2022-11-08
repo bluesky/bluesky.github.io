@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.run_engine &mdash; bluesky 1.10.0.post6+g72ea2473 documentation</title>
+  <title>bluesky.run_engine &mdash; bluesky 1.10.0.post14+gfc4204d4 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -30,7 +30,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.10.0.post6+g72ea2473
+                1.10.0.post14+gfc4204d4
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -101,9 +101,9 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
-          <li><a href="../index.html">Module code</a> &raquo;</li>
-      <li>bluesky.run_engine</li>
+      <li><a href="../../index.html" class="icon icon-home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bluesky.run_engine</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -129,7 +129,7 @@
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">import</span> <span class="nn">typing</span>
 <span class="kn">from</span> <span class="nn">.bundlers</span> <span class="kn">import</span> <span class="n">RunBundler</span><span class="p">,</span> <span class="n">maybe_await</span>
-<span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="p">(</span><span class="n">Flyable</span><span class="p">,</span> <span class="n">Movable</span><span class="p">,</span> <span class="n">Pausable</span><span class="p">,</span> <span class="n">Readable</span><span class="p">,</span> <span class="n">Stageable</span><span class="p">,</span>
+<span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="p">(</span><span class="n">Flyable</span><span class="p">,</span> <span class="n">Locatable</span><span class="p">,</span> <span class="n">Movable</span><span class="p">,</span> <span class="n">Pausable</span><span class="p">,</span> <span class="n">Readable</span><span class="p">,</span> <span class="n">Stageable</span><span class="p">,</span>
                         <span class="n">Stoppable</span><span class="p">,</span> <span class="n">Triggerable</span><span class="p">,</span> <span class="n">check_supports</span><span class="p">)</span>
 
 <span class="kn">import</span> <span class="nn">concurrent</span>
@@ -567,6 +567,7 @@
             <span class="s1">&#39;save&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save</span><span class="p">,</span>
             <span class="s1">&#39;drop&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_drop</span><span class="p">,</span>
             <span class="s1">&#39;read&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read</span><span class="p">,</span>
+            <span class="s1">&#39;locate&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locate</span><span class="p">,</span>
             <span class="s1">&#39;monitor&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor</span><span class="p">,</span>
             <span class="s1">&#39;unmonitor&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unmonitor</span><span class="p">,</span>
             <span class="s1">&#39;null&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_null</span><span class="p">,</span>
@@ -1963,6 +1964,27 @@
             <span class="k">await</span> <span class="n">current_run</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ret</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">ret</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_locate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="n">Msg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Locate some Movables and return their locations.</span>
+
+<span class="sd">        Expected message object is:</span>
+
+<span class="sd">            Msg(&#39;locate&#39;, obj1, ..., objn, squeeze=True)</span>
+
+<span class="sd">        If a single obj is passed, obj.locate() is returned. If multiple objs</span>
+<span class="sd">        are passed, obj.locate() is called in parallel for all objs and a list</span>
+<span class="sd">        of the results returned. If squeeze is supplied and is False then it</span>
+<span class="sd">        will always return a list of results even with a single object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">objs</span> <span class="o">=</span> <span class="p">[</span><span class="n">check_supports</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Locatable</span><span class="p">)</span> <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="p">,)</span> <span class="o">+</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">]</span>
+        <span class="c1"># actually _locate_ the objects</span>
+        <span class="n">coros</span> <span class="o">=</span> <span class="p">[</span><span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">locate</span><span class="p">())</span> <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">objs</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coros</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;squeeze&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">coros</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">coros</span><span class="p">))</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_monitor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>

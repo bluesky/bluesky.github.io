@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.preprocessors &mdash; bluesky 1.10.0.post6+g72ea2473 documentation</title>
+  <title>bluesky.preprocessors &mdash; bluesky 1.10.0.post14+gfc4204d4 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -30,7 +30,7 @@
             <a href="../../index.html" class="icon icon-home"> bluesky
           </a>
               <div class="version">
-                1.10.0.post6+g72ea2473
+                1.10.0.post14+gfc4204d4
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -101,9 +101,9 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
-          <li><a href="../index.html">Module code</a> &raquo;</li>
-      <li>bluesky.preprocessors</li>
+      <li><a href="../../index.html" class="icon icon-home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bluesky.preprocessors</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -118,6 +118,8 @@
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">deque</span><span class="p">,</span> <span class="n">ChainMap</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterable</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="kn">from</span> <span class="nn">bluesky.protocols</span> <span class="kn">import</span> <span class="n">Locatable</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span><span class="n">get_hinted_fields</span><span class="p">,</span> <span class="n">normalize_subs_input</span><span class="p">,</span> <span class="n">root_ancestor</span><span class="p">,</span>
                     <span class="n">separate_devices</span><span class="p">,</span>
                     <span class="n">Msg</span><span class="p">,</span> <span class="n">ensure_generator</span><span class="p">,</span> <span class="n">single_gen</span><span class="p">,</span>
@@ -1089,6 +1091,14 @@
     <span class="k">return</span> <span class="n">devices</span><span class="p">,</span> <span class="n">coupled_parents</span>
 
 
+<span class="k">def</span> <span class="nf">__get_result_of_message</span><span class="p">(</span><span class="n">msg_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="n">msg_type</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># this plan may be being list-ified</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;*** all positions for </span><span class="si">{</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> are relative to current position ***&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
 <span class="k">def</span> <span class="nf">__read_and_stash_a_motor</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">initial_positions</span><span class="p">,</span> <span class="n">coupled_parents</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Internal plan for relative set and reset wrappers</span>
 
@@ -1098,37 +1108,40 @@
 <span class="sd">       Do not use this plan directly for any reason.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># obj should have a `position` attribution</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">cur_pos</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">position</span>
-    <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
-        <span class="c1"># ... but as a fallback we can read obj and grab the value of the</span>
-        <span class="c1"># first key</span>
-        <span class="n">reading</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;read&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+    <span class="c1"># First check if it is a locatable, and use its location if it is</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Locatable</span><span class="p">):</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="k">yield from</span> <span class="n">__get_result_of_message</span><span class="p">(</span><span class="s2">&quot;locate&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">location</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">setpoint</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">setpoint</span> <span class="o">=</span> <span class="n">location</span><span class="p">[</span><span class="s2">&quot;setpoint&quot;</span><span class="p">]</span>
+    <span class="c1"># Otherwise it might have a `position` attribution</span>
+    <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">&quot;position&quot;</span><span class="p">):</span>
+        <span class="n">setpoint</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">position</span>
+    <span class="c1"># Otherwise fallback to read obj and grab the value of the first key</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">reading</span> <span class="o">=</span> <span class="k">yield from</span> <span class="n">__get_result_of_message</span><span class="p">(</span><span class="s2">&quot;read&quot;</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">reading</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># this plan may be being list-ified</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;*** all positions for </span><span class="si">{m.name}</span><span class="s2"> are &quot;</span>
-                  <span class="s2">&quot;relative to current position ***&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">m</span><span class="o">=</span><span class="n">obj</span><span class="p">))</span>
-            <span class="n">cur_pos</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">setpoint</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">fields</span> <span class="o">=</span> <span class="n">get_hinted_fields</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
                 <span class="n">k</span><span class="p">,</span> <span class="o">=</span> <span class="n">fields</span>
-                <span class="n">cur_pos</span> <span class="o">=</span> <span class="n">reading</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s1">&#39;value&#39;</span><span class="p">]</span>
+                <span class="n">setpoint</span> <span class="o">=</span> <span class="n">reading</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s1">&#39;value&#39;</span><span class="p">]</span>
             <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">k</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">reading</span><span class="o">.</span><span class="n">keys</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="n">cur_pos</span> <span class="o">=</span> <span class="n">reading</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s1">&#39;value&#39;</span><span class="p">]</span>
+                <span class="n">setpoint</span> <span class="o">=</span> <span class="n">reading</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s1">&#39;value&#39;</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;do not yet know how to deal with &quot;</span>
                                 <span class="s2">&quot;non pseudopositioner multi-axis.  Please &quot;</span>
                                 <span class="s2">&quot;contact DAMA to justify why you need &quot;</span>
                                 <span class="s2">&quot;this.&quot;</span><span class="p">)</span>
 
-    <span class="n">initial_positions</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">cur_pos</span>
+    <span class="n">initial_positions</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">setpoint</span>
 
     <span class="c1"># if we move a pseudo positioner also stash it&#39;s children</span>
     <span class="k">if</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">coupled_parents</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">pseudo_positioners</span><span class="p">,</span> <span class="n">cur_pos</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">pseudo_positioners</span><span class="p">,</span> <span class="n">setpoint</span><span class="p">):</span>
             <span class="n">initial_positions</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span>
 
     <span class="c1"># if we move a pseudo single, also stash it&#39;s parent and siblings</span>
