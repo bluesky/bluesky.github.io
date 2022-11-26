@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_httpserver.authorization.api_access &mdash; Bluesky HTTP Server 0.0.8.post4+g6f88d76 documentation</title>
+  <title>bluesky_httpserver.authorization.api_access &mdash; Bluesky HTTP Server 0.0.8.post13+gda229f0 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -30,7 +30,7 @@
             <a href="../../../index.html" class="icon icon-home"> Bluesky HTTP Server
           </a>
               <div class="version">
-                0.0.8.post4+g6f88d76
+                0.0.8.post13+gda229f0
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -74,9 +74,9 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
-          <li><a href="../../index.html">Module code</a> &raquo;</li>
-      <li>bluesky_httpserver.authorization.api_access</li>
+      <li><a href="../../../index.html" class="icon icon-home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bluesky_httpserver.authorization.api_access</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -86,13 +86,21 @@
            <div itemprop="articleBody">
              
   <h1>Source code for bluesky_httpserver.authorization.api_access</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">import</span> <span class="nn">httpx</span>
 <span class="kn">import</span> <span class="nn">jsonschema</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">time</span> <span class="k">as</span> <span class="nn">ttime</span>
 <span class="kn">import</span> <span class="nn">yaml</span>
 
 <span class="kn">from</span> <span class="nn">._defaults</span> <span class="kn">import</span> <span class="n">_DEFAULT_ROLES</span><span class="p">,</span> <span class="n">_DEFAULT_USER_INFO</span>
 <span class="kn">from</span> <span class="nn">..config_schemas.loading</span> <span class="kn">import</span> <span class="n">ConfigError</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
 
 <span class="n">_schema_BasicAPIAccessControl</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
@@ -537,6 +545,205 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">v</span><span class="p">[</span><span class="s2">&quot;roles&quot;</span><span class="p">]]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">user_info</span><span class="p">)</span></div></div>
+
+
+<span class="n">_schema_ServerBasedAPIAccessControl</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  instrument:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  endstation:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  roles:  # Detailed validation is performed elsewhere</span>
+<span class="s2">    description: The value is passed to BasicAPIAccessControl object</span>
+<span class="s2">  server:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  port:</span>
+<span class="s2">    type: integer</span>
+<span class="s2">  update_period:</span>
+<span class="s2">    type: integer</span>
+<span class="s2">  expiration_period:</span>
+<span class="s2">    type: [integer, &quot;null&quot;]</span>
+<span class="s2">  http_timeout:</span>
+<span class="s2">    type: integer</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="ServerBasedAPIAccessControl"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.ServerBasedAPIAccessControl.html#bluesky_httpserver.authorization.ServerBasedAPIAccessControl">[docs]</a><span class="k">class</span> <span class="nc">ServerBasedAPIAccessControl</span><span class="p">(</span><span class="n">BasicAPIAccessControl</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Access policy based on external Access Control Server. The user access data is</span>
+<span class="sd">    periodically requested from the server using REST API. The access control server is</span>
+<span class="sd">    expected to expose ``/instruments/{instrument}/{endstation}/qserver/access`` API,</span>
+<span class="sd">    where ``instrument`` and ``endstation`` are the identifiers of the instrument and</span>
+<span class="sd">    endstation (optional) passed as class constructor parameters. The API is expected to</span>
+<span class="sd">    return a dictionary which maps roles (&#39;admin&#39;, &#39;expert&#39;, &#39;advanced&#39;, &#39;user&#39;, &#39;observer&#39;)</span>
+<span class="sd">    to dictionaries with information on users that are assigned the role, for example</span>
+
+<span class="sd">    .. code-block::</span>
+
+<span class="sd">        {</span>
+<span class="sd">            &quot;admin&quot;: {</span>
+<span class="sd">                &quot;bob&quot;: {&quot;mail&quot;: &quot;bob@gmail.com&quot;},</span>
+<span class="sd">                &quot;tom&quot;: {},</span>
+<span class="sd">            },</span>
+<span class="sd">            &quot;expert&quot;: {</span>
+<span class="sd">                &quot;bob&quot;: {&quot;mail&quot;: &quot;bob@gmail.com&quot;}</span>
+<span class="sd">            },</span>
+<span class="sd">            &quot;advanced&quot;: {</span>
+<span class="sd">                &quot;jdoe&quot;: {&quot;mail&quot;: &quot;jdoe@gmail.com&quot;, &quot;displayed_name&quot;: &quot;Doe, John&quot;}</span>
+<span class="sd">            },</span>
+<span class="sd">            &quot;user&quot;: {},</span>
+<span class="sd">            &quot;observer&quot;: {},</span>
+<span class="sd">        }</span>
+
+<span class="sd">    User information consists of the username (dictionary key, which makes it mandatory) and</span>
+<span class="sd">    optional ``&#39;mail&#39;`` and ``&#39;displayed_name&#39;``. Additional user information is ignored.</span>
+
+<span class="sd">    Access information is requested from the server at startup and periodically updated</span>
+<span class="sd">    during operation with the period ``update_period +/-20%``. If the server is not accessible,</span>
+<span class="sd">    the user access rights do not change until access information expires. The expiration</span>
+<span class="sd">    period is set using the parameter ``expiration_period``. If the access information</span>
+<span class="sd">    expires and an attempt to update it fails, all users lose access to the HTTP server.</span>
+
+<span class="sd">    The scopes for the roles can be modified by passing the parameter dictionary with</span>
+<span class="sd">    the parameter ``roles``. The dictionary is handled by the constructor of</span>
+<span class="sd">    ``BasicAPIAccessControl``. See the class documentation for more details.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    instrument: str</span>
+<span class="sd">        Instrument ID, such as &#39;SRX&#39; or &#39;TES&#39;. This is the required parameter.</span>
+<span class="sd">    endstation: str, optional</span>
+<span class="sd">        Endstation ID (if applicable). The default value is ``&#39;default&#39;``.</span>
+<span class="sd">    roles: dict or None, optional</span>
+<span class="sd">        The dictionary that defines new and/or modifies existing roles. The dictionary</span>
+<span class="sd">        is passed to the ``BasicAPIAccessControl`` constructor. Default: ``None``.</span>
+<span class="sd">    server: str, optional</span>
+<span class="sd">        Access Control server address, such as ``&#39;accesscontrol.server.com&#39;`` or</span>
+<span class="sd">        ``&#39;110.43.6.45&#39;``. The default address is ``localhost``.</span>
+<span class="sd">    port: int, optional</span>
+<span class="sd">        Access Control server port. The default port is `8000`.</span>
+<span class="sd">    update_period: int, optional</span>
+<span class="sd">        Average period in seconds between consecutive requests for updated access data.</span>
+<span class="sd">        The actual period is randomized (uniform distribution in the range +/-20% of</span>
+<span class="sd">        the update period). Default: 600.</span>
+<span class="sd">    expiration_period: int or None, optional</span>
+<span class="sd">        Expiration period for the current access data. If a request to the API server</span>
+<span class="sd">        fails and the data is expired, then users lose access. Longer expiration period</span>
+<span class="sd">        allows users to continue operation if the API server is temporarily unavailable.</span>
+<span class="sd">        If the value is ``None``, then the period is set to ``1.5 * update_period``.</span>
+<span class="sd">        Default: ``None``.</span>
+<span class="sd">    http_timeout: int, optional</span>
+<span class="sd">        Timeout for requests to the API server.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ServerBasedAPIAccessControl.__init__"><a class="viewcode-back" href="../../../generated/bluesky_httpserver.authorization.ServerBasedAPIAccessControl.html#bluesky_httpserver.authorization.ServerBasedAPIAccessControl.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">instrument</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">endstation</span><span class="o">=</span><span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="n">roles</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">server</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span>
+        <span class="n">port</span><span class="o">=</span><span class="mi">8000</span><span class="p">,</span>
+        <span class="n">update_period</span><span class="o">=</span><span class="mi">600</span><span class="p">,</span>
+        <span class="n">expiration_period</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">http_timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">roles</span><span class="o">=</span><span class="n">roles</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">instrument</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span><span class="s2">&quot;The required parameter &#39;instrument&#39; is not specified&quot;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;instrument&quot;</span><span class="p">:</span> <span class="n">instrument</span><span class="p">,</span>
+                <span class="s2">&quot;endstation&quot;</span><span class="p">:</span> <span class="n">endstation</span><span class="p">,</span>
+                <span class="s2">&quot;roles&quot;</span><span class="p">:</span> <span class="n">roles</span><span class="p">,</span>
+                <span class="s2">&quot;server&quot;</span><span class="p">:</span> <span class="n">server</span><span class="p">,</span>
+                <span class="s2">&quot;port&quot;</span><span class="p">:</span> <span class="n">port</span><span class="p">,</span>
+                <span class="s2">&quot;update_period&quot;</span><span class="p">:</span> <span class="n">update_period</span><span class="p">,</span>
+                <span class="s2">&quot;expiration_period&quot;</span><span class="p">:</span> <span class="n">expiration_period</span><span class="p">,</span>
+                <span class="s2">&quot;http_timeout&quot;</span><span class="p">:</span> <span class="n">http_timeout</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">_schema_ServerBasedAPIAccessControl</span><span class="p">)</span>
+            <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">jsonschema</span><span class="o">.</span><span class="n">ValidationError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ValidationError while validating parameters BasicAPIAccessControl: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_instrument</span> <span class="o">=</span> <span class="n">instrument</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_endstation</span> <span class="o">=</span> <span class="n">endstation</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server</span> <span class="o">=</span> <span class="n">server</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_port</span> <span class="o">=</span> <span class="n">port</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_period</span> <span class="o">=</span> <span class="n">update_period</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_http_timeout</span> <span class="o">=</span> <span class="n">http_timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_expiration_period</span> <span class="o">=</span> <span class="n">expiration_period</span> <span class="ow">or</span> <span class="p">(</span><span class="n">update_period</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">)</span>
+
+        <span class="n">current_time</span> <span class="o">=</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_time_next_update</span> <span class="o">=</span> <span class="n">current_time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_time_expiration</span> <span class="o">=</span> <span class="n">current_time</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">background_tasks</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_background_updates</span><span class="p">]</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">update_access_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send a single request to the API server and update locally stored access control info.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">base_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;http://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_port</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">access_api</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;/instruments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_instrument</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_endstation</span><span class="si">}</span><span class="s2">/qserver/access&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="n">base_url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_http_timeout</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">access_api</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">groups</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+            <span class="n">user_info</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">g</span><span class="p">,</span> <span class="n">gmembers</span> <span class="ow">in</span> <span class="n">groups</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">g</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_roles</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">ui</span> <span class="ow">in</span> <span class="n">gmembers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="n">user_info</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="p">{})</span>
+                        <span class="n">user_info</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;roles&quot;</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">g</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="s2">&quot;displayed_name&quot;</span> <span class="ow">in</span> <span class="n">ui</span><span class="p">:</span>
+                            <span class="n">user_info</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;displayed_name&quot;</span><span class="p">,</span> <span class="n">ui</span><span class="p">[</span><span class="s2">&quot;displayed_name&quot;</span><span class="p">])</span>
+                        <span class="k">if</span> <span class="s2">&quot;mail&quot;</span> <span class="ow">in</span> <span class="n">ui</span><span class="p">:</span>
+                            <span class="n">user_info</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;mail&quot;</span><span class="p">,</span> <span class="n">ui</span><span class="p">[</span><span class="s2">&quot;mail&quot;</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Unsupported role </span><span class="si">%r</span><span class="s2">. Supported roles: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">g</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_roles</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_clear_user_info</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">user_info</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_time_expiration</span> <span class="o">=</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expiration_period</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_background_updates</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Start this task during the server startup. The task periodically sends requests</span>
+<span class="sd">        to API server and updates locally stored access control data.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_access_info</span><span class="p">()</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to update access control data: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_expiration</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Access control data expired.&quot;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_clear_user_info</span><span class="p">()</span>
+
+            <span class="c1"># Wait for the next update. Randomize waiting time.</span>
+            <span class="n">t_next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update_period</span>
+            <span class="n">t_next_variation</span> <span class="o">=</span> <span class="n">t_next</span> <span class="o">*</span> <span class="mf">0.2</span>
+            <span class="n">t_next</span> <span class="o">=</span> <span class="n">t_next</span> <span class="o">+</span> <span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">t_next_variation</span><span class="p">,</span> <span class="n">t_next_variation</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">t_next</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_clear_user_info</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Clear non-default entries from user info dict</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_DEFAULT_USER_INFO</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_user_info</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">k</span><span class="p">)</span></div>
 </pre></div>
 
            </div>

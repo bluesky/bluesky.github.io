@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Server Configuration &mdash; Bluesky HTTP Server 0.0.8.post4+g6f88d76 documentation</title>
+  <title>Server Configuration &mdash; Bluesky HTTP Server 0.0.8.post13+gda229f0 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -33,7 +33,7 @@
             <a href="index.html" class="icon icon-home"> Bluesky HTTP Server
           </a>
               <div class="version">
-                0.0.8.post4+g6f88d76
+                0.0.8.post13+gda229f0
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -69,6 +69,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#authorization-api-access">Authorization: API Access</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#basic-api-access-policy">Basic API Access Policy</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dictionary-api-access-policy">Dictionary API Access Policy</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#access-policy-based-on-external-access-control-server">Access Policy Based on External Access Control Server</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#authorization-resource-access">Authorization: Resource Access</a><ul>
@@ -103,8 +104,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Server Configuration</li>
+      <li><a href="index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">Server Configuration</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/configuration.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -437,7 +438,7 @@ scopes from <code class="docutils literal notranslate"><span class="pre">unauthe
       <span class="n">unauthenticated_public</span><span class="p">:</span>
         <span class="n">scopes_add</span><span class="p">:</span> <span class="n">read</span><span class="p">:</span><span class="n">console</span>
       <span class="n">unauthenticated_single_user</span><span class="p">:</span>
-        <span class="n">scipes_remove</span><span class="p">:</span>
+        <span class="n">scopes_remove</span><span class="p">:</span>
           <span class="o">-</span> <span class="n">write</span><span class="p">:</span><span class="n">scripts</span>
           <span class="o">-</span> <span class="n">user</span><span class="p">:</span><span class="n">apikeys</span>
 </pre></div>
@@ -495,6 +496,45 @@ for two users (<code class="docutils literal notranslate"><span class="pre">bob<
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/bluesky_httpserver.authorization.DictionaryAPIAccessControl.html#bluesky_httpserver.authorization.DictionaryAPIAccessControl" title="bluesky_httpserver.authorization.DictionaryAPIAccessControl"><code class="xref py py-obj docutils literal notranslate"><span class="pre">authorization.DictionaryAPIAccessControl</span></code></a></p></td>
 <td><p>Dictionary-based API access policy.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="access-policy-based-on-external-access-control-server">
+<h4>Access Policy Based on External Access Control Server<a class="headerlink" href="#access-policy-based-on-external-access-control-server" title="Permalink to this heading">¶</a></h4>
+<p>The policy is periodically loading user access data from the external
+Access Control server. The server holds user access information obtained from other
+services, such as Active Directory, and serves the purpose of reducing the load
+on those services.</p>
+<p>The following example shows configuration of <code class="docutils literal notranslate"><span class="pre">ServerBasedAPIAccessControl</span></code>
+to use hypothetical <code class="docutils literal notranslate"><span class="pre">accesscontrol.server.com:60001</span></code> as Access Control server.
+The requests are sent with the average period of 300 seconds (+/- 20%). If the server
+can not be contacted for 3600 seconds (1 hour), the access control data expires and
+users lose access to the Queue Server.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">api_access</span><span class="p">:</span>
+  <span class="n">policy</span><span class="p">:</span> <span class="n">bluesky_httpserver</span><span class="o">.</span><span class="n">authorization</span><span class="p">:</span><span class="n">ServerBasedAPIAccessControl</span>
+  <span class="n">args</span><span class="p">:</span>
+    <span class="n">instrument</span><span class="p">:</span> <span class="n">srx</span>
+    <span class="n">server</span><span class="p">:</span> <span class="n">accesscontrol</span><span class="o">.</span><span class="n">server</span><span class="o">.</span><span class="n">com</span>
+    <span class="n">port</span><span class="p">:</span> <span class="mi">60001</span>
+    <span class="n">update_period</span><span class="p">:</span> <span class="mi">300</span>
+    <span class="n">expiration_period</span><span class="p">:</span> <span class="mi">3600</span>
+    <span class="n">roles</span><span class="p">:</span>
+      <span class="n">expert</span><span class="p">:</span>
+        <span class="n">scopes_remove</span><span class="p">:</span>
+          <span class="o">-</span> <span class="n">write</span><span class="p">:</span><span class="n">scripts</span>
+          <span class="o">-</span> <span class="n">write</span><span class="p">:</span><span class="n">permissions</span>
+</pre></div>
+</div>
+<p>See the documentation on <code class="docutils literal notranslate"><span class="pre">ServerBasedAPIAccessControl</span></code> for more details.</p>
+<table class="autosummary longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/bluesky_httpserver.authorization.ServerBasedAPIAccessControl.html#bluesky_httpserver.authorization.ServerBasedAPIAccessControl" title="bluesky_httpserver.authorization.ServerBasedAPIAccessControl"><code class="xref py py-obj docutils literal notranslate"><span class="pre">authorization.ServerBasedAPIAccessControl</span></code></a></p></td>
+<td><p>Access policy based on external Access Control Server.</p></td>
 </tr>
 </tbody>
 </table>
