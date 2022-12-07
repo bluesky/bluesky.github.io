@@ -586,6 +586,105 @@ the <cite>-c</cite> option from <cite>caput</cite> for more information.</p>
 </dd></dl>
 
 </section>
+<section id="pvpositionercomparator">
+<h2>PVPositionerComparator<a class="headerlink" href="#pvpositionercomparator" title="Permalink to this heading">#</a></h2>
+<p>As an example, take a shutter that has a setpoint PV and a readback
+PV. The setpoint PV takes only CLOSE_VALVE and OPEN_VALVE commands.
+The readback PV goes through the states OPEN -&gt; MOVING -&gt; CLOSED -&gt;
+MOVING and back to OPEN. The <code class="docutils literal notranslate"><span class="pre">done_comparator()</span></code> method knows that
+the movement is done when the <code class="docutils literal notranslate"><span class="pre">readback</span></code> argument is not the MOVING
+state.</p>
+<p>From Bluesky, this device can be moved like
+any other motor.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ophyd.pv_positioner</span> <span class="kn">import</span> <span class="n">PVPositionerComparator</span>
+<span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">Component</span><span class="p">,</span> <span class="n">EpicsSignal</span><span class="p">,</span> <span class="n">EpicsSignalRO</span>
+
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">IntEnum</span><span class="p">,</span> <span class="n">unique</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="nd">@unique</span>
+<span class="k">class</span> <span class="nc">SetpointCmd</span><span class="p">(</span><span class="n">IntEnum</span><span class="p">):</span>
+  <span class="n">CLOSE_VALVE</span> <span class="o">=</span> <span class="mi">1</span>
+  <span class="n">OPEN_VALVE</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="nd">@unique</span>
+<span class="k">class</span> <span class="nc">ReadbackStatus</span><span class="p">(</span><span class="n">IntEnum</span><span class="p">):</span>
+  <span class="n">UNKNOWN</span> <span class="o">=</span> <span class="mi">0</span>
+  <span class="n">INVALID</span> <span class="o">=</span> <span class="mi">1</span>
+  <span class="n">CLOSED</span> <span class="o">=</span> <span class="mi">2</span>
+  <span class="n">OPEN</span> <span class="o">=</span> <span class="mi">3</span>
+  <span class="n">MOVING</span> <span class="o">=</span> <span class="mi">4</span>
+
+<span class="k">class</span> <span class="nc">Shutter</span><span class="p">(</span><span class="n">PVPositionerComparator</span><span class="p">):</span>
+  <span class="n">setpoint</span> <span class="o">=</span> <span class="n">Component</span><span class="p">(</span><span class="n">EpicsSignal</span><span class="p">,</span> <span class="s2">&quot;:OPEN_CLOSE_CMD&quot;</span><span class="p">)</span>
+  <span class="n">readback</span> <span class="o">=</span> <span class="n">Component</span><span class="p">(</span><span class="n">EpicsSignalRO</span><span class="p">,</span> <span class="s2">&quot;:OPEN_CLOSE_STATUS&quot;</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;limits&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">SetpointCmd</span><span class="o">.</span><span class="n">CLOSE_VALVE</span><span class="p">,</span>
+                              <span class="n">SetpointCmd</span><span class="o">.</span><span class="n">OPEN_VALVE</span><span class="p">)})</span>
+    <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">done_comparator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">readback</span><span class="p">:</span><span class="n">Any</span><span class="p">,</span> <span class="n">setpoint</span><span class="p">:</span><span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">readback</span> <span class="o">!=</span> <span class="n">ReadbackStatus</span><span class="o">.</span><span class="n">MOVING</span>
+</pre></div>
+</div>
+<dl class="py class">
+<dt class="sig sig-object py" id="ophyd.pv_positioner.PVPositionerComparator">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ophyd.pv_positioner.</span></span><span class="sig-name descname"><span class="pre">PVPositionerComparator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.11)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.11)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ophyd.pv_positioner.PVPositionerComparator" title="Permalink to this definition">#</a></dt>
+<dd><p>PV Positioner with a software done signal.</p>
+<p>The done state is set by a comparison function defined in the class body.
+The comparison function takes two arguments, readback and setpoint,
+returning True if we are considered done or False if we are not.</p>
+<p>This class is intended to support <cite>PVPositionerIsClose</cite>, but exists to
+allow some flexibility if we want to use other metrics for deciding if
+the PVPositioner is done.</p>
+<p>Internally, this will subscribe to both the <cite>setpoint</cite> and <cite>readback</cite>
+signals, updating <cite>done</cite> as appropriate.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>prefix</strong><span class="classifier">str, optional</span></dt><dd><p>The device prefix used for all sub-positioners. This is optional as it
+may be desirable to specify full PV names for PVPositioners.</p>
+</dd>
+<dt><strong>limits</strong><span class="classifier">2-element sequence, optional</span></dt><dd><p>(low_limit, high_limit)</p>
+</dd>
+<dt><strong>name</strong><span class="classifier">str</span></dt><dd><p>The device name</p>
+</dd>
+<dt><strong>egu</strong><span class="classifier">str, optional</span></dt><dd><p>The engineering units (EGU) for the position</p>
+</dd>
+<dt><strong>settle_time</strong><span class="classifier">float, optional</span></dt><dd><p>The amount of time to wait after moves to report status completion</p>
+</dd>
+<dt><strong>timeout</strong><span class="classifier">float, optional</span></dt><dd><p>The default timeout to use for motion requests, in seconds.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><strong>setpoint</strong><span class="classifier">Signal</span></dt><dd><p>The setpoint (request) signal</p>
+</dd>
+<dt><strong>readback</strong><span class="classifier">Signal or None</span></dt><dd><p>The readback PV (e.g., encoder position PV)</p>
+</dd>
+<dt><strong>actuate</strong><span class="classifier">Signal or None</span></dt><dd><p>The actuation PV to set when movement is requested</p>
+</dd>
+<dt><strong>actuate_value</strong><span class="classifier">any, optional</span></dt><dd><p>The actuation value, sent to the actuate signal when motion is
+requested</p>
+</dd>
+<dt><strong>stop_signal</strong><span class="classifier">Signal or None</span></dt><dd><p>The stop PV to set when motion should be stopped</p>
+</dd>
+<dt><strong>stop_value</strong><span class="classifier">any, optional</span></dt><dd><p>The value sent to stop_signal when a stop is requested</p>
+</dd>
+<dt><strong>put_complete</strong><span class="classifier">bool, optional</span></dt><dd><p>If set, the specified PV should allow for asynchronous put completion
+to indicate motion has finished.  If <cite>actuate</cite> is specified, it will be
+used for put completion.  Otherwise, the <cite>setpoint</cite> will be used.  See
+the <cite>-c</cite> option from <cite>caput</cite> for more information.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
 <section id="pseudopositioner">
 <h2>PseudoPositioner<a class="headerlink" href="#pseudopositioner" title="Permalink to this heading">#</a></h2>
 <p>An ophyd <code class="docutils literal notranslate"><span class="pre">PseudoPositioner</span></code> relates one or more pseudo (virtual) axes to one
@@ -831,6 +930,22 @@ to ‘computed’</p>
      <code class="docutils literal notranslate">
       <span class="pre">
        PVPositioner
+      </span>
+     </code>
+    </a>
+   </li>
+  </ul>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#pvpositionercomparator">
+   PVPositionerComparator
+  </a>
+  <ul class="nav section-nav flex-column">
+   <li class="toc-h3 nav-item toc-entry">
+    <a class="reference internal nav-link" href="#ophyd.pv_positioner.PVPositionerComparator">
+     <code class="docutils literal notranslate">
+      <span class="pre">
+       PVPositionerComparator
       </span>
      </code>
     </a>
