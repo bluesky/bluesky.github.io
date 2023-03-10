@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.plan_stubs &mdash; bluesky 1.10.0.post28+g46ca38b6 documentation</title>
+  <title>bluesky.plan_stubs &mdash; bluesky 1.10.0.post30+g971d510d documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             bluesky
           </a>
               <div class="version">
-                1.10.0.post28+g46ca38b6
+                1.10.0.post30+g971d510d
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -129,7 +129,7 @@
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">toolz</span> <span class="kn">import</span> <span class="n">partition</span>
 
-<span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="n">Locatable</span><span class="p">,</span> <span class="n">Triggerable</span>
+<span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="n">Locatable</span><span class="p">,</span> <span class="n">Triggerable</span><span class="p">,</span> <span class="n">Status</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">get_hinted_fields</span><span class="p">,</span>
     <span class="n">merge_cycler</span><span class="p">,</span>
@@ -805,44 +805,142 @@
     <span class="k">return</span> <span class="p">(</span><span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;configure&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
 
 
-<div class="viewcode-block" id="stage"><a class="viewcode-back" href="../../generated/bluesky.plan_stubs.stage.html#bluesky.plan_stubs.stage">[docs]</a><span class="k">def</span> <span class="nf">stage</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<div class="viewcode-block" id="stage"><a class="viewcode-back" href="../../generated/bluesky.plan_stubs.stage.html#bluesky.plan_stubs.stage">[docs]</a><span class="k">def</span> <span class="nf">stage</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    &#39;Stage&#39; a device (i.e., prepare it for use, &#39;arm&#39; it).</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    obj : Device</span>
+<span class="sd">    group : string (or any hashable object), optional</span>
+<span class="sd">        identifier used by &#39;wait&#39;; None by default</span>
+<span class="sd">    wait : boolean, optional</span>
+<span class="sd">        If True, wait for completion before processing any more messages.</span>
+<span class="sd">        False by default.</span>
 
 <span class="sd">    Yields</span>
 <span class="sd">    ------</span>
 <span class="sd">    msg : Msg</span>
-<span class="sd">        Msg(&#39;stage&#39;, obj)</span>
 
 <span class="sd">    See Also</span>
 <span class="sd">    --------</span>
 <span class="sd">    :func:`bluesky.plan_stubs.unstage`</span>
+<span class="sd">    :func:`bluesky.plan_stubs.stage_all`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="p">(</span><span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;stage&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">))</span></div>
+    <span class="n">ret</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;stage&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+    <span class="n">old_style</span> <span class="o">=</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="n">Status</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">old_style</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">wait</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">wait</span><span class="p">:</span>
+            <span class="c1"># Old-style devices will just block. We do not need to explicitly wait.</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># wait is False-y</span>
+            <span class="c1"># No way to tell old-style devices not to wait</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">obj</span><span class="si">}</span><span class="s2">: Is an old style device and cannot be told not to wait&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">wait</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ret</span></div>
 
 
-<div class="viewcode-block" id="unstage"><a class="viewcode-back" href="../../generated/bluesky.plan_stubs.unstage.html#bluesky.plan_stubs.unstage">[docs]</a><span class="k">def</span> <span class="nf">unstage</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">stage_all</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    &#39;Stage&#39; one or more devices (i.e., prepare them for use, &#39;arm&#39; them).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    args :</span>
+<span class="sd">        device1, device2, device3, ...</span>
+<span class="sd">    group : string (or any hashable object), optional</span>
+<span class="sd">        identifier used by &#39;wait&#39;; None by default</span>
+
+<span class="sd">    Yields</span>
+<span class="sd">    ------</span>
+<span class="sd">    msg : Msg</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    :func:`bluesky.plan_stubs.stage`</span>
+<span class="sd">    :func:`bluesky.plan_stubs.unstage_all`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">group</span> <span class="o">=</span> <span class="n">group</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+    <span class="n">status_objects</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">args</span><span class="p">:</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;stage&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="n">Status</span><span class="p">):</span>
+            <span class="n">status_objects</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ret</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">status_objects</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="unstage"><a class="viewcode-back" href="../../generated/bluesky.plan_stubs.unstage.html#bluesky.plan_stubs.unstage">[docs]</a><span class="k">def</span> <span class="nf">unstage</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    &#39;Unstage&#39; a device (i.e., put it in standby, &#39;disarm&#39; it).</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    obj : Device</span>
+<span class="sd">    group : string (or any hashable object), optional</span>
+<span class="sd">        identifier used by &#39;wait&#39;; None by default</span>
+<span class="sd">    wait : boolean, optional</span>
+<span class="sd">        If True, wait for completion before processing any more messages.</span>
+<span class="sd">        False by default.</span>
 
 <span class="sd">    Yields</span>
 <span class="sd">    ------</span>
 <span class="sd">    msg : Msg</span>
-<span class="sd">        Msg(&#39;unstage&#39;, obj)</span>
 
 <span class="sd">    See Also</span>
 <span class="sd">    --------</span>
 <span class="sd">    :func:`bluesky.plan_stubs.stage`</span>
+<span class="sd">    :func:`bluesky.plan_stubs.unstage_all`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="p">(</span><span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;unstage&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">))</span></div>
+    <span class="n">ret</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;unstage&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+    <span class="n">old_style</span> <span class="o">=</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="n">Status</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">old_style</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">wait</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">wait</span><span class="p">:</span>
+            <span class="c1"># Old-style devices will just block. We do not need to explicitly wait.</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No way to tell old-style devices not to wait</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">obj</span><span class="si">}</span><span class="s2">: Is an old style device and cannot be told not to wait&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">wait</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ret</span></div>
+
+
+<span class="k">def</span> <span class="nf">unstage_all</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    &#39;Unstage&#39; one or more devices (i.e., put them in standby, &#39;disarm&#39; them).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    args :</span>
+<span class="sd">        device1, device2, device3, ...</span>
+<span class="sd">    group : string (or any hashable object), optional</span>
+<span class="sd">        identifier used by &#39;wait&#39;; None by default</span>
+
+<span class="sd">    Yields</span>
+<span class="sd">    ------</span>
+<span class="sd">    msg : Msg</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    :func:`bluesky.plan_stubs.unstage`</span>
+<span class="sd">    :func:`bluesky.plan_stubs.stage_all`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">group</span> <span class="o">=</span> <span class="n">group</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+    <span class="n">status_objects</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">args</span><span class="p">:</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;unstage&#39;</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ret</span><span class="p">,</span> <span class="n">Status</span><span class="p">):</span>
+            <span class="n">status_objects</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ret</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">status_objects</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">Msg</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="subscribe"><a class="viewcode-back" href="../../generated/bluesky.plan_stubs.subscribe.html#bluesky.plan_stubs.subscribe">[docs]</a><span class="k">def</span> <span class="nf">subscribe</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">func</span><span class="p">):</span>
