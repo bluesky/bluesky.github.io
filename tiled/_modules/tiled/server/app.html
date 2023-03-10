@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a85.post18+g7bdfc68 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a85.post19+g527bd5c documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a85.post18+g7bdfc68
+                0.1.0a85.post19+g527bd5c
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -143,9 +143,8 @@
 <span class="kn">from</span> <span class="nn">fastapi.templating</span> <span class="kn">import</span> <span class="n">Jinja2Templates</span>
 <span class="kn">from</span> <span class="nn">starlette.responses</span> <span class="kn">import</span> <span class="n">FileResponse</span>
 
-<span class="kn">from</span> <span class="nn">tiled.database.core</span> <span class="kn">import</span> <span class="n">purge_expired</span>
-
 <span class="kn">from</span> <span class="nn">..authenticators</span> <span class="kn">import</span> <span class="n">Mode</span>
+<span class="kn">from</span> <span class="nn">..config</span> <span class="kn">import</span> <span class="n">construct_build_app_kwargs</span>
 <span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
 <span class="p">)</span>
@@ -164,7 +163,7 @@
 <span class="kn">from</span> <span class="nn">.object_cache</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">object_cache_logger</span>
 <span class="kn">from</span> <span class="nn">.object_cache</span> <span class="kn">import</span> <span class="n">set_object_cache</span>
 <span class="kn">from</span> <span class="nn">.router</span> <span class="kn">import</span> <span class="n">declare_search_router</span><span class="p">,</span> <span class="n">router</span>
-<span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_sessionmaker</span><span class="p">,</span> <span class="n">get_settings</span>
+<span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
     <span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span>
@@ -260,15 +259,29 @@
             <span class="p">):</span>
                 <span class="k">raise</span> <span class="n">UnscalableConfig</span><span class="p">(</span>
 <span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    In a scaled (multi-process) deployment, when Tiled is configured with an</span>
-<span class="sd">    Authenticator, secret keys must be provided via configuration like</span>
+<span class="sd">In a scaled (multi-process) deployment, when Tiled is configured with an</span>
+<span class="sd">Authenticator, secret keys must be provided via configuration like</span>
 
-<span class="sd">    authentication:</span>
-<span class="sd">      secret_keys:</span>
-<span class="sd">        - SECRET</span>
-<span class="sd">      ...</span>
+<span class="sd">authentication:</span>
+<span class="sd">  secret_keys:</span>
+<span class="sd">    - SECRET</span>
+<span class="sd">  ...</span>
 
-<span class="sd">    or via the environment variable TILED_SERVER_SECRET_KEYS.&quot;&quot;&quot;</span><span class="p">,</span>
+<span class="sd">or via the environment variable TILED_SERVER_SECRET_KEYS.&quot;&quot;&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="c1"># Multi-user authentication requires a database. We cannot fall</span>
+            <span class="c1"># back to the default of an in-memory SQLite database in a</span>
+            <span class="c1"># horizontally scaled deployment.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;database&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;uri&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">UnscalableConfig</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">In a scaled (multi-process) deployment, when Tiled is configured with an</span>
+<span class="sd">Authenticator, a persistent database must be provided via configuration like</span>
+
+<span class="sd">database:</span>
+<span class="sd">  uri: sqlite+aiosqlite:////path/to/database.sqlite</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
                 <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># No authentication provider is configured, so no secret keys are</span>
@@ -279,15 +292,15 @@
             <span class="p">):</span>
                 <span class="k">raise</span> <span class="n">UnscalableConfig</span><span class="p">(</span>
 <span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    In a scaled (multi-process) deployment, when Tiled is configured for</span>
-<span class="sd">    single-user access (i.e. without an Authenticator) a single-user API key must</span>
-<span class="sd">    be provided via configuration like</span>
+<span class="sd">In a scaled (multi-process) deployment, when Tiled is configured for</span>
+<span class="sd">single-user access (i.e. without an Authenticator) a single-user API key must</span>
+<span class="sd">be provided via configuration like</span>
 
-<span class="sd">    authentication:</span>
-<span class="sd">      single_user_api_key: SECRET</span>
-<span class="sd">      ...</span>
+<span class="sd">authentication:</span>
+<span class="sd">  single_user_api_key: SECRET</span>
+<span class="sd">  ...</span>
 
-<span class="sd">    or via the environment variable TILED_SINGLE_USER_API_KEY.&quot;&quot;&quot;</span><span class="p">,</span>
+<span class="sd">or via the environment variable TILED_SINGLE_USER_API_KEY.&quot;&quot;&quot;</span><span class="p">,</span>
                 <span class="p">)</span>
         <span class="c1"># If we reach here, the no configuration problems were found.</span>
 
@@ -482,8 +495,9 @@
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;providers&quot;</span><span class="p">):</span>
             <span class="c1"># If we support authentication providers, we need a database, so if one is</span>
-            <span class="c1"># not set, use a SQLite database in the current working directory.</span>
-            <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">or</span> <span class="s2">&quot;sqlite:///./tiled.sqlite&quot;</span>
+            <span class="c1"># not set, use a SQLite database in memory. Horizontally scaled deployments</span>
+            <span class="c1"># must specify a persistent database.</span>
+            <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">or</span> <span class="s2">&quot;sqlite+aiosqlite://&quot;</span>
         <span class="k">return</span> <span class="n">settings</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">on_event</span><span class="p">(</span><span class="s2">&quot;startup&quot;</span><span class="p">)</span>
@@ -560,66 +574,96 @@
         <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">root_tree</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_root_tree</span><span class="p">]()</span>
 
         <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">get_sessionmaker</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">database_settings</span><span class="p">)()</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
-                <span class="kn">from</span> <span class="nn">..database</span> <span class="kn">import</span> <span class="n">orm</span>
-                <span class="kn">from</span> <span class="nn">..database.core</span> <span class="kn">import</span> <span class="p">(</span>
-                    <span class="n">REQUIRED_REVISION</span><span class="p">,</span>
-                    <span class="n">DatabaseUpgradeNeeded</span><span class="p">,</span>
-                    <span class="n">UninitializedDatabase</span><span class="p">,</span>
-                    <span class="n">check_database</span><span class="p">,</span>
-                    <span class="n">initialize_database</span><span class="p">,</span>
-                    <span class="n">make_admin_by_identity</span><span class="p">,</span>
-                <span class="p">)</span>
+            <span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">AsyncSession</span>
 
-                <span class="n">engine</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">get_bind</span><span class="p">()</span>
+            <span class="kn">from</span> <span class="nn">..database</span> <span class="kn">import</span> <span class="n">orm</span>
+            <span class="kn">from</span> <span class="nn">..database.connection_pool</span> <span class="kn">import</span> <span class="n">open_database_connection_pool</span>
+            <span class="kn">from</span> <span class="nn">..database.core</span> <span class="kn">import</span> <span class="p">(</span>
+                <span class="n">DatabaseUpgradeNeeded</span><span class="p">,</span>
+                <span class="n">UninitializedDatabase</span><span class="p">,</span>
+                <span class="n">check_database</span><span class="p">,</span>
+                <span class="n">initialize_database</span><span class="p">,</span>
+                <span class="n">make_admin_by_identity</span><span class="p">,</span>
+                <span class="n">purge_expired</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="c1"># This creates a connection pool and stashes it in a module-global</span>
+            <span class="c1"># registry, keyed on database_settings, where can be retrieved by</span>
+            <span class="c1"># the Dependency get_database_session.</span>
+            <span class="n">engine</span> <span class="o">=</span> <span class="n">open_database_connection_pool</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">database_settings</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">engine</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">database</span><span class="p">:</span>
+                <span class="c1"># Special-case for in-memory SQLite: Because it is transient we can</span>
+                <span class="c1"># skip over anything related to migrations.</span>
+                <span class="k">await</span> <span class="n">initialize_database</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Transient in-memory database initialized.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
                 <span class="n">redacted_url</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">password</span><span class="o">=</span><span class="s2">&quot;[redacted]&quot;</span><span class="p">)</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">check_database</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">check_database</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
                 <span class="k">except</span> <span class="n">UninitializedDatabase</span><span class="p">:</span>
-                    <span class="c1"># Create tables and stamp (alembic) revision.</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Database </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span><span class="s2"> is new. &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Creating tables and marking revision </span><span class="si">{</span><span class="n">REQUIRED_REVISION</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="nb">print</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+
+<span class="s2">No database found at </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span>
+
+<span class="s2">To create one, run:</span>
+
+<span class="s2">    tiled admin init-database </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
+                        <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
                     <span class="p">)</span>
-                    <span class="n">initialize_database</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Database initialized.&quot;</span><span class="p">)</span>
+                    <span class="k">raise</span>
                 <span class="k">except</span> <span class="n">DatabaseUpgradeNeeded</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="nb">print</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
 
-<span class="s2">    The database used by Tiled to store authentication-related information</span>
-<span class="s2">    was created using an older version of Tiled. It needs to be upgraded to</span>
-<span class="s2">    work with this version of Tiled.</span>
+<span class="s2">The database used by Tiled to store authentication-related information</span>
+<span class="s2">was created using an older version of Tiled. It needs to be upgraded to</span>
+<span class="s2">work with this version of Tiled.</span>
 
-<span class="s2">    Back up the database, and then run:</span>
+<span class="s2">Back up the database, and then run:</span>
 
-<span class="s2">        tiled admin upgrade-database </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span>
-<span class="s2">    &quot;&quot;&quot;</span><span class="p">,</span>
+<span class="s2">    tiled admin upgrade-database </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
                         <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
                     <span class="p">)</span>
                     <span class="k">raise</span> <span class="n">err</span> <span class="kn">from</span> <span class="bp">None</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Connected to existing database at </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">admin</span> <span class="ow">in</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tiled_admins&quot;</span><span class="p">,</span> <span class="p">[]):</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Ensuring that principal with identity </span><span class="si">{</span><span class="n">admin</span><span class="si">}</span><span class="s2"> has role &#39;admin&#39;&quot;</span>
-                    <span class="p">)</span>
-                    <span class="n">make_admin_by_identity</span><span class="p">(</span>
-                        <span class="n">db</span><span class="p">,</span>
+            <span class="k">for</span> <span class="n">admin</span> <span class="ow">in</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tiled_admins&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Ensuring that principal with identity </span><span class="si">{</span><span class="n">admin</span><span class="si">}</span><span class="s2"> has role &#39;admin&#39;&quot;</span>
+                <span class="p">)</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">AsyncSession</span><span class="p">(</span>
+                    <span class="n">engine</span><span class="p">,</span> <span class="n">autoflush</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span>
+                <span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="n">make_admin_by_identity</span><span class="p">(</span>
+                        <span class="n">session</span><span class="p">,</span>
                         <span class="n">identity_provider</span><span class="o">=</span><span class="n">admin</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">],</span>
                         <span class="nb">id</span><span class="o">=</span><span class="n">admin</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
                     <span class="p">)</span>
 
             <span class="k">async</span> <span class="k">def</span> <span class="nf">purge_expired_sessions_and_api_keys</span><span class="p">():</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Purging expired Sessions and API keys from the database.&quot;</span><span class="p">)</span>
+                <span class="n">PURGE_INTERVAL</span> <span class="o">=</span> <span class="mi">600</span>  <span class="c1"># seconds</span>
                 <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span>
-                        <span class="kc">None</span><span class="p">,</span> <span class="n">purge_expired</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">Session</span><span class="p">)</span>
-                    <span class="p">)</span>
-                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span>
-                        <span class="kc">None</span><span class="p">,</span> <span class="n">purge_expired</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">APIKey</span><span class="p">)</span>
-                    <span class="p">)</span>
-                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">600</span><span class="p">)</span>
+                    <span class="k">async</span> <span class="k">with</span> <span class="n">AsyncSession</span><span class="p">(</span>
+                        <span class="n">engine</span><span class="p">,</span> <span class="n">autoflush</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span>
+                    <span class="p">)</span> <span class="k">as</span> <span class="n">db_session</span><span class="p">:</span>
+                        <span class="n">num_expired_sessions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">purge_expired</span><span class="p">(</span>
+                            <span class="n">db_session</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">Session</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="n">num_expired_sessions</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Purged </span><span class="si">{</span><span class="n">num_expired_sessions</span><span class="si">}</span><span class="s2"> expired Sessions from the database.&quot;</span>
+                            <span class="p">)</span>
+                        <span class="n">num_expired_api_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">purge_expired</span><span class="p">(</span>
+                            <span class="n">db_session</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">APIKey</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="n">num_expired_api_keys</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Purged </span><span class="si">{</span><span class="n">num_expired_api_keys</span><span class="si">}</span><span class="s2"> expired API keys from the database.&quot;</span>
+                            <span class="p">)</span>
+                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">PURGE_INTERVAL</span><span class="p">)</span>
 
             <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">purge_expired_sessions_and_api_keys</span><span class="p">())</span>
@@ -627,8 +671,13 @@
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">on_event</span><span class="p">(</span><span class="s2">&quot;shutdown&quot;</span><span class="p">)</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">shutdown_event</span><span class="p">():</span>
-        <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tasks</span><span class="p">:</span>
-            <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span>
+        <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">..database.connection_pool</span> <span class="kn">import</span> <span class="n">close_database_connection_pool</span>
+
+            <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tasks</span><span class="p">:</span>
+                <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+            <span class="k">await</span> <span class="n">close_database_connection_pool</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">database_settings</span><span class="p">)</span>
 
     <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
         <span class="n">CompressionMiddleware</span><span class="p">,</span>
@@ -777,7 +826,6 @@
 
     <span class="n">metrics_config</span> <span class="o">=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metrics&quot;</span><span class="p">,</span> <span class="p">{})</span>
     <span class="k">if</span> <span class="n">metrics_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prometheus&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
-
         <span class="c1"># PROMETHEUS_MULTIRPOC_DIR puts prometheus_client in multiprocess mode</span>
         <span class="c1"># (for e.g. gunicorn) which uses a directory of memory-mapped files.</span>
         <span class="c1"># If that environment variable is set, check that the directory exists</span>
@@ -815,6 +863,12 @@
             <span class="k">return</span> <span class="n">response</span>
 
     <span class="k">return</span> <span class="n">app</span></div>
+
+
+<div class="viewcode-block" id="build_app_from_config"><a class="viewcode-back" href="../../../reference/generated/tiled.server.app.build_app_from_config.html#tiled.server.app.build_app_from_config">[docs]</a><span class="k">def</span> <span class="nf">build_app_from_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">scalable</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="s2">&quot;Convenience function that calls build_app(...) given config as dict.&quot;</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="n">construct_build_app_kwargs</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">build_app</span><span class="p">(</span><span class="n">scalable</span><span class="o">=</span><span class="n">scalable</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
 <span class="k">def</span> <span class="nf">app_factory</span><span class="p">():</span>

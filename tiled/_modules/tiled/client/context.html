@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a85.post18+g7bdfc68 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a85.post19+g527bd5c documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a85.post18+g7bdfc68
+                0.1.0a85.post19+g527bd5c
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -137,7 +137,7 @@
 <span class="kn">import</span> <span class="nn">msgpack</span>
 
 <span class="kn">from</span> <span class="nn">.._version</span> <span class="kn">import</span> <span class="n">get_versions</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">Sentinel</span>
 <span class="kn">from</span> <span class="nn">.auth</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
     <span class="n">CannotRefreshAuthentication</span><span class="p">,</span>
@@ -156,6 +156,8 @@
 <span class="n">tiled_version</span> <span class="o">=</span> <span class="n">get_versions</span><span class="p">()[</span><span class="s2">&quot;version&quot;</span><span class="p">]</span>
 <span class="n">USER_AGENT</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;python-tiled/</span><span class="si">{</span><span class="n">tiled_version</span><span class="si">}</span><span class="s2">&quot;</span>
 <span class="n">API_KEY_AUTH_HEADER_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^Apikey (\w+)$&quot;</span><span class="p">)</span>
+<span class="n">UNSET</span> <span class="o">=</span> <span class="n">Sentinel</span><span class="p">(</span><span class="s2">&quot;UNSET&quot;</span><span class="p">)</span>
+<span class="n">PROMPT_FOR_REAUTHENTICATION</span> <span class="o">=</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="Context"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.html#tiled.client.context.Context">[docs]</a><span class="k">class</span> <span class="nc">Context</span><span class="p">:</span>
@@ -173,7 +175,7 @@
         <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
+        <span class="n">token_cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
@@ -184,6 +186,8 @@
         <span class="c1"># Set the User Agent to help the server fail informatively if the client</span>
         <span class="c1"># version is too old.</span>
         <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;user-agent&quot;</span><span class="p">,</span> <span class="n">USER_AGENT</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">token_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">token_cache</span> <span class="o">=</span> <span class="n">DEFAULT_TOKEN_CACHE</span>
 
         <span class="c1"># If ?api_key=... is present, move it from the query into a header.</span>
         <span class="c1"># The server would accept it in the query parameter, but using</span>
@@ -250,13 +254,13 @@
 
                 <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
+                <span class="kn">import</span> <span class="nn">threading</span>
+
                 <span class="c1"># The threading module has its own (internal) atexit</span>
                 <span class="c1"># mechanism that runs at thread shutdown, prior to the atexit</span>
                 <span class="c1"># mechanism that runs at interpreter shutdown.</span>
                 <span class="c1"># We need to intervene at that layer to close the portal, or else</span>
                 <span class="c1"># we will wait forever for a thread run by the portal to join().</span>
-                <span class="kn">import</span> <span class="nn">threading</span>
-
                 <span class="n">threading</span><span class="o">.</span><span class="n">_register_atexit</span><span class="p">(</span><span class="n">client</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span> <span class="o">=</span> <span class="n">client</span>
@@ -277,7 +281,17 @@
             <span class="c1"># We need a CSRF token.</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_cache</span><span class="p">(</span><span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>  <span class="c1"># property setter sets Authorization header</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>  <span class="c1"># property setter sets Authorization header</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">admin</span> <span class="o">=</span> <span class="n">Admin</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>  <span class="c1"># accessor for admin-related requests</span></div>
+
+    <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span> <span class="s2">&quot;app&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
@@ -342,7 +356,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="n">server_info</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">offline</span> <span class="o">=</span> <span class="n">offline</span>
 
-    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="Context.from_any_uri"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.from_any_uri.html#tiled.client.context.Context.from_any_uri">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_any_uri</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">uri</span><span class="p">,</span>
@@ -353,7 +367,7 @@
         <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">token_cache</span><span class="o">=</span><span class="n">DEFAULT_TOKEN_CACHE</span><span class="p">,</span>
+        <span class="n">token_cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -400,7 +414,45 @@
             <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
             <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">context</span><span class="p">,</span> <span class="n">node_path_parts</span>
+        <span class="k">return</span> <span class="n">context</span><span class="p">,</span> <span class="n">node_path_parts</span></div>
+
+<div class="viewcode-block" id="Context.from_app"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.from_app.html#tiled.client.context.Context.from_app">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_app</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">app</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">token_cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">api_key</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
+        <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Construct a Context around a FastAPI app. Primarily for testing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">uri</span><span class="o">=</span><span class="s2">&quot;http://local-tiled-app/api/v1&quot;</span><span class="p">,</span>
+            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+            <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
+            <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+            <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
+            <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
+            <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="n">raise_server_exceptions</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">api_key</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">]</span>
+        <span class="p">):</span>
+            <span class="c1"># Extract the API key from the app and set it.</span>
+            <span class="kn">from</span> <span class="nn">..server.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
+
+            <span class="n">settings</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span>
+            <span class="n">api_key</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">single_user_api_key</span> <span class="ow">or</span> <span class="kc">None</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>
+        <span class="k">return</span> <span class="n">context</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -745,10 +797,16 @@
             <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="Context.authenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.authenticate.html#tiled.client.context.Context.authenticate">[docs]</a>    <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="Context.authenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.authenticate.html#tiled.client.context.Context.authenticate">[docs]</a>    <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">UNSET</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        See login. This is for programmatic use.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">prompt_for_reauthentication</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">:</span>
+            <span class="n">prompt_for_reauthentication</span> <span class="o">=</span> <span class="n">PROMPT_FOR_REAUTHENTICATION</span>
+        <span class="k">if</span> <span class="n">prompt_for_reauthentication</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">prompt_for_reauthentication</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">__stdin__</span><span class="o">.</span><span class="n">isatty</span><span class="p">()</span>
         <span class="n">providers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">]</span>
         <span class="n">spec</span> <span class="o">=</span> <span class="n">_choose_identity_provider</span><span class="p">(</span><span class="n">providers</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
         <span class="n">provider</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span>
@@ -782,6 +840,8 @@
             <span class="k">except</span> <span class="n">CannotRefreshAuthentication</span><span class="p">:</span>
                 <span class="c1"># Continue below, where we will prompt for log in.</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">prompt_for_reauthentication</span><span class="p">:</span>
+                    <span class="k">raise</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># We have a live session for the specified provider and username already.</span>
                 <span class="c1"># No need to log in again.</span>
@@ -1008,6 +1068,31 @@
                     <span class="k">continue</span>
                 <span class="k">break</span>
     <span class="k">return</span> <span class="n">spec</span>
+
+
+<span class="k">class</span> <span class="nc">Admin</span><span class="p">:</span>
+    <span class="s2">&quot;Accessor for requests that require administrative privileges.&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">context</span> <span class="o">=</span> <span class="n">context</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">list_principals</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
+        <span class="s2">&quot;List Principals (users and services) in the authenticaiton database.&quot;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span>
+        <span class="p">)</span>
+        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">show_principal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">):</span>
+        <span class="s2">&quot;Show one Principal (user or service) in the authenticaiton database.&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 </pre></div>
 
            </div>
