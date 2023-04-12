@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.node &mdash; tiled 0.1.0a91 documentation</title>
+  <title>tiled.client.node &mdash; tiled 0.1.0a91.post7+gaf69269 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a91
+                0.1.0a91.post7+gaf69269
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -372,7 +372,7 @@
                 <span class="k">yield</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
             <span class="n">next_page_url</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;next&quot;</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">_ignore_inlined_contents</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">,</span> <span class="n">_ignore_inlined_contents</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="c1"># These are equivalent:</span>
         <span class="c1">#</span>
         <span class="c1"># &gt;&gt;&gt; node[&#39;a&#39;][&#39;b&#39;][&#39;c&#39;]</span>
@@ -382,24 +382,19 @@
         <span class="c1"># The last two are equivalent at a Python level;</span>
         <span class="c1"># both call node.__getitem__((&#39;a&#39;, &#39;b&#39;, &#39;c&#39;)).</span>
         <span class="c1">#</span>
-        <span class="c1"># TODO Elide this into a single request to the server rather than</span>
+        <span class="c1"># We elide this into a single request to the server rather than</span>
         <span class="c1"># a chain of requests. This is not totally straightforward because</span>
         <span class="c1"># of this use case:</span>
         <span class="c1">#</span>
         <span class="c1"># &gt;&gt;&gt; node.search(...)[&#39;a&#39;, &#39;b&#39;]</span>
         <span class="c1">#</span>
         <span class="c1"># which must only return a result if &#39;a&#39; is contained in the search results.</span>
-        <span class="c1"># There are also some open design questions on the server side about</span>
-        <span class="c1"># how search and tree-traversal will relate, so we&#39;ll wait to make this</span>
-        <span class="c1"># optimization until that is fully worked out.</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
-            <span class="n">child</span> <span class="o">=</span> <span class="bp">self</span>
-            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">key</span><span class="p">:</span>
-                <span class="n">child</span> <span class="o">=</span> <span class="n">child</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
-            <span class="k">return</span> <span class="n">child</span>
-
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">(</span><span class="n">keys</span><span class="p">,)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queries</span><span class="p">:</span>
             <span class="c1"># Lookup this key *within the search results* of this Node.</span>
+            <span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">tail</span> <span class="o">=</span> <span class="n">keys</span>
+            <span class="n">tail</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span>  <span class="c1"># list -&gt; tuple</span>
             <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;search&quot;</span><span class="p">],</span>
                 <span class="n">params</span><span class="o">=</span><span class="p">{</span>
@@ -419,32 +414,49 @@
                 <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
             <span class="p">),</span> <span class="s2">&quot;The key lookup query must never result more than one result.&quot;</span>
             <span class="p">(</span><span class="n">item</span><span class="p">,)</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">client_for_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tail</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="n">tail</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Straightforwardly look up the key under this node.</span>
+            <span class="c1"># Straightforwardly look up the keys under this node.</span>
             <span class="c1"># There is no search filter in place, so if it is there</span>
             <span class="c1"># then we want it.</span>
 
-            <span class="c1"># Sometimes Nodes will in-line their contents (child nodes)</span>
-            <span class="c1"># to reduce latency. This is how we handle xarray Datasets efficiently,</span>
-            <span class="c1"># for example. Use that, if present.</span>
-            <span class="n">item</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;contents&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">item</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_ignore_inlined_contents</span><span class="p">:</span>
-                <span class="c1"># The item was not inlined, either because nothing was inlined</span>
-                <span class="c1"># or because it was added after we fetched the inlined contents.</span>
-                <span class="c1"># Make a request for it.</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">self_link</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span>
-                    <span class="k">if</span> <span class="n">self_link</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">):</span>
-                        <span class="n">self_link</span> <span class="o">=</span> <span class="n">self_link</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-                    <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
-                        <span class="n">self_link</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="k">except</span> <span class="n">ClientError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">err</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-                    <span class="k">raise</span>
-                <span class="n">item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">client_for_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+            <span class="c1"># The server may greedily send nested information about children</span>
+            <span class="c1"># (&quot;inlined contents&quot;) to reduce latency. This is how we handle</span>
+            <span class="c1"># xarray Datasets efficiently, for example.</span>
+
+            <span class="c1"># In a loop, walk the key(s). Use inlined contents if we have it.</span>
+            <span class="c1"># When we reach a key that we don&#39;t have inlined contents for, send</span>
+            <span class="c1"># out a single request with all the rest of the keys, and break</span>
+            <span class="c1"># the keys-walking loop. We are effectively &quot;jumping&quot; down the tree</span>
+            <span class="c1"># to the node of interest without downloading information about</span>
+            <span class="c1"># intermediate parents.</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;contents&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">item</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_ignore_inlined_contents</span><span class="p">:</span>
+                    <span class="c1"># The item was not inlined, either because nothing was inlined</span>
+                    <span class="c1"># or because it was added after we fetched the inlined contents.</span>
+                    <span class="c1"># Make a request for it.</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">self_link</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">self_link</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">):</span>
+                            <span class="n">self_link</span> <span class="o">=</span> <span class="n">self_link</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                        <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
+                            <span class="n">self_link</span> <span class="o">+</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">[</span><span class="n">i</span><span class="p">:]),</span>
+                        <span class="p">)</span>
+                    <span class="k">except</span> <span class="n">ClientError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">err</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
+                            <span class="c1"># If this is a scalar lookup, raise KeyError(&quot;X&quot;) not KeyError((&quot;X&quot;,)).</span>
+                            <span class="n">err_arg</span> <span class="o">=</span> <span class="n">keys</span><span class="p">[</span><span class="n">i</span><span class="p">:]</span>
+                            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">err_arg</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                                <span class="p">(</span><span class="n">err_arg</span><span class="p">,)</span> <span class="o">=</span> <span class="n">err_arg</span>
+                            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">err_arg</span><span class="p">)</span>
+                        <span class="k">raise</span>
+                    <span class="n">item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+                    <span class="k">break</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">client_for_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
 
     <span class="k">def</span> <span class="fm">__delitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
