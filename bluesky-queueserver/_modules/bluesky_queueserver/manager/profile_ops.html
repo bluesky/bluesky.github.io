@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.0.18.post3+g194d181 documentation</title>
+  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.0.18.post76+g879a108 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             bluesky-queueserver
           </a>
               <div class="version">
-                0.0.18.post3+g194d181
+                0.0.18.post76+g879a108
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -113,7 +113,9 @@
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">random</span>
 <span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
 <span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">tempfile</span>
 <span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">import</span> <span class="nn">typing</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterable</span>
@@ -127,6 +129,7 @@
 <span class="kn">import</span> <span class="nn">bluesky_queueserver</span>
 
 <span class="kn">from</span> <span class="nn">.logging_setup</span> <span class="kn">import</span> <span class="n">PPrintForLogging</span> <span class="k">as</span> <span class="n">ppfl</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">to_boolean</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 <span class="n">qserver_version</span> <span class="o">=</span> <span class="n">bluesky_queueserver</span><span class="o">.</span><span class="n">__version__</span>
@@ -149,13 +152,160 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tb</span>
 
 
+<span class="k">class</span> <span class="nc">_RegisteredNamespaceItems</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reg_devices</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reg_plans</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Clear the dictionaries of registered plans and devices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reg_devices</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reg_plans</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">reg_devices</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Property returns the reference to the dictionary of registered devices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reg_devices</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">reg_plans</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Property returns the reference to the dictionary of registered plans.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reg_plans</span>
+
+    <span class="k">def</span> <span class="nf">_validate_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item_type</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Validate object name (for a plan or device). Item type should be a string (&#39;device&#39; or &#39;plan&#39;),</span>
+<span class="sd">        used in error messages.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">item_type</span> <span class="o">=</span> <span class="n">item_type</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">item_type</span><span class="si">}</span><span class="s2"> name must be a string: name=</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> type(name)=</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">item_type</span><span class="si">}</span><span class="s2"> name is an empty string&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^[_a-zA-Z]([_a-zA-Z0-9])*$&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">item_type</span><span class="si">}</span><span class="s2"> name </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> contains invalid characters. The name must start with a letter &quot;</span>
+                <span class="s2">&quot;or underscore and may contain letters, numbers and underscores.)&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_validate_depth</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">depth</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Validate the value of &#39;depth&#39; parameter.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">depth</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Depth must be an integer number: depth=</span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2"> type(depth)=</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">depth</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">depth</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Depth must be a positive integer: depth=</span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">register_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Register a device with Queue Server. The function allows to specify depth of the tree</span>
+<span class="sd">        of subdevices included in the list or exclude the device from the list. Only top-level</span>
+<span class="sd">        devices can be registered. Devices can be registered before they are defined in</span>
+<span class="sd">        the startup code.</span>
+
+<span class="sd">        This is experimental API. Functionality may change in the future.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name: str</span>
+<span class="sd">            Name of the device. This should be a name of the variable in the global scope</span>
+<span class="sd">            of the startup code. Only top level devices can be registered. Names of the device</span>
+<span class="sd">            components are not accepted.</span>
+<span class="sd">        depth: int</span>
+<span class="sd">            Depth of the device tree included in the list of existing devices: 0 - include</span>
+<span class="sd">            the tree of unlimited depth, 1 - include only top-level device, 2 - include</span>
+<span class="sd">            the top-level device and it&#39;s components etc. Depth specified for registered</span>
+<span class="sd">            devices overrides the depth used by default for unregistered devices.</span>
+<span class="sd">        exclude: boolean</span>
+<span class="sd">            Set this parameter ``False`` to exclude the device from the list of existing</span>
+<span class="sd">            devices. The device can still be used in the code, but it can not be passed</span>
+<span class="sd">            as a parameter value to a plan via RE Manager.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError, TypeError</span>
+<span class="sd">            Unsupported type or value of passed parameters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_name</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">item_type</span><span class="o">=</span><span class="s2">&quot;device&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_depth</span><span class="p">(</span><span class="n">depth</span><span class="p">)</span>
+        <span class="n">exclude</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">exclude</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reg_devices</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">obj</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">register_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Register a plan with Queue Server. The function allows to exclude a plan from</span>
+<span class="sd">        processing by the Queue Server.</span>
+
+<span class="sd">        This is experimental API. Functionality may change in the future.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name: str</span>
+<span class="sd">            Name of the plan. This should be a name of the variable in the global scope</span>
+<span class="sd">            of the startup code.</span>
+<span class="sd">        exclude: boolean</span>
+<span class="sd">            Set this parameter ``False`` to exclude the plan from the list of existing</span>
+<span class="sd">            plans. The plan can still be called from other plans, but it can not be</span>
+<span class="sd">            started using RE Manager.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError, TypeError</span>
+<span class="sd">            Unsupported type or value of passed parameters.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_name</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">item_type</span><span class="o">=</span><span class="s2">&quot;plan&quot;</span><span class="p">)</span>
+        <span class="n">exclude</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">exclude</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reg_plans</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">obj</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="n">exclude</span><span class="p">)</span>
+
+
+<span class="n">reg_ns_items</span> <span class="o">=</span> <span class="n">_RegisteredNamespaceItems</span><span class="p">()</span>
+
+<span class="n">clear_registered_items</span> <span class="o">=</span> <span class="n">reg_ns_items</span><span class="o">.</span><span class="n">clear</span>
+<span class="c1"># The following are public functions intended to be used in startup code</span>
+<span class="n">register_device</span> <span class="o">=</span> <span class="n">reg_ns_items</span><span class="o">.</span><span class="n">register_device</span>
+<span class="n">register_plan</span> <span class="o">=</span> <span class="n">reg_ns_items</span><span class="o">.</span><span class="n">register_plan</span>
+
+
 <span class="k">def</span> <span class="nf">get_default_startup_dir</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Returns the path to the default profile collection that is distributed with the package.</span>
-<span class="sd">    The function does not guarantee that the directory exists.</span>
+<span class="sd">    The function does not guarantee that the directory exists. Used for demo with Python-based worker.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">pc_path</span> <span class="o">=</span> <span class="n">pkg_resources</span><span class="o">.</span><span class="n">resource_filename</span><span class="p">(</span><span class="s2">&quot;bluesky_queueserver&quot;</span><span class="p">,</span> <span class="s2">&quot;profile_collection_sim/&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">pc_path</span>
+
+
+<span class="k">def</span> <span class="nf">get_default_startup_profile</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the name for the default startup profile. Used for demo with IPython-based worker.</span>
+<span class="sd">    The startup code is expected to be in ``/tmp/qserver/ipython/profile_collection_sim/startup`` directory.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="s2">&quot;collection_sim&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">create_demo_ipython_profile</span><span class="p">(</span><span class="n">startup_dir</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">delete_existing</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create demo IPython profile in temporary location. Copy startup directory</span>
+<span class="sd">    to the new profile. Raises IOError if the destination directory is not temporary.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tempdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">gettempdir</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">commonprefix</span><span class="p">([</span><span class="n">tempdir</span><span class="p">,</span> <span class="n">startup_dir</span><span class="p">])</span> <span class="o">!=</span> <span class="n">tempdir</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s2">&quot;Attempting to create a demo profile in non-temporary startup directory: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">startup_dir</span><span class="p">)</span>
+
+    <span class="c1"># Delete the existing startup directory (but not the whole profile).</span>
+    <span class="k">if</span> <span class="n">delete_existing</span><span class="p">:</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">startup_dir</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Copy the startup files</span>
+    <span class="n">default_startup_dir</span> <span class="o">=</span> <span class="n">get_default_startup_dir</span><span class="p">()</span>
+    <span class="n">shutil</span><span class="o">.</span><span class="n">copytree</span><span class="p">(</span><span class="n">default_startup_dir</span><span class="p">,</span> <span class="n">startup_dir</span><span class="p">)</span>
 
 
 <span class="n">_startup_script_patch</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
@@ -219,7 +369,7 @@
     <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">s_list</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">load_profile_collection</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">patch_profiles</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">load_profile_collection</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">patch_profiles</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Load profile collection located at the specified path. The collection consists of</span>
 <span class="sd">    .py files started with &#39;DD-&#39;, where D is a digit (e.g. 05-file.py). The files</span>
@@ -235,11 +385,15 @@
 <span class="sd">    keep_re: boolean</span>
 <span class="sd">        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)</span>
 <span class="sd">        or removed (``False``).</span>
+<span class="sd">    nspace: dict or None</span>
+<span class="sd">        Reference to the existing namespace, in which the code is executed. If ``nspace``</span>
+<span class="sd">        is *None*, then the new namespace is created.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    nspace: dict</span>
-<span class="sd">        namespace in which the profile collection was executed</span>
+<span class="sd">        namespace in which the profile collection was executed. Reference to ``nspace``</span>
+<span class="sd">        passed as a parameter is returned if ``nspace`` is not *None*.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -277,7 +431,7 @@
 
     <span class="k">try</span><span class="p">:</span>
         <span class="c1"># Load the files into the namespace &#39;nspace&#39;.</span>
-        <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">nspace</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">nspace</span>
 
         <span class="k">if</span> <span class="n">patch_profiles</span><span class="p">:</span>
             <span class="n">exec</span><span class="p">(</span><span class="n">_startup_script_patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
@@ -286,7 +440,7 @@
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Loading startup file &#39;</span><span class="si">%s</span><span class="s2">&#39; ...&quot;</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span>
 
                 <span class="c1"># Set &#39;__file__&#39; and &#39;__name__&#39; variables</span>
-                <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">&#39;; __name__ = &#39;startup_script&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">&#39;; __name__ = &#39;__main__&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
                 <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">file</span><span class="p">):</span>
@@ -318,7 +472,7 @@
     <span class="k">return</span> <span class="n">nspace</span>
 
 
-<span class="k">def</span> <span class="nf">load_startup_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">load_startup_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Populate namespace by import a module.</span>
 
@@ -329,17 +483,22 @@
 <span class="sd">    keep_re: boolean</span>
 <span class="sd">        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)</span>
 <span class="sd">        or removed (``False``).</span>
+<span class="sd">    nspace: dict or None</span>
+<span class="sd">        Reference to the existing namespace, in which the code is executed. If ``nspace``</span>
+<span class="sd">        is *None*, then the new namespace is created.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    nspace: dict</span>
-<span class="sd">        namespace that contains objects loaded from the module.</span>
+<span class="sd">        namespace that contains objects loaded from the module. Reference to ``nspace``</span>
+<span class="sd">        passed as a parameter is returned if ``nspace`` is not *None*.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">importlib</span><span class="o">.</span><span class="n">invalidate_caches</span><span class="p">()</span>
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">_module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
-        <span class="n">nspace</span> <span class="o">=</span> <span class="n">_module</span><span class="o">.</span><span class="vm">__dict__</span>
+        <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">nspace</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">nspace</span>
+        <span class="n">nspace</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_module</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
 
     <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
         <span class="c1"># Capture traceback and send it as a message</span>
@@ -353,7 +512,7 @@
     <span class="k">return</span> <span class="n">nspace</span>
 
 
-<span class="k">def</span> <span class="nf">load_startup_script</span><span class="p">(</span><span class="n">script_path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">enable_local_imports</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">load_startup_script</span><span class="p">(</span><span class="n">script_path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">enable_local_imports</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Populate namespace by import a module.</span>
 
@@ -367,18 +526,22 @@
 <span class="sd">    enable_local_imports : boolean</span>
 <span class="sd">        If ``False``, local imports from the script will not work. Setting to ``True``</span>
 <span class="sd">        enables local imports.</span>
+<span class="sd">    nspace: dict or None</span>
+<span class="sd">        Reference to the existing namespace, in which the code is executed. If ``nspace``</span>
+<span class="sd">        is *None*, then the new namespace is created.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    nspace: dict</span>
-<span class="sd">        namespace that contains objects loaded from the module.</span>
+<span class="sd">        namespace that contains objects loaded from the module. Reference to ``nspace``</span>
+<span class="sd">        passed as a parameter is returned if ``nspace`` is not *None*.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">importlib</span><span class="o">.</span><span class="n">invalidate_caches</span><span class="p">()</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">script_path</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to load the script &#39;</span><span class="si">{</span><span class="n">script_path</span><span class="si">}</span><span class="s2">&#39;: script was not found&quot;</span><span class="p">)</span>
 
-    <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">nspace</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">nspace</span>
 
     <span class="k">if</span> <span class="n">enable_local_imports</span><span class="p">:</span>
         <span class="n">p</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">script_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
@@ -387,12 +550,11 @@
         <span class="n">sm_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">nspace</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">script_path</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Startup file </span><span class="si">{</span><span class="n">script_path</span><span class="si">!r}</span><span class="s2"> was not found&quot;</span><span class="p">)</span>
 
         <span class="c1"># Set &#39;__file__&#39; and &#39;__name__&#39; variables</span>
-        <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">script_path</span><span class="si">}</span><span class="s2">&#39;; __name__ = &#39;startup_script&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">script_path</span><span class="si">}</span><span class="s2">&#39;; __name__ = &#39;__main__&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
         <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
         <span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">script_path</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">(),</span> <span class="n">script_path</span><span class="p">,</span> <span class="s2">&quot;exec&quot;</span><span class="p">)</span>
@@ -426,7 +588,12 @@
 
 
 <span class="k">def</span> <span class="nf">load_worker_startup_code</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span> <span class="n">startup_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">startup_module_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">startup_script_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">startup_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">startup_module_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">startup_script_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">keep_re</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">nspace</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Load worker startup code. Possible sources: startup directory (IPython-style profile collection),</span>
@@ -443,30 +610,37 @@
 <span class="sd">    keep_re: boolean</span>
 <span class="sd">        Indicates if ``RE`` and ``db`` defined in the module should be kept (``True``)</span>
 <span class="sd">        or removed (``False``).</span>
+<span class="sd">    nspace: dict or None</span>
+<span class="sd">        Reference to the existing namespace, in which the code is executed. If ``nspace``</span>
+<span class="sd">        is *None*, then the new namespace is created.</span>
+
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    nspace : dict</span>
-<span class="sd">       Dictionary with loaded namespace data</span>
+<span class="sd">       Dictionary with loaded namespace data. Reference to ``nspace`` passed as a parameter</span>
+<span class="sd">       is returned if ``nspace`` is not *None*.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">if</span> <span class="nb">sum</span><span class="p">([</span><span class="n">_</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="p">[</span><span class="n">startup_dir</span><span class="p">,</span> <span class="n">startup_module_name</span><span class="p">,</span> <span class="n">startup_script_path</span><span class="p">]])</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Source of the startup code was not specified or multiple sources were specified.&quot;</span><span class="p">)</span>
 
+    <span class="n">clear_registered_items</span><span class="p">()</span>  <span class="c1"># Operation on the global object</span>
+
     <span class="k">if</span> <span class="n">startup_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Loading RE Worker startup code from directory &#39;</span><span class="si">%s</span><span class="s2">&#39; ...&quot;</span><span class="p">,</span> <span class="n">startup_dir</span><span class="p">)</span>
         <span class="n">startup_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="n">startup_dir</span><span class="p">))</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Startup directory: &#39;</span><span class="si">%s</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="n">startup_dir</span><span class="p">)</span>
-        <span class="n">nspace</span> <span class="o">=</span> <span class="n">load_profile_collection</span><span class="p">(</span><span class="n">startup_dir</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">)</span>
+        <span class="n">nspace</span> <span class="o">=</span> <span class="n">load_profile_collection</span><span class="p">(</span><span class="n">startup_dir</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">,</span> <span class="n">patch_profiles</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">)</span>
 
     <span class="k">elif</span> <span class="n">startup_module_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Loading RE Worker startup code from module &#39;</span><span class="si">%s</span><span class="s2">&#39; ...&quot;</span><span class="p">,</span> <span class="n">startup_module_name</span><span class="p">)</span>
-        <span class="n">nspace</span> <span class="o">=</span> <span class="n">load_startup_module</span><span class="p">(</span><span class="n">startup_module_name</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">)</span>
+        <span class="n">nspace</span> <span class="o">=</span> <span class="n">load_startup_module</span><span class="p">(</span><span class="n">startup_module_name</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">)</span>
 
     <span class="k">elif</span> <span class="n">startup_script_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Loading RE Worker startup code from script &#39;</span><span class="si">%s</span><span class="s2">&#39; ...&quot;</span><span class="p">,</span> <span class="n">startup_script_path</span><span class="p">)</span>
         <span class="n">startup_script_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="n">startup_script_path</span><span class="p">))</span>
-        <span class="n">nspace</span> <span class="o">=</span> <span class="n">load_startup_script</span><span class="p">(</span><span class="n">startup_script_path</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">)</span>
+        <span class="n">nspace</span> <span class="o">=</span> <span class="n">load_startup_script</span><span class="p">(</span><span class="n">startup_script_path</span><span class="p">,</span> <span class="n">keep_re</span><span class="o">=</span><span class="n">keep_re</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">)</span>
 
     <span class="k">else</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -564,9 +738,12 @@
         <span class="k">if</span> <span class="s2">&quot;db&quot;</span> <span class="ow">in</span> <span class="n">nspace</span><span class="p">:</span>
             <span class="n">object_backup</span><span class="p">[</span><span class="s2">&quot;db&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">nspace</span><span class="p">[</span><span class="s2">&quot;db&quot;</span><span class="p">]</span>
 
+    <span class="n">saved__file__</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="c1"># Set &#39;__name__&#39; variables. NOTE: &#39;__file__&#39; variable is undefined (difference!!!)</span>
-        <span class="n">patch</span> <span class="o">=</span> <span class="s2">&quot;__name__ = &#39;startup_script&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="n">script_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">script_root_path</span><span class="p">,</span> <span class="s2">&quot;script&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">script_root_path</span> <span class="k">else</span> <span class="s2">&quot;script&quot;</span>
+        <span class="n">saved__file__</span> <span class="o">=</span> <span class="n">nspace</span><span class="p">[</span><span class="s2">&quot;__file__&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="s2">&quot;__file__&quot;</span> <span class="ow">in</span> <span class="n">nspace</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__name__ = &#39;__main__&#39;</span><span class="se">\n</span><span class="s2">__file__ = &#39;</span><span class="si">{</span><span class="n">script_path</span><span class="si">}</span><span class="s2">&#39;</span><span class="se">\n</span><span class="s2">&quot;</span>
         <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
         <span class="c1"># A script may be partially loaded into the environment in case it fails.</span>
@@ -581,6 +758,13 @@
         <span class="k">raise</span> <span class="n">ScriptLoadingError</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ex_str</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
 
     <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">saved__file__</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">patch</span> <span class="o">=</span> <span class="s2">&quot;del __file__</span><span class="se">\n</span><span class="s2">&quot;</span>  <span class="c1"># Do not delete &#39;__name__&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Restore the original value</span>
+            <span class="n">patch</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__file__ = &#39;</span><span class="si">{</span><span class="n">saved__file__</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+        <span class="n">exec</span><span class="p">(</span><span class="n">patch</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="ow">not</span> <span class="n">update_re</span><span class="p">:</span>
             <span class="c1"># Remove references for &#39;RE&#39; and &#39;db&#39; from the namespace</span>
             <span class="n">nspace</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;RE&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -600,6 +784,59 @@
             <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">script_root_path</span><span class="p">)</span>
 
 
+<span class="k">def</span> <span class="nf">is_plan</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns ``True`` if the object is a plan.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isgeneratorfunction</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">is_device</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns ``True`` if the object is a device.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">bluesky</span> <span class="kn">import</span> <span class="n">protocols</span>
+
+    <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="n">protocols</span><span class="o">.</span><span class="n">Readable</span><span class="p">,</span> <span class="n">protocols</span><span class="o">.</span><span class="n">Flyable</span><span class="p">))</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_process_registered_objects</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">reg_objs</span><span class="p">,</span> <span class="n">validator</span><span class="p">,</span> <span class="n">obj_type</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Attempt to get a reference for each registered object (plan or device).</span>
+<span class="sd">    After processing, the parameter ``obj`` of each object will contain a valid reference</span>
+<span class="sd">    to the object, unless the object is registered as excluded, the object does not exist in</span>
+<span class="sd">    the namespace or not recognized as a plan or a device.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nspace: dict</span>
+<span class="sd">        Worker namespace</span>
+<span class="sd">    reg_objs: dict</span>
+<span class="sd">        Reference to ``reg_ns_items.reg_plans`` or ``reg_ns_items.reg_devices``.</span>
+<span class="sd">    validator: dict</span>
+<span class="sd">        Function, which takes reference to the object and returns *True* if the object has</span>
+<span class="sd">        valid type (reference to ``is_plan`` or ``is_device``).</span>
+<span class="sd">    obj_type: str</span>
+<span class="sd">        The name of the object type used in error messages. Expected to be ``plan`` or ``device``</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">reg_objs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">p</span><span class="p">[</span><span class="s2">&quot;obj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="s2">&quot;exclude&quot;</span><span class="p">]:</span>
+                <span class="k">continue</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">validator</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+                <span class="n">p</span><span class="p">[</span><span class="s2">&quot;obj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Registered object </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not recognized as a </span><span class="si">{</span><span class="n">obj_type</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Registered </span><span class="si">{</span><span class="n">obj_type</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not found in the namespace: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">plans_from_nspace</span><span class="p">(</span><span class="n">nspace</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Extract plans from the namespace. Currently the function returns the dict of callable objects.</span>
@@ -616,8 +853,11 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">plans</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">nspace</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isgeneratorfunction</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">is_plan</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
             <span class="n">plans</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span>
+
+    <span class="n">_process_registered_objects</span><span class="p">(</span><span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">,</span> <span class="n">reg_objs</span><span class="o">=</span><span class="n">reg_ns_items</span><span class="o">.</span><span class="n">reg_plans</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">is_plan</span><span class="p">,</span> <span class="n">obj_type</span><span class="o">=</span><span class="s2">&quot;plan&quot;</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">plans</span>
 
 
@@ -637,16 +877,19 @@
 <span class="sd">        Dictionary that maps device names to device objects.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="kn">from</span> <span class="nn">bluesky</span> <span class="kn">import</span> <span class="n">protocols</span>
-
     <span class="n">devices</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">nspace</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="n">protocols</span><span class="o">.</span><span class="n">Readable</span><span class="p">,</span> <span class="n">protocols</span><span class="o">.</span><span class="n">Flyable</span><span class="p">))</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">is_device</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
             <span class="n">devices</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span>
+
+    <span class="n">_process_registered_objects</span><span class="p">(</span>
+        <span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">,</span> <span class="n">reg_objs</span><span class="o">=</span><span class="n">reg_ns_items</span><span class="o">.</span><span class="n">reg_devices</span><span class="p">,</span> <span class="n">validator</span><span class="o">=</span><span class="n">is_device</span><span class="p">,</span> <span class="n">obj_type</span><span class="o">=</span><span class="s2">&quot;device&quot;</span>
+    <span class="p">)</span>
+
     <span class="k">return</span> <span class="n">devices</span>
 
 
-<span class="k">def</span> <span class="nf">_get_nspace_object</span><span class="p">(</span><span class="n">object_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_get_nspace_object</span><span class="p">(</span><span class="n">object_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Search for object in namespace by name (e.g. ``count`` or ``det1.val``).</span>
 <span class="sd">    The function searches for subdevices by using ``component_name`` device property</span>
@@ -659,6 +902,11 @@
 <span class="sd">        Object (device or plan) name, such as ``count``, ``det1`` or ``det1.val``.</span>
 <span class="sd">    objects_in_nspace: dict</span>
 <span class="sd">        Dictionary of objects (devices and/or plans) in namespace.</span>
+<span class="sd">    nspace: dict</span>
+<span class="sd">        Reference to plan execution namespace. If ``nspace`` is not *None*, the up-to-date references</span>
+<span class="sd">        to plans and devices are taken directly from the namespace. The plans and devices still must be</span>
+<span class="sd">        present in ``plans_in_nspace`` and ``devices_in_nspace``, but those dictionaries may contain</span>
+<span class="sd">        stale references (e.g. if a plan is interactively replaced by a user).</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -677,7 +925,12 @@
 
     <span class="n">object_found</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="k">if</span> <span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="n">objects_in_nspace</span><span class="p">:</span>
-        <span class="n">device</span> <span class="o">=</span> <span class="n">objects_in_nspace</span><span class="p">[</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="k">if</span> <span class="n">nspace</span><span class="p">:</span>
+            <span class="c1"># This is actual reference to the object from execution namespace. It may be different from</span>
+            <span class="c1">#   the reference saved during the last update of the lists.</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">nspace</span><span class="p">[</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">objects_in_nspace</span><span class="p">[</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">object_found</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -704,26 +957,31 @@
     <span class="k">return</span> <span class="n">device</span>
 
 
-<span class="k">def</span> <span class="nf">prepare_plan</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="n">devices_in_nspace</span><span class="p">,</span> <span class="n">allowed_plans</span><span class="p">,</span> <span class="n">allowed_devices</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">prepare_plan</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="n">devices_in_nspace</span><span class="p">,</span> <span class="n">allowed_plans</span><span class="p">,</span> <span class="n">allowed_devices</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Prepare the plan for execution: replace the device names (str) in the plan specification</span>
 <span class="sd">    by references to ophyd objects; replace plan name by the reference to the plan.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    plan : dict</span>
+<span class="sd">    plan: dict</span>
 <span class="sd">        Plan specification. Keys: `name` (str) - plan name, `args` - plan args,</span>
 <span class="sd">        `kwargs` - plan kwargs. The plan parameters must contain ``user_group``.</span>
-<span class="sd">    plans_in_nspace : dict(str, callable)</span>
+<span class="sd">    plans_in_nspace: dict(str, callable)</span>
 <span class="sd">        Dictionary of existing plans from the RE workspace.</span>
-<span class="sd">    devices_in_nspace : dict(str, ophyd.Device)</span>
+<span class="sd">    devices_in_nspace: dict(str, ophyd.Device)</span>
 <span class="sd">        Dictionary of existing devices from RE workspace.</span>
-<span class="sd">    allowed_plans : dict(str, dict)</span>
+<span class="sd">    allowed_plans: dict(str, dict)</span>
 <span class="sd">        Dictionary of allowed plans that maps group name to dictionary of plans allowed</span>
 <span class="sd">        to the members of the group (group name can be found in ``plan[&quot;user_group&quot;]``.</span>
-<span class="sd">    allowed_devices : dict(str, dict)</span>
+<span class="sd">    allowed_devices: dict(str, dict)</span>
 <span class="sd">        Dictionary of allowed devices that maps group name to dictionary of devices allowed</span>
 <span class="sd">        to the members of the group.</span>
+<span class="sd">    nspace: dict</span>
+<span class="sd">        Reference to plan execution namespace. If ``nspace`` is not *None*, the up-to-date references</span>
+<span class="sd">        to plans and devices are taken directly from the namespace. The plans and devices still must be</span>
+<span class="sd">        present in ``plans_in_nspace`` and ``devices_in_nspace``, but those dictionaries may contain</span>
+<span class="sd">        stale references (e.g. if a plan is interactively replaced by a user).</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -784,27 +1042,27 @@
                 <span class="n">default_value</span> <span class="o">=</span> <span class="n">_process_default_value</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">])</span>
                 <span class="n">default_params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]:</span> <span class="n">default_value</span><span class="p">})</span>
 
-    <span class="k">def</span> <span class="nf">ref_from_name</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">ref_from_name</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="k">if</span> <span class="p">(</span><span class="n">v</span> <span class="ow">in</span> <span class="n">sel_object_names</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_is_object_name_in_list</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">allowed_objects</span><span class="o">=</span><span class="n">selected_object_tree</span><span class="p">):</span>
-                <span class="n">v</span> <span class="o">=</span> <span class="n">_get_nspace_object</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="o">=</span><span class="n">objects_in_nspace</span><span class="p">)</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">_get_nspace_object</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="o">=</span><span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">v</span>
 
-    <span class="k">def</span> <span class="nf">process_argument</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">process_argument</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
         <span class="c1"># Recursively process lists (iterables) and dictionaries</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="n">v</span> <span class="o">=</span> <span class="n">ref_from_name</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">)</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="n">ref_from_name</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">v</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">v</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">)</span>
+                <span class="n">v</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
             <span class="n">v_original</span> <span class="o">=</span> <span class="n">v</span>
             <span class="n">v</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">v_original</span><span class="p">:</span>
-                <span class="n">v</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">process_argument</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">))</span>
+                <span class="n">v</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">process_argument</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">v</span>
 
-    <span class="k">def</span> <span class="nf">process_parameter_value</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">pp</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">group_devices</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">process_parameter_value</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">pp</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">group_devices</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Process a parameter value ``value`` based on parameter description ``pp``</span>
 <span class="sd">        (``pp = allowed_plans[&lt;plan_name&gt;][&lt;param_name&gt;]``).</span>
@@ -847,7 +1105,7 @@
         <span class="n">sel_object_names</span> <span class="o">=</span> <span class="n">pname_list</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">dname_list</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">sel_object_names</span> <span class="ow">or</span> <span class="n">selected_object_tree</span><span class="p">:</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">)</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">value</span>
 
@@ -855,7 +1113,7 @@
     <span class="n">items_in_nspace</span> <span class="o">=</span> <span class="n">devices_in_nspace</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="n">items_in_nspace</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">plans_in_nspace</span><span class="p">)</span>
 
-    <span class="n">plan_func</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">plan_name</span><span class="p">,</span> <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="nb">set</span><span class="p">(),</span> <span class="n">group_plans</span><span class="p">)</span>
+    <span class="n">plan_func</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">plan_name</span><span class="p">,</span> <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="nb">set</span><span class="p">(),</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">plan_func</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">err_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Plan &#39;</span><span class="si">{</span><span class="n">plan_name</span><span class="si">}</span><span class="s2">&#39; is not allowed or does not exist&quot;</span>
@@ -867,14 +1125,16 @@
         <span class="c1"># Fetch parameter description ({} if parameter is not found)</span>
         <span class="n">pp</span> <span class="o">=</span> <span class="n">param_descriptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">p_name</span><span class="p">,</span> <span class="p">{})</span>
         <span class="n">bound_args</span><span class="o">.</span><span class="n">arguments</span><span class="p">[</span><span class="n">p_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">process_parameter_value</span><span class="p">(</span>
-            <span class="n">value</span><span class="p">,</span> <span class="n">pp</span><span class="p">,</span> <span class="n">items_in_nspace</span><span class="p">,</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">group_devices</span>
+            <span class="n">value</span><span class="p">,</span> <span class="n">pp</span><span class="p">,</span> <span class="n">items_in_nspace</span><span class="p">,</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">group_devices</span><span class="p">,</span> <span class="n">nspace</span>
         <span class="p">)</span>
 
     <span class="k">for</span> <span class="n">p_name</span> <span class="ow">in</span> <span class="n">default_params</span><span class="p">:</span>
         <span class="n">value</span> <span class="o">=</span> <span class="n">default_params</span><span class="p">[</span><span class="n">p_name</span><span class="p">]</span>
         <span class="c1"># Fetch parameter description ({} if parameter is not found)</span>
         <span class="n">pp</span> <span class="o">=</span> <span class="n">group_plans</span><span class="p">[</span><span class="n">plan_name</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">p_name</span><span class="p">,</span> <span class="p">{})</span>
-        <span class="n">default_params</span><span class="p">[</span><span class="n">p_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">process_parameter_value</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">pp</span><span class="p">,</span> <span class="n">items_in_nspace</span><span class="p">,</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">group_devices</span><span class="p">)</span>
+        <span class="n">default_params</span><span class="p">[</span><span class="n">p_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">process_parameter_value</span><span class="p">(</span>
+            <span class="n">value</span><span class="p">,</span> <span class="n">pp</span><span class="p">,</span> <span class="n">items_in_nspace</span><span class="p">,</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">group_devices</span><span class="p">,</span> <span class="n">nspace</span>
+        <span class="p">)</span>
 
     <span class="n">plan_args_parsed</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">bound_args</span><span class="o">.</span><span class="n">args</span><span class="p">)</span>
     <span class="n">plan_kwargs_parsed</span> <span class="o">=</span> <span class="n">bound_args</span><span class="o">.</span><span class="n">kwargs</span>
@@ -964,7 +1224,7 @@
     <span class="n">func_callable</span> <span class="o">=</span> <span class="n">nspace</span><span class="p">[</span><span class="n">func_name</span><span class="p">]</span>
 
     <span class="c1"># Following are basic checks to avoid most common errors. The list of check can be expanded.</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">func_callable</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">func_callable</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Object </span><span class="si">{</span><span class="n">func_name</span><span class="si">!r}</span><span class="s2"> defined in worker namespace is not callable&quot;</span><span class="p">)</span>
     <span class="c1"># Generator functions defined in the worker namespace are plans, which return generators</span>
     <span class="c1">#   when called. There is no point in calling those functions directly.</span>
@@ -2864,26 +3124,50 @@
     <span class="k">return</span> <span class="n">ret</span>
 
 
-<span class="k">def</span> <span class="nf">_prepare_plans</span><span class="p">(</span><span class="n">plans</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">existing_devices</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_prepare_plans</span><span class="p">(</span><span class="n">plans</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">existing_devices</span><span class="p">,</span> <span class="n">ignore_invalid_plans</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Prepare dictionary of existing plans for saving to YAML file.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    plans : dict</span>
+<span class="sd">    plans: dict</span>
 <span class="sd">        Dictionary of plans extracted from the workspace</span>
-<span class="sd">    existing_devices : dict</span>
+<span class="sd">    existing_devices: dict</span>
 <span class="sd">        Prepared dictionary of existing devices (returned by the function ``_prepare_devices``.</span>
+<span class="sd">    ignore_invalid_plans: bool</span>
+<span class="sd">        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then</span>
+<span class="sd">        an exception is raised otherwise a message is printed and the plan is not included in the list.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict</span>
 <span class="sd">        Dictionary that maps plan names to plan descriptions</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">plan_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">plans</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="n">k</span><span class="p">:</span> <span class="n">_process_plan</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">existing_devices</span><span class="o">=</span><span class="n">existing_devices</span><span class="p">,</span> <span class="n">existing_plans</span><span class="o">=</span><span class="n">plan_names</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">plans</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-    <span class="p">}</span>
+    <span class="n">reg_plans</span> <span class="o">=</span> <span class="n">reg_ns_items</span><span class="o">.</span><span class="n">reg_plans</span>
+
+    <span class="n">plans_selected</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">plans</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">reg_plans</span><span class="o">.</span><span class="n">keys</span><span class="p">())):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">reg_plans</span><span class="p">:</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="n">reg_plans</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s2">&quot;obj&quot;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">plans</span><span class="p">:</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="n">plans</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">obj</span><span class="p">:</span>
+            <span class="n">plans_selected</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span>
+
+    <span class="n">plans_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">plans_selected</span><span class="p">)</span>
+
+    <span class="n">prepared_plans</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">plans_selected</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">prepared_plans</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">_process_plan</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">existing_devices</span><span class="o">=</span><span class="n">existing_devices</span><span class="p">,</span> <span class="n">existing_plans</span><span class="o">=</span><span class="n">plans_names</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">ignore_invalid_plans</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;PLAN WAS IGNORED: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ex</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span>
+
+    <span class="k">return</span> <span class="n">prepared_plans</span>
 
 
 <span class="k">def</span> <span class="nf">_prepare_devices</span><span class="p">(</span><span class="n">devices</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">ignore_all_subdevices_if_one_fails</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">expand_areadetectors</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
@@ -2938,13 +3222,13 @@
             <span class="n">component_names</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="n">component_names</span>
 
-    <span class="k">def</span> <span class="nf">create_device_description</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">create_device_description</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">device_name</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">is_registered</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="n">description</span> <span class="o">=</span> <span class="n">get_device_params</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="n">comps</span> <span class="o">=</span> <span class="n">get_device_component_names</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
         <span class="n">components</span> <span class="o">=</span> <span class="p">{}</span>
 
         <span class="n">is_areadetector</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">ADBase</span><span class="p">)</span>
-        <span class="n">expand</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">is_areadetector</span> <span class="ow">or</span> <span class="n">expand_areadetectors</span>
+        <span class="n">expand</span> <span class="o">=</span> <span class="n">is_registered</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">is_areadetector</span> <span class="ow">or</span> <span class="n">expand_areadetectors</span>
 
         <span class="k">if</span> <span class="n">expand</span> <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">max_depth</span> <span class="ow">or</span> <span class="p">(</span><span class="n">depth</span> <span class="o">&lt;</span> <span class="n">max_depth</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)):</span>
             <span class="n">ignore_subdevices</span> <span class="o">=</span> <span class="kc">False</span>
@@ -2952,7 +3236,13 @@
                 <span class="k">try</span><span class="p">:</span>
                     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">comp_name</span><span class="p">):</span>
                         <span class="n">c</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">comp_name</span><span class="p">)</span>
-                        <span class="n">desc</span> <span class="o">=</span> <span class="n">create_device_description</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">device_name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">comp_name</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                        <span class="n">desc</span> <span class="o">=</span> <span class="n">create_device_description</span><span class="p">(</span>
+                            <span class="n">c</span><span class="p">,</span>
+                            <span class="n">device_name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">comp_name</span><span class="p">,</span>
+                            <span class="n">depth</span><span class="o">=</span><span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                            <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span><span class="p">,</span>
+                            <span class="n">is_registered</span><span class="o">=</span><span class="n">is_registered</span><span class="p">,</span>
+                        <span class="p">)</span>
                         <span class="n">components</span><span class="p">[</span><span class="n">comp_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">desc</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
                     <span class="n">ignore_subdevices</span> <span class="o">=</span> <span class="n">ignore_all_subdevices_if_one_fails</span>
@@ -2967,18 +3257,53 @@
 
         <span class="k">return</span> <span class="n">description</span>
 
-    <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">create_device_description</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">devices</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="k">def</span> <span class="nf">process_devices</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process devices one by one based on information from the namespace and</span>
+<span class="sd">        the dictionary of registered devices.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">reg_devices</span> <span class="o">=</span> <span class="n">reg_ns_items</span><span class="o">.</span><span class="n">reg_devices</span>
+
+        <span class="n">devices_selected</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">devices</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">reg_devices</span><span class="o">.</span><span class="n">keys</span><span class="p">())):</span>
+            <span class="n">obj</span><span class="p">,</span> <span class="n">_max_depth</span><span class="p">,</span> <span class="n">is_registered</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">,</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">reg_devices</span><span class="p">:</span>
+                <span class="n">obj</span> <span class="o">=</span> <span class="n">reg_devices</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s2">&quot;obj&quot;</span><span class="p">]</span>
+                <span class="n">_max_depth</span> <span class="o">=</span> <span class="n">reg_devices</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s2">&quot;depth&quot;</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">obj</span><span class="p">:</span>
+                    <span class="n">is_registered</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">:</span>
+                <span class="n">obj</span> <span class="o">=</span> <span class="n">devices</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">obj</span><span class="p">:</span>
+                <span class="n">devices_selected</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">obj</span><span class="o">=</span><span class="n">obj</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="n">_max_depth</span><span class="p">,</span> <span class="n">is_registered</span><span class="o">=</span><span class="n">is_registered</span><span class="p">)</span>
+
+        <span class="n">device_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">devices_selected</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">device_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">create_device_description</span><span class="p">(</span>
+                <span class="n">p</span><span class="p">[</span><span class="s2">&quot;obj&quot;</span><span class="p">],</span> <span class="n">name</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;max_depth&quot;</span><span class="p">],</span> <span class="n">is_registered</span><span class="o">=</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;is_registered&quot;</span><span class="p">]</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">device_dict</span>
+
+    <span class="k">return</span> <span class="n">process_devices</span><span class="p">(</span><span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">existing_plans_and_devices_from_nspace</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">existing_plans_and_devices_from_nspace</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">ignore_invalid_plans</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate lists of existing plans and devices from namespace. The namespace</span>
 <span class="sd">    must be in the form returned by ``load_worker_startup_code()``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    nspace : dict</span>
+<span class="sd">    nspace: dict</span>
 <span class="sd">        Namespace that contains plans and devices</span>
+<span class="sd">    max_depth: int</span>
+<span class="sd">        Default maximum depth for device search: 0 - unlimited depth, 1 - include only top level devices,</span>
+<span class="sd">        2 - include top level devices and subdevices, etc.</span>
+<span class="sd">    ignore_invalid_plans: bool</span>
+<span class="sd">        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then</span>
+<span class="sd">        an exception is raised otherwise a message is printed and the plan is not included in the list.</span>
+
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -2991,11 +3316,15 @@
 <span class="sd">    devices_in_nspace : dict</span>
 <span class="sd">        Dictionary of devices in namespace</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Extracting existing plans and devices from the namespace ...&quot;</span><span class="p">)</span>
+
     <span class="n">plans_in_nspace</span> <span class="o">=</span> <span class="n">plans_from_nspace</span><span class="p">(</span><span class="n">nspace</span><span class="p">)</span>
     <span class="n">devices_in_nspace</span> <span class="o">=</span> <span class="n">devices_from_nspace</span><span class="p">(</span><span class="n">nspace</span><span class="p">)</span>
 
-    <span class="n">existing_devices</span> <span class="o">=</span> <span class="n">_prepare_devices</span><span class="p">(</span><span class="n">devices_in_nspace</span><span class="p">)</span>
-    <span class="n">existing_plans</span> <span class="o">=</span> <span class="n">_prepare_plans</span><span class="p">(</span><span class="n">plans_in_nspace</span><span class="p">,</span> <span class="n">existing_devices</span><span class="o">=</span><span class="n">existing_devices</span><span class="p">)</span>
+    <span class="n">existing_devices</span> <span class="o">=</span> <span class="n">_prepare_devices</span><span class="p">(</span><span class="n">devices_in_nspace</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span><span class="p">)</span>
+    <span class="n">existing_plans</span> <span class="o">=</span> <span class="n">_prepare_plans</span><span class="p">(</span>
+        <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="n">existing_devices</span><span class="o">=</span><span class="n">existing_devices</span><span class="p">,</span> <span class="n">ignore_invalid_plans</span><span class="o">=</span><span class="n">ignore_invalid_plans</span>
+    <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">existing_plans</span><span class="p">,</span> <span class="n">existing_devices</span><span class="p">,</span> <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="n">devices_in_nspace</span>
 
@@ -3050,6 +3379,8 @@
     <span class="n">file_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">file_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">ignore_invalid_plans</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">device_max_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate the list of plans and devices from a collection of startup files, python module or</span>
@@ -3074,6 +3405,13 @@
 <span class="sd">        name of the output YAML file, None - default file name is used</span>
 <span class="sd">    overwrite: boolean</span>
 <span class="sd">        overwrite the file if it already exists</span>
+<span class="sd">    ignore_invalid_plans: bool</span>
+<span class="sd">        Ignore plans with unsupported signatures. If the argument is ``False`` (default), then</span>
+<span class="sd">        an exception is raised otherwise a message is printed and the plan is not included in the list.</span>
+<span class="sd">    device_max_depth: int</span>
+<span class="sd">        Default maximum depth for devices included in the list of existing devices:</span>
+<span class="sd">        0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors),</span>
+<span class="sd">        1 - only top level devices are included, 2 - top level devices and subdevices are included, etc.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -3084,7 +3422,9 @@
 <span class="sd">    RuntimeError</span>
 <span class="sd">        Error occurred while creating or saving the lists.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span> <span class="nn">.profile_tools</span> <span class="kn">import</span> <span class="n">clear_re_worker_active</span><span class="p">,</span> <span class="n">set_re_worker_active</span>
+    <span class="kn">from</span> <span class="nn">.profile_tools</span> <span class="kn">import</span> <span class="n">clear_ipython_mode</span><span class="p">,</span> <span class="n">clear_re_worker_active</span><span class="p">,</span> <span class="n">set_ipython_mode</span><span class="p">,</span> <span class="n">set_re_worker_active</span>
+
+    <span class="n">use_ipython_kernel</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># TODO: Make this a parameter, but it requires extension of functionality</span>
 
     <span class="n">file_name</span> <span class="o">=</span> <span class="n">file_name</span> <span class="ow">or</span> <span class="s2">&quot;existing_plans_and_devices.yaml&quot;</span>
     <span class="k">try</span><span class="p">:</span>
@@ -3095,6 +3435,7 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Source of the startup code was not specified or multiple sources were specified.&quot;</span><span class="p">)</span>
 
         <span class="n">set_re_worker_active</span><span class="p">()</span>
+        <span class="n">set_ipython_mode</span><span class="p">(</span><span class="n">use_ipython_kernel</span><span class="p">)</span>
 
         <span class="n">nspace</span> <span class="o">=</span> <span class="n">load_worker_startup_code</span><span class="p">(</span>
             <span class="n">startup_dir</span><span class="o">=</span><span class="n">startup_dir</span><span class="p">,</span>
@@ -3102,7 +3443,9 @@
             <span class="n">startup_script_path</span><span class="o">=</span><span class="n">startup_script_path</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="n">existing_plans</span><span class="p">,</span> <span class="n">existing_devices</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">existing_plans_and_devices_from_nspace</span><span class="p">(</span><span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">)</span>
+        <span class="n">existing_plans</span><span class="p">,</span> <span class="n">existing_devices</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">existing_plans_and_devices_from_nspace</span><span class="p">(</span>
+            <span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">,</span> <span class="n">ignore_invalid_plans</span><span class="o">=</span><span class="n">ignore_invalid_plans</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="n">device_max_depth</span>
+        <span class="p">)</span>
 
         <span class="n">save_existing_plans_and_devices</span><span class="p">(</span>
             <span class="n">existing_plans</span><span class="o">=</span><span class="n">existing_plans</span><span class="p">,</span>
@@ -3117,6 +3460,7 @@
 
     <span class="k">finally</span><span class="p">:</span>
         <span class="n">clear_re_worker_active</span><span class="p">()</span>
+        <span class="n">clear_ipython_mode</span><span class="p">()</span>
 
 
 <span class="k">def</span> <span class="nf">gen_list_of_plans_and_devices_cli</span><span class="p">():</span>
@@ -3190,6 +3534,27 @@
         <span class="s2">&quot;&#39;qserver-list-plans-devices --startup-script ~/startup/scripts/script.py&#39; loads &quot;</span>
         <span class="s2">&quot;startup code from the script and saves the results to the file in the current directory.&quot;</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">&quot;--ignore-invalid-plans&quot;</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="s2">&quot;ignore_invalid_plans&quot;</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ON&quot;</span><span class="p">,</span> <span class="s2">&quot;OFF&quot;</span><span class="p">],</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">&quot;OFF&quot;</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Ignore plans with unsupported signatures When loading startup code or executing scripts. &quot;</span>
+        <span class="s2">&quot;The default behavior is to raise an exception. If the parameter is set, the message is printed for each &quot;</span>
+        <span class="s2">&quot;invalid plan and only plans that were processed correctly are included in the list of existing plans &quot;</span>
+        <span class="s2">&quot;(default: </span><span class="si">%(default)s</span><span class="s2">).&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">&quot;--device-max-depth&quot;</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="s2">&quot;device_max_depth&quot;</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Default maximum depth for devices included in the list of existing devices: &quot;</span>
+        <span class="s2">&quot;0 - unlimited depth (full tree of subdevices is included for all devices except areadetectors), &quot;</span>
+        <span class="s2">&quot;1 - only top level devices are included, 2 - top level devices and subdevices are included, etc. &quot;</span>
+        <span class="s2">&quot;(default: </span><span class="si">%(default)s</span><span class="s2">).&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
     <span class="n">file_dir</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">file_dir</span>
@@ -3197,6 +3562,8 @@
     <span class="n">startup_dir</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">startup_dir</span>
     <span class="n">startup_module_name</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">startup_module_name</span>
     <span class="n">startup_script_path</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">startup_script_path</span>
+    <span class="n">ignore_invalid_plans</span> <span class="o">=</span> <span class="n">to_boolean</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">ignore_invalid_plans</span><span class="p">)</span>
+    <span class="n">device_max_depth</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">device_max_depth</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">file_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">file_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="n">file_dir</span><span class="p">)</span>
@@ -3210,6 +3577,8 @@
             <span class="n">file_dir</span><span class="o">=</span><span class="n">file_dir</span><span class="p">,</span>
             <span class="n">file_name</span><span class="o">=</span><span class="n">file_name</span><span class="p">,</span>
             <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">ignore_invalid_plans</span><span class="o">=</span><span class="n">ignore_invalid_plans</span><span class="p">,</span>
+            <span class="n">device_max_depth</span><span class="o">=</span><span class="n">device_max_depth</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The list of existing plans and devices was created successfully.&quot;</span><span class="p">)</span>
         <span class="n">exit_code</span> <span class="o">=</span> <span class="mi">0</span>
