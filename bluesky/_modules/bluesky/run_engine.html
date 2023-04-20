@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.run_engine &mdash; bluesky 1.10.0.post50+g610d2027 documentation</title>
+  <title>bluesky.run_engine &mdash; bluesky 1.10.0.post83+gfddf4aee documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             bluesky
           </a>
               <div class="version">
-                1.10.0.post50+g610d2027
+                1.10.0.post83+gfddf4aee
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -446,6 +446,8 @@
                              <span class="s1">&#39;close_run&#39;</span><span class="p">,</span> <span class="s1">&#39;install_suspender&#39;</span><span class="p">,</span>
                              <span class="s1">&#39;remove_suspender&#39;</span><span class="p">,</span> <span class="s1">&#39;_start_suspender&#39;</span><span class="p">]</span>
 
+    <span class="n">RunBundler</span> <span class="o">=</span> <span class="n">RunBundler</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
@@ -564,7 +566,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_task_fut</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># future proxy to the task above</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pardon_failures</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># will hold an asyncio.Event</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_plan</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># the plan instance from __call__</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require_stream_declaration</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_command_registry</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;declare_stream&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_declare_stream</span><span class="p">,</span>
             <span class="s1">&#39;create&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create</span><span class="p">,</span>
             <span class="s1">&#39;save&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_save</span><span class="p">,</span>
             <span class="s1">&#39;drop&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_drop</span><span class="p">,</span>
@@ -1884,8 +1888,9 @@
         <span class="c1"># against users mutating the md with their validator.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">md_validator</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">md</span><span class="p">))</span>
 
-        <span class="n">current_run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span><span class="p">[</span><span class="n">run_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">RunBundler</span><span class="p">(</span>
-            <span class="n">md</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">record_interruptions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit_sync</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log</span>
+        <span class="n">current_run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span><span class="p">[</span><span class="n">run_key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">RunBundler</span><span class="p">(</span>
+            <span class="n">md</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">record_interruptions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit_sync</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">,</span>
+            <span class="n">strict_pre_declare</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_require_stream_declaration</span>
         <span class="p">)</span>
 
         <span class="n">new_uid</span> <span class="o">=</span> <span class="k">await</span> <span class="n">current_run</span><span class="o">.</span><span class="n">open_run</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
@@ -1937,6 +1942,30 @@
                                          <span class="s2">&quot;an open run. That is, &#39;create&#39; must &quot;</span>
                                          <span class="s2">&quot;be preceded by &#39;open_run&#39;.&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ke</span>
         <span class="k">return</span> <span class="p">(</span><span class="k">await</span> <span class="n">current_run</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">msg</span><span class="p">))</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_declare_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Trigger the run engine to start bundling future obj.read() calls for</span>
+<span class="sd">         an Event document</span>
+
+<span class="sd">        Expected message object is:</span>
+
+<span class="sd">            Msg(&#39;create&#39;, None, name=&#39;primary&#39;)</span>
+<span class="sd">            Msg(&#39;create&#39;, name=&#39;primary&#39;)</span>
+
+<span class="sd">        Note that the `name` kwarg will be the &#39;name&#39; field of the resulting</span>
+<span class="sd">        descriptor. So descriptor[&#39;name&#39;] = msg.kwargs[&#39;name&#39;].</span>
+
+<span class="sd">        Also note that changing the &#39;name&#39; of the Event will create a new</span>
+<span class="sd">        Descriptor document.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">run_key</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">run</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">current_run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_bundlers</span><span class="p">[</span><span class="n">run_key</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">ke</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">IllegalMessageSequence</span><span class="p">(</span><span class="s2">&quot;Cannot bundle readings without &quot;</span>
+                                         <span class="s2">&quot;an open run. That is, &#39;create&#39; must &quot;</span>
+                                         <span class="s2">&quot;be preceded by &#39;open_run&#39;.&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">ke</span>
+        <span class="k">return</span> <span class="p">(</span><span class="k">await</span> <span class="n">current_run</span><span class="o">.</span><span class="n">declare_stream</span><span class="p">(</span><span class="n">msg</span><span class="p">))</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
