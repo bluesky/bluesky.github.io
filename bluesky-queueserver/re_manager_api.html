@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post82+g4e1bb97 documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post102+g24fd5ce documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -35,7 +35,7 @@
             bluesky-queueserver
           </a>
               <div class="version">
-                0.0.18.post82+g4e1bb97
+                0.0.18.post102+g24fd5ce
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -112,6 +112,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#queue-start"><strong>‘queue_start’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-stop"><strong>‘queue_stop’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-stop-cancel"><strong>‘queue_stop_cancel’</strong></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#queue-autostart"><strong>‘queue_autostart’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#re-pause"><strong>‘re_pause’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#re-resume-re-stop-re-abort-re-halt"><strong>‘re_resume’, ‘re_stop’, ‘re_abort’, ‘re_halt’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#re-runs"><strong>‘re_runs’</strong></a></li>
@@ -273,6 +274,7 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <li><p><a class="reference internal" href="#method-queue-start"><span class="std std-ref">‘queue_start’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-queue-stop"><span class="std std-ref">‘queue_stop’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-queue-stop-cancel"><span class="std std-ref">‘queue_stop_cancel’</span></a></p></li>
+<li><p><a class="reference internal" href="#method-queue-autostart"><span class="std std-ref">‘queue_autostart’</span></a></p></li>
 </ul>
 <p>Send commands to Bluesky Run Engine:</p>
 <ul class="simple">
@@ -422,6 +424,9 @@ in the dictionary represent parameter names and values. Supported parameters:
 </dd>
 <dt><strong>queue_stop_pending</strong>: <em>boolean</em></dt><dd><p>indicates if the request to stop the queue after completion of the current plan is
 pending.</p>
+</dd>
+<dt><strong>queue_autostart_enabled</strong>: <em>boolean</em></dt><dd><p>indicates if the autostart queue mode is enabled, see
+<a class="reference internal" href="#method-queue-autostart"><span class="std std-ref">‘queue_autostart’</span></a> API.</p>
 </dd>
 <dt><strong>pause_pending</strong>: <em>boolean</em></dt><dd><p>indicates if the request to pause the currently running plan was send to Run Engine
 (see <strong>re_pause</strong> method), but the plan is not stopped yet. It may take considerable
@@ -745,7 +750,8 @@ successfully executed), <strong>‘abort’</strong> and <strong>‘halt’</str
 the plan is considered failed), <strong>‘unknown’</strong> (the exit status information is lost, e.g. due
 to restart of RE Manager process, but plan information still needs to be placed in the history;
 this is very unlikely to happen in practice);</p></li>
-<li><p><strong>run_uids</strong> - list of UIDs of runs executed by the plan;</p></li>
+<li><p><strong>run_uids</strong> - list of UIDs (str) of runs executed by the plan;</p></li>
+<li><p><strong>scan_ids</strong> - list of scan IDs (int) of runs executed by the plan;</p></li>
 <li><p><strong>time_start</strong> and <strong>time_stop</strong> - time of start and completion of the plan (not runs),
 floating point number returned by <em>time.time()</em>.</p></li>
 <li><p><strong>msg</strong> - error message if the plan failed, empty string otherwise.</p></li>
@@ -1688,6 +1694,68 @@ with the request. See documentation on <a class="reference internal" href="#meth
 </tbody>
 </table>
 </section>
+<section id="queue-autostart">
+<span id="method-queue-autostart"></span><h4><strong>‘queue_autostart’</strong><a class="headerlink" href="#queue-autostart" title="Permalink to this heading">¶</a></h4>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘queue_autostart’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Enable/disable autostart mode. In autostart mode, the queue execution is automatically
+started whenever the queue contains items and the manager and the environment are
+ready to execute plans. Client applications may check if the manager is in autostart
+mode using <em>queue_autostart_enabled</em> parameter of RE Manager status
+(see <a class="reference internal" href="#method-status"><span class="std std-ref">‘status’</span></a> API).The autostart mode is not disabled after the queue runs out of
+items, but is automatically restarted once new items are added. The autostart mode is
+disabled if the API is called with <em>enable=False</em>, or if the queue or the running plan
+is stopped due to the following events:</p>
+<ul class="simple">
+<li><p><em>‘queue_stop’</em> queue instruction was executed;</p></li>
+<li><p>the queue was stopped using <a class="reference internal" href="#method-queue-stop"><span class="std std-ref">‘queue_stop’</span></a> API (the API call itself does not
+disable autostart, the queue remains in autostart mode if <strong>queue_stop</strong> was cancelled
+before the queue was stopped);</p></li>
+<li><p>running plan was stopped/aborted/halted;</p></li>
+<li><p>running plan failed, unless the <em>‘ignore_failures’</em> queue mode is enabled (see
+<a class="reference internal" href="#method-queue-mode-set"><span class="std std-ref">‘queue_mode_set’</span></a> API).</p></li>
+</ul>
+<p>The autostart mode may be enabled/disabled at any time. If the queue contains items,
+but queue can not be started immediately, e.g. due to environment being closed,
+the manager periodically checks the state of the manager and the worker and will attempt to
+start the queue once the manager and the worker are ready. If the queue runs
+out of items, the manager returns to IDLE state and will accept requests to execute
+foreground tasks: run a plan (<a class="reference internal" href="#method-queue-item-execute"><span class="std std-ref">‘queue_item_execute’</span></a> API), a function
+(<a class="reference internal" href="#method-function-execute"><span class="std std-ref">‘function_execute’</span></a> API) or a script (<a class="reference internal" href="#method-script-upload"><span class="std std-ref">‘script_upload’</span></a> API).
+If plans are added to the queue while the manager is busy, the queue is
+is automatically started once the task is complete.</p>
+<p><em>The request always succeeds</em>.</p>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><dl class="simple">
+<dt><strong>enable</strong>: <em>boolean</em></dt><dd><p>pass <em>True</em> to enable the ‘autostart’ mode and <em>False</em> to disable it.</p>
+</dd>
+<dt><strong>lock_key</strong>: <em>str</em> (optional)</dt><dd><p>Lock key. The API fails if <strong>the environment</strong> is locked and no valid key is submitted
+with the request. See documentation on <a class="reference internal" href="#method-lock"><span class="std std-ref">‘lock’</span></a> API for more details.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>Immediate: no follow-up requests are required.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
 <section id="re-pause">
 <span id="method-re-pause"></span><h4><strong>‘re_pause’</strong><a class="headerlink" href="#re-pause" title="Permalink to this heading">¶</a></h4>
 <table class="docutils align-default">
@@ -1801,8 +1869,8 @@ runs.</p>
 <dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
 </dd>
 <dt><strong>run_list</strong>: <em>list(dict)</em></dt><dd><p>the requested list of runs, list items are dictionaries with keys ‘uid’ (str),
-‘is_open’ (boolean) and ‘exit_status’ (str or None). See Bluesky documentation
-for ‘exit_status’ values.</p>
+‘scan_id’ (int), ‘is_open’ (boolean) and ‘exit_status’ (str or None).
+See Bluesky documentation for ‘exit_status’ values.</p>
 </dd>
 <dt><strong>run_list_uid</strong>: str</dt><dd><p>UID of the returned run list, identical to the RE Manager status field with
 the same name.</p>
