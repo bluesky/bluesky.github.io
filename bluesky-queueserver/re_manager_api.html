@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post105+g51e2b05 documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post129+g760eb30 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -35,7 +35,7 @@
             bluesky-queueserver
           </a>
               <div class="version">
-                0.0.18.post105+g51e2b05
+                0.0.18.post129+g760eb30
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -85,6 +85,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#detailed-reference">Detailed Reference</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#ping"><strong>‘ping’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#status"><strong>‘status’</strong></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#config-get"><strong>‘config_get’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#plans-allowed"><strong>‘plans_allowed’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#devices-allowed"><strong>‘devices_allowed’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#plans-existing"><strong>‘plans_existing’</strong></a></li>
@@ -228,10 +229,11 @@ an argument of the callback. In case of communication error, <cite>send_message<
 raise the exception (default) or return the error message. If reference to a callback function
 is passed to <cite>send_message</cite> (in thread-based API), the communication error message will be
 passed as <cite>msg_err</cite> parameter of the callback function</p>
-<p>Get status information from RE Manager:</p>
+<p>Get status and configuration information from RE Manager:</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="#method-ping"><span class="std std-ref">‘ping’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-status"><span class="std std-ref">‘status’</span></a></p></li>
+<li><p><a class="reference internal" href="#method-config-get"><span class="std std-ref">‘config_get’</span></a></p></li>
 </ul>
 <p>Existing and allowed plans and devices:</p>
 <ul class="simple">
@@ -405,10 +407,13 @@ destroyed (emergency).</p></li>
 RE Worker environment does not exist (or closed).</p>
 </dd>
 <dt><strong>worker_environment_state</strong>: <em>str</em></dt><dd><p>current state of the worker environment. Supported states: <em>‘initializing’</em>,
-<em>‘idle’</em>, <em>‘executing_plan’</em>, <em>‘executing_task’</em>, <em>‘closing’</em> and <em>‘closed’</em>.
-Running background tasks does not influence the state (<em>‘executing_task’</em> is
-not set). The environment state is different from Run Engine state (<em>re_state</em>),
-e.g. the environment is considered <em>idle</em> when the current plan is paused.</p>
+<em>‘failed’</em>, <em>‘idle’</em>, <em>‘executing_plan’</em>, <em>‘executing_task’</em>, <em>‘closing’</em>
+and <em>‘closed’</em>. The <em>‘failed’</em> state may be briefly reported during environment
+initialization in case startup failed, but the environment is not closed yet.
+Running background tasks does not influence the state
+(<em>‘executing_task’</em> is not set). The environment state is different from
+Run Engine state (<em>re_state</em>), e.g. the environment is considered <em>idle</em> when
+the current plan is paused.</p>
 </dd>
 <dt><strong>worker_background_tasks</strong>: <em>int</em></dt><dd><p>the number of background tasks, which are currently running in the worker environment.
 Excessive or growing number of background task may indicated serious issue with
@@ -434,6 +439,18 @@ time for deferred pause to be processed.</p>
 </dd>
 <dt><strong>worker_environment_exists</strong>: <em>boolean</em></dt><dd><p>indicates if RE Worker environment was created and plans could be executed.</p>
 </dd>
+<dt><strong>ip_kernel_state</strong>: <em>str</em> or <em>None</em></dt><dd><p>state of worker IPython kernel: <em>None</em> - environment is closed <em>‘disabled’</em> -
+IP kernel is not started or not used, <em>‘starting’</em> - startup in progress,
+<em>‘idle’</em> - IP kernel is idle and ready to execute tasks, <em>‘busy’</em> - kernel
+is busy executing a task started by the manager or another client client.</p>
+</dd>
+<dt><strong>ip_kernel_captured</strong>: <em>boolean</em> or <em>None</em></dt><dd><p>indicates if the IPython kernel is ‘captured’ by RE Manager: <em>None</em> - the
+environment is closed or IP kernel is not used, <em>True/False</em> - indicates
+if IP kernel is running execution loop started by RE Manager. The loop
+is expected to run when the worker is executing foreground tasks (plans,
+functions, scripts). The kernel can not be accessed directly by clients
+(e.g. using Jupyter Console) while it is ‘captured’.</p>
+</dd>
 <dt><strong>lock_info_uid</strong>: <em>str</em></dt><dd><p>UID of <strong>lock_info</strong> (see <strong>lock</strong> and <strong>lock_info</strong> API). Reload <em>lock_info</em> using
 <strong>lock_info</strong> API when the UID is changed.</p>
 </dd>
@@ -443,6 +460,45 @@ time for deferred pause to be processed.</p>
 See the <strong>lock</strong> API for details.</p></li>
 <li><p><strong>queue</strong> (<em>boolean</em>) - indicates if the queue is locked. See the <strong>lock</strong> API
 for details.</p></li>
+</ul>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>Immediate: no follow-up requests are required.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="config-get">
+<span id="method-config-get"></span><h4><strong>‘config_get’</strong><a class="headerlink" href="#config-get" title="Permalink to this heading">¶</a></h4>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘config_get’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Returns config info for RE Manager.</p>
+<p><em>The request always succeeds</em>.</p>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><p>—</p></td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
+</dd>
+<dt><strong>config</strong>: <em>dict</em></dt><dd><p>config information for RE Manager:</p>
+<ul class="simple">
+<li><p><strong>‘ip_connect_info’</strong> (<em>dict</em>) - connect info for IPython kernel running in
+the worker process, empty dictionary if IPython kernel is not running.
+The returned dictionary may be saved as JSON to create IPython kernel connection
+file. The connection file may be passed to Jupyter Console with
+<strong>‘–existing’</strong> parameter.</p></li>
 </ul>
 </dd>
 </dl>
