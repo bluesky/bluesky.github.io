@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post138+g752bd21 documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post180+g3923d2a documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -35,7 +35,7 @@
             bluesky-queueserver
           </a>
               <div class="version">
-                0.0.18.post138+g752bd21
+                0.0.18.post180+g3923d2a
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -445,11 +445,12 @@ IP kernel is not started or not used, <em>‘starting’</em> - startup in progr
 is busy executing a task started by the manager or another client client.</p>
 </dd>
 <dt><strong>ip_kernel_captured</strong>: <em>boolean</em> or <em>None</em></dt><dd><p>indicates if the IPython kernel is ‘captured’ by RE Manager: <em>None</em> - the
-environment is closed or IP kernel is not used, <em>True/False</em> - indicates
-if IP kernel is running execution loop started by RE Manager. The loop
-is expected to run when the worker is executing foreground tasks (plans,
-functions, scripts). The kernel can not be accessed directly by clients
-(e.g. using Jupyter Console) while it is ‘captured’.</p>
+environment is closed, <em>True/False</em> - indicates if IP kernel is running execution
+loop started by RE Manager. The loop is expected to run when the worker is executing
+foreground tasks (plans, functions, scripts). The kernel can not be accessed
+directly by clients (e.g. using Jupyter Console) while it is ‘captured’.
+The parameter is always <em>True</em> if the environment is open, but the worker is not
+using IPython kernel (the execution loop is always running).</p>
 </dd>
 <dt><strong>lock_info_uid</strong>: <em>str</em></dt><dd><p>UID of <strong>lock_info</strong> (see <strong>lock</strong> and <strong>lock_info</strong> API). Reload <em>lock_info</em> using
 <strong>lock_info</strong> API when the UID is changed.</p>
@@ -802,10 +803,14 @@ execution (<strong>‘result’</strong> key), which contains the following keys
 is successfully completed), <strong>‘failed’</strong> (the plan execution failed; a plan can fail due to
 multiple reasons, including internal error of RE Manager; see the error message to determine
 the reason of failure), <strong>‘stopped’</strong> (the plan was paused, then stopped; the plan is considered
-successfully executed), <strong>‘abort’</strong> and <strong>‘halt’</strong> (the plan was paused, then aborted or halted;
+successfully executed), <strong>‘aborted’</strong> and <strong>‘halted’</strong> (the plan was paused, then aborted or halted;
 the plan is considered failed), <strong>‘unknown’</strong> (the exit status information is lost, e.g. due
 to restart of RE Manager process, but plan information still needs to be placed in the history;
-this is very unlikely to happen in practice);</p></li>
+this is very unlikely to happen in practice). IPython mode: if a plan is started by the manager,
+then paused and resumed by a client directly connected to IPython kernel (e.g. Jupyter Console),
+the exit status can be <strong>unknown</strong> (all runs are successfully completed or the plan opened no
+runs), <strong>aborted</strong> (at least one of the runs is aborted or halted) or <strong>failed</strong> (at least one
+of the runs failed);</p></li>
 <li><p><strong>run_uids</strong> - list of UIDs (str) of runs executed by the plan;</p></li>
 <li><p><strong>scan_ids</strong> - list of scan IDs (int) of runs executed by the plan;</p></li>
 <li><p><strong>time_start</strong> and <strong>time_stop</strong> - time of start and completion of the plan (not runs),
@@ -1784,6 +1789,10 @@ foreground tasks: run a plan (<a class="reference internal" href="#method-queue-
 (<a class="reference internal" href="#method-function-execute"><span class="std std-ref">‘function_execute’</span></a> API) or a script (<a class="reference internal" href="#method-script-upload"><span class="std std-ref">‘script_upload’</span></a> API).
 If plans are added to the queue while the manager is busy, the queue is
 is automatically started once the task is complete.</p>
+<p>If a plan is paused by the manager and resumed (and runs to completion) or stopped in
+Jupyter console, the autostart mode is not disabled and the next plan is started.
+If the plan is aborted or halted in Jupyter Console, then the autostart is disabled.
+This behavior may change in the future.</p>
 <p><em>The request always succeeds</em>.</p>
 </td>
 </tr>
