@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a93 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a93.post1+g1886473 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a93
+                0.1.0a93.post1+g1886473
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -54,6 +54,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/writing.html">Writing Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How To Guides</span></p>
@@ -228,6 +229,7 @@
     <span class="n">serialization_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">compression_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">validation_registry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">tasks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">scalable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -252,6 +254,16 @@
     <span class="n">query_registry</span> <span class="o">=</span> <span class="n">query_registry</span> <span class="ow">or</span> <span class="n">get_query_registry</span><span class="p">()</span>
     <span class="n">compression_registry</span> <span class="o">=</span> <span class="n">compression_registry</span> <span class="ow">or</span> <span class="n">default_compression_registry</span>
     <span class="n">validation_registry</span> <span class="o">=</span> <span class="n">validation_registry</span> <span class="ow">or</span> <span class="n">default_validation_registry</span>
+    <span class="n">tasks</span> <span class="o">=</span> <span class="n">tasks</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">tasks</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;startup&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="n">tasks</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;background&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="n">tasks</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;shutdown&quot;</span><span class="p">,</span> <span class="p">[])</span>
+    <span class="c1"># The tasks are collected at config-parsing time off of the sub-trees.</span>
+    <span class="c1"># Collect the tasks off the root tree here, so that it works when</span>
+    <span class="c1"># a single tree is passed to build_app(...) directly, as happens in the tests.</span>
+    <span class="n">tasks</span><span class="p">[</span><span class="s2">&quot;startup&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;startup_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+    <span class="n">tasks</span><span class="p">[</span><span class="s2">&quot;background&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+    <span class="n">tasks</span><span class="p">[</span><span class="s2">&quot;shutdown&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;shutdown_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
 
     <span class="k">if</span> <span class="n">scalable</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;providers&quot;</span><span class="p">):</span>
@@ -543,11 +555,15 @@
 <span class="sd">    &quot;&quot;&quot;</span>
                 <span class="p">)</span>
 
+        <span class="c1"># Run startup tasks collected from trees (adapters).</span>
+        <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;startup&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="k">await</span> <span class="n">task</span><span class="p">()</span>
+
         <span class="c1"># Stash these to cancel this on shutdown.</span>
         <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tasks</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="c1"># Trees and Authenticators can run tasks in the background.</span>
         <span class="n">background_tasks</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">background_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+        <span class="n">background_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tasks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
         <span class="k">for</span> <span class="n">authenticator</span> <span class="ow">in</span> <span class="n">authenticators</span><span class="p">:</span>
             <span class="n">background_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
         <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">background_tasks</span> <span class="ow">or</span> <span class="p">[]:</span>
@@ -686,6 +702,10 @@
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">on_event</span><span class="p">(</span><span class="s2">&quot;shutdown&quot;</span><span class="p">)</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">shutdown_event</span><span class="p">():</span>
+        <span class="c1"># Run shutdown tasks collected from trees (adapters).</span>
+        <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;shutdown&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="k">await</span> <span class="n">task</span><span class="p">()</span>
+
         <span class="n">settings</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span>
         <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">..database.connection_pool</span> <span class="kn">import</span> <span class="n">close_database_connection_pool</span>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.node &mdash; tiled 0.1.0a93 documentation</title>
+  <title>tiled.client.node &mdash; tiled 0.1.0a93.post1+g1886473 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a93
+                0.1.0a93.post1+g1886473
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -54,6 +54,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/writing.html">Writing Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How To Guides</span></p>
@@ -201,10 +202,6 @@
     <span class="p">):</span>
         <span class="s2">&quot;This is not user-facing. Use Node.from_uri.&quot;</span>
 
-        <span class="k">if</span> <span class="n">structure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Node accepts &#39;structure&#39; param for API compatibility with other clients,</span>
-            <span class="c1"># but it should always be None.</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Node received unexpected structure: </span><span class="si">{</span><span class="n">structure</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span> <span class="o">=</span> <span class="n">structure_clients</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_queries</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">queries</span> <span class="ow">or</span> <span class="p">[])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_queries_as_params</span> <span class="o">=</span> <span class="n">_queries_to_params</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_queries</span><span class="p">)</span>
@@ -682,7 +679,14 @@
             <span class="k">return</span> <span class="p">[]</span>
 
     <span class="k">def</span> <span class="nf">new</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">structure_family</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">references</span><span class="o">=</span><span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">structure_family</span><span class="p">,</span>
+        <span class="n">structure</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">references</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Create a new item within this Node.</span>
@@ -695,6 +699,7 @@
 <span class="sd">        write_dataframe</span>
 <span class="sd">        write_coo_array</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">specs</span> <span class="o">=</span> <span class="n">specs</span> <span class="ow">or</span> <span class="p">[]</span>
         <span class="n">normalized_specs</span> <span class="o">=</span> <span class="p">[]</span>
@@ -703,30 +708,45 @@
                 <span class="n">spec</span> <span class="o">=</span> <span class="n">Spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
             <span class="n">normalized_specs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">spec</span><span class="p">))</span>
         <span class="n">references</span> <span class="o">=</span> <span class="n">references</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="n">data_sources</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">structure_family</span> <span class="o">!=</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">node</span><span class="p">:</span>
+            <span class="c1"># TODO Handle multiple data sources.</span>
+            <span class="n">data_sources</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;structure&quot;</span><span class="p">:</span> <span class="n">asdict</span><span class="p">(</span><span class="n">structure</span><span class="p">)})</span>
         <span class="n">item</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;attributes&quot;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
-                <span class="s2">&quot;structure&quot;</span><span class="p">:</span> <span class="n">asdict</span><span class="p">(</span><span class="n">structure</span><span class="p">),</span>
                 <span class="s2">&quot;structure_family&quot;</span><span class="p">:</span> <span class="n">StructureFamily</span><span class="p">(</span><span class="n">structure_family</span><span class="p">),</span>
                 <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalized_specs</span><span class="p">,</span>
                 <span class="s2">&quot;references&quot;</span><span class="p">:</span> <span class="n">references</span><span class="p">,</span>
+                <span class="s2">&quot;data_sources&quot;</span><span class="p">:</span> <span class="n">data_sources</span><span class="p">,</span>
             <span class="p">}</span>
         <span class="p">}</span>
 
         <span class="k">if</span> <span class="n">structure_family</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">dataframe</span><span class="p">:</span>
             <span class="c1"># send bytes base64 encoded</span>
-            <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
-                <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">]</span>
+            <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;data_sources&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span>
+                <span class="s2">&quot;meta&quot;</span>
+            <span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
+                <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;data_sources&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">]</span>
             <span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
-            <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;divisions&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
-                <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;divisions&quot;</span><span class="p">]</span>
+            <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;data_sources&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span>
+                <span class="s2">&quot;divisions&quot;</span>
+            <span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
+                <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;data_sources&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">][</span><span class="s2">&quot;micro&quot;</span><span class="p">][</span><span class="s2">&quot;divisions&quot;</span><span class="p">]</span>
             <span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
 
-        <span class="n">document</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">post_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">,</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">])</span>
+        <span class="n">body</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">body</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="n">document</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">post_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+        <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">structure</span>
 
         <span class="c1"># if server returned modified metadata update the local copy</span>
         <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">in</span> <span class="n">document</span><span class="p">:</span>
             <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">document</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">)</span>
+        <span class="c1"># Ditto for structure</span>
+        <span class="k">if</span> <span class="s2">&quot;structure&quot;</span> <span class="ow">in</span> <span class="n">document</span><span class="p">:</span>
+            <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">document</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;structure&quot;</span><span class="p">)</span>
 
         <span class="c1"># Merge in &quot;id&quot; and &quot;links&quot; returned by the server.</span>
         <span class="n">item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
@@ -742,13 +762,50 @@
     <span class="c1"># to attempt to avoid bumping into size limits.</span>
     <span class="n">_SUGGESTED_MAX_UPLOAD_SIZE</span> <span class="o">=</span> <span class="mi">100_000_000</span>  <span class="c1"># 100 MB</span>
 
-    <span class="k">def</span> <span class="nf">write_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">references</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">create_node</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">references</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        EXPERIMENTAL: Write an array.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        key : str, optional</span>
+<span class="sd">            Key (name) for this new node. If None, the server will provide a unique key.</span>
+<span class="sd">        metadata : dict, optional</span>
+<span class="sd">            User metadata. May be nested. Must contain only basic types</span>
+<span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
+<span class="sd">        dims : List[str], optional</span>
+<span class="sd">            A label for each dimension of the array.</span>
+<span class="sd">        specs : List[Spec], optional</span>
+<span class="sd">            List of names that are used to label that the data and/or metadata</span>
+<span class="sd">            conform to some named standard specification.</span>
+<span class="sd">        references : List[Dict[str, URL]], optional</span>
+<span class="sd">            References (e.g. links) to related information. This may include</span>
+<span class="sd">            links into other Tiled data sets, search results, or external</span>
+<span class="sd">            resources unrelated to Tiled.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
+            <span class="n">StructureFamily</span><span class="o">.</span><span class="n">node</span><span class="p">,</span>
+            <span class="p">{</span><span class="s2">&quot;contents&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
+            <span class="n">references</span><span class="o">=</span><span class="n">references</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">write_array</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">references</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        EXPERIMENTAL: Write an array.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        array : array-like</span>
+<span class="sd">        key : str, optional</span>
+<span class="sd">            Key (name) for this new node. If None, the server will provide a unique key.</span>
 <span class="sd">        metadata : dict, optional</span>
 <span class="sd">            User metadata. May be nested. Must contain only basic types</span>
 <span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
@@ -769,7 +826,6 @@
 
         <span class="kn">from</span> <span class="nn">..structures.array</span> <span class="kn">import</span> <span class="n">ArrayMacroStructure</span><span class="p">,</span> <span class="n">ArrayStructure</span><span class="p">,</span> <span class="n">BuiltinDtype</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">hasattr</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="s2">&quot;shape&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">)):</span>
             <span class="c1"># This does not implement enough of the array-like interface.</span>
             <span class="c1"># Coerce to numpy.</span>
@@ -804,6 +860,7 @@
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">array</span><span class="p">,</span>
             <span class="n">structure</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
             <span class="n">references</span><span class="o">=</span><span class="n">references</span><span class="p">,</span>
@@ -832,10 +889,39 @@
         <span class="k">return</span> <span class="n">client</span>
 
     <span class="k">def</span> <span class="nf">write_sparse</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">references</span><span class="o">=</span><span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">coords</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">,</span>
+        <span class="n">shape</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">references</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        EXPERIMENTAL: Write a sparse array.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coords : array-like</span>
+<span class="sd">        data : array-like</span>
+<span class="sd">        shape : tuple</span>
+<span class="sd">        key : str, optional</span>
+<span class="sd">            Key (name) for this new node. If None, the server will provide a unique key.</span>
+<span class="sd">        metadata : dict, optional</span>
+<span class="sd">            User metadata. May be nested. Must contain only basic types</span>
+<span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
+<span class="sd">        dims : List[str], optional</span>
+<span class="sd">            A label for each dimension of the array.</span>
+<span class="sd">        specs : List[Spec], optional</span>
+<span class="sd">            List of names that are used to label that the data and/or metadata</span>
+<span class="sd">            conform to some named standard specification.</span>
+<span class="sd">        references : List[Dict[str, URL]], optional</span>
+<span class="sd">            References (e.g. links) to related information. This may include</span>
+<span class="sd">            links into other Tiled data sets, search results, or external</span>
+<span class="sd">            resources unrelated to Tiled.</span>
 
 <span class="sd">        Examples</span>
 <span class="sd">        --------</span>
@@ -855,25 +941,6 @@
 <span class="sd">        # Coords are given with in the reference frame of each chunk.</span>
 <span class="sd">        &gt;&gt;&gt; x.write_block(coords=[[2, 4]], data=[3.1, 2.8], block=(0,))</span>
 <span class="sd">        &gt;&gt;&gt; x.write_block(coords=[[0, 1]], data=[6.7, 1.2], block=(1,))</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        coords : array-like</span>
-<span class="sd">        data : array-like</span>
-<span class="sd">        shape: Tuple</span>
-<span class="sd">        metadata : dict, optional</span>
-<span class="sd">            User metadata. May be nested. Must contain only basic types</span>
-<span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
-<span class="sd">        dims : List[str], optional</span>
-<span class="sd">            A label for each dimension of the array.</span>
-<span class="sd">        specs : List[Spec], optional</span>
-<span class="sd">            List of names that are used to label that the data and/or metadata</span>
-<span class="sd">            conform to some named standard specification.</span>
-<span class="sd">        references : Dict[str, URL], optional</span>
-<span class="sd">            References (e.g. links) to related information. This may include</span>
-<span class="sd">            links into other Tiled data sets, search results, or external</span>
-<span class="sd">            resources unrelated to Tiled.</span>
-
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">..structures.sparse</span> <span class="kn">import</span> <span class="n">COOStructure</span>
 
@@ -886,6 +953,7 @@
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">sparse</span><span class="p">,</span>
             <span class="n">structure</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
             <span class="n">references</span><span class="o">=</span><span class="n">references</span><span class="p">,</span>
@@ -893,7 +961,9 @@
         <span class="n">client</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">client</span>
 
-    <span class="k">def</span> <span class="nf">write_dataframe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataframe</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">references</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">write_dataframe</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dataframe</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">references</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        EXPERIMENTAL: Write a DataFrame.</span>
 
@@ -902,6 +972,8 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dataframe : pandas.DataFrame</span>
+<span class="sd">        key : str, optional</span>
+<span class="sd">            Key (name) for this new node. If None, the server will provide a unique key.</span>
 <span class="sd">        metadata : dict, optional</span>
 <span class="sd">            User metadata. May be nested. Must contain only basic types</span>
 <span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
@@ -922,8 +994,6 @@
             <span class="n">DataFrameMicroStructure</span><span class="p">,</span>
             <span class="n">DataFrameStructure</span><span class="p">,</span>
         <span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">specs</span> <span class="o">=</span> <span class="n">specs</span> <span class="ow">or</span> <span class="p">[]</span>
@@ -951,6 +1021,7 @@
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">dataframe</span><span class="p">,</span>
             <span class="n">structure</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
             <span class="n">references</span><span class="o">=</span><span class="n">references</span><span class="p">,</span>

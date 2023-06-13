@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.config &mdash; tiled 0.1.0a93 documentation</title>
+  <title>tiled.config &mdash; tiled 0.1.0a93.post1+g1886473 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a93
+                0.1.0a93.post1+g1886473
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -54,6 +54,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/search.html">Search</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/writing.html">Writing Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How To Guides</span></p>
@@ -139,6 +140,7 @@
 
 <span class="kn">import</span> <span class="nn">jsonschema</span>
 
+<span class="kn">from</span> <span class="nn">.adapters.mapping</span> <span class="kn">import</span> <span class="n">MapAdapter</span>
 <span class="kn">from</span> <span class="nn">.media_type_registration</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
 <span class="p">)</span>
@@ -179,6 +181,9 @@
 <span class="sd">    and used (and modified).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">config</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>  <span class="c1"># Avoid mutating input.</span>
+    <span class="n">startup_tasks</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">shutdown_tasks</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">background_tasks</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="n">query_registry</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">query_registry</span> <span class="o">=</span> <span class="n">default_query_registry</span>
     <span class="k">if</span> <span class="n">serialization_registry</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -257,10 +262,17 @@
                 <span class="n">tree</span> <span class="o">=</span> <span class="n">obj</span><span class="p">(</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Interpret obj as a tree *instance*.</span>
+                <span class="k">if</span> <span class="n">access_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Cannot apply access_policy to object </span><span class="si">{</span><span class="n">obj</span><span class="si">}</span><span class="s2"> which is already instantiated.&quot;</span>
+                    <span class="p">)</span>
                 <span class="n">tree</span> <span class="o">=</span> <span class="n">obj</span>
             <span class="k">if</span> <span class="n">segments</span> <span class="ow">in</span> <span class="n">trees</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The path </span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">segments</span><span class="p">)</span><span class="si">}</span><span class="s2"> was specified twice.&quot;</span><span class="p">)</span>
             <span class="n">trees</span><span class="p">[</span><span class="n">segments</span><span class="p">]</span> <span class="o">=</span> <span class="n">tree</span>
+            <span class="n">startup_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;startup_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+            <span class="n">shutdown_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;shutdown_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+            <span class="n">background_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">trees</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Configuration contains no trees&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">list</span><span class="p">(</span><span class="n">trees</span><span class="p">)</span> <span class="o">==</span> <span class="p">[()]:</span>
@@ -271,8 +283,6 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># There are one or more tree(s) to be served at</span>
             <span class="c1"># sub-paths. Merged them into one root MapAdapter.</span>
-            <span class="kn">from</span> <span class="nn">.adapters.mapping</span> <span class="kn">import</span> <span class="n">MapAdapter</span>
-
             <span class="c1"># Map path segments to dicts containing Adapters at that path.</span>
             <span class="n">root_mapping</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="n">index</span> <span class="o">=</span> <span class="p">{():</span> <span class="n">root_mapping</span><span class="p">}</span>
@@ -329,6 +339,11 @@
         <span class="s2">&quot;serialization_registry&quot;</span><span class="p">:</span> <span class="n">serialization_registry</span><span class="p">,</span>
         <span class="s2">&quot;compression_registry&quot;</span><span class="p">:</span> <span class="n">compression_registry</span><span class="p">,</span>
         <span class="s2">&quot;validation_registry&quot;</span><span class="p">:</span> <span class="n">validation_registry</span><span class="p">,</span>
+        <span class="s2">&quot;tasks&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;startup&quot;</span><span class="p">:</span> <span class="n">startup_tasks</span><span class="p">,</span>
+            <span class="s2">&quot;shutdown&quot;</span><span class="p">:</span> <span class="n">shutdown_tasks</span><span class="p">,</span>
+            <span class="s2">&quot;background&quot;</span><span class="p">:</span> <span class="n">background_tasks</span><span class="p">,</span>
+        <span class="p">},</span>
     <span class="p">}</span></div>
 
 

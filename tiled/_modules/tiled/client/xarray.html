@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.xarray &mdash; tiled 0.1.0a93 documentation</title>
+  <title>tiled.client.xarray &mdash; tiled 0.1.0a93.post1+g1886473 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a93
+                0.1.0a93.post1+g1886473
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -54,6 +54,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/writing.html">Writing Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How To Guides</span></p>
@@ -134,6 +135,7 @@
 
 <span class="kn">from</span> <span class="nn">..client.base</span> <span class="kn">import</span> <span class="n">BaseStructureClient</span>
 <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">deserialize_arrow</span>
+<span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">Spec</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span>
 <span class="kn">from</span> <span class="nn">.node</span> <span class="kn">import</span> <span class="n">Node</span>
 
@@ -312,6 +314,30 @@
             <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="n">variables</span><span class="p">},</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">write_xarray_dataset</span><span class="p">(</span><span class="n">client_node</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">dataset_client</span> <span class="o">=</span> <span class="n">client_node</span><span class="o">.</span><span class="n">create_node</span><span class="p">(</span>
+        <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="p">[</span><span class="n">Spec</span><span class="p">(</span><span class="s2">&quot;xarray_dataset&quot;</span><span class="p">)],</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;attrs&quot;</span><span class="p">:</span> <span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">}</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">data_vars</span><span class="p">:</span>
+        <span class="n">data_array</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">dataset_client</span><span class="o">.</span><span class="n">write_array</span><span class="p">(</span>
+            <span class="n">data_array</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;attrs&quot;</span><span class="p">:</span> <span class="n">data_array</span><span class="o">.</span><span class="n">attrs</span><span class="p">},</span>
+            <span class="n">specs</span><span class="o">=</span><span class="p">[</span><span class="n">Spec</span><span class="p">(</span><span class="s2">&quot;xarray_data_var&quot;</span><span class="p">)],</span>
+        <span class="p">)</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">coords</span><span class="p">:</span>
+        <span class="n">data_array</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">dataset_client</span><span class="o">.</span><span class="n">write_array</span><span class="p">(</span>
+            <span class="n">data_array</span><span class="o">.</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;attrs&quot;</span><span class="p">:</span> <span class="n">data_array</span><span class="o">.</span><span class="n">attrs</span><span class="p">},</span>
+            <span class="n">dims</span><span class="o">=</span><span class="n">data_array</span><span class="o">.</span><span class="n">dims</span><span class="p">,</span>
+            <span class="n">specs</span><span class="o">=</span><span class="p">[</span><span class="n">Spec</span><span class="p">(</span><span class="s2">&quot;xarray_coord&quot;</span><span class="p">)],</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">dataset_client</span>
 </pre></div>
 
            </div>
