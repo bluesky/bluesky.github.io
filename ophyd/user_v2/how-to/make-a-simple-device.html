@@ -390,7 +390,6 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="../generated/ophyd.v2.core.set_sim_value.html">ophyd.v2.core.set_sim_value</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../generated/ophyd.v2.core.wait_for_connection.html">ophyd.v2.core.wait_for_connection</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../generated/ophyd.v2.core.wait_for_value.html">ophyd.v2.core.wait_for_value</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/ophyd.v2.core.AsyncReadable.html">ophyd.v2.core.AsyncReadable</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../generated/ophyd.v2.core.AsyncStatus.html">ophyd.v2.core.AsyncStatus</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../generated/ophyd.v2.core.Device.html">ophyd.v2.core.Device</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../generated/ophyd.v2.core.DeviceCollector.html">ophyd.v2.core.DeviceCollector</a></li>
@@ -507,18 +506,18 @@ define some signals, then tell the superclass which signals should contribute to
         <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">epics_signal_r</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s2">&quot;Value&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">epics_signal_rw</span><span class="p">(</span><span class="n">EnergyMode</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s2">&quot;Mode&quot;</span><span class="p">)</span>
         <span class="c1"># Set name and signals for read() and read_configuration()</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_readable_signals</span><span class="p">(</span>
             <span class="n">read</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">],</span>
             <span class="n">config</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">],</span>
         <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>First some Signals are constructed and stored on the Device. Each one is passed
 its Python type, which could be:</p>
 <ul class="simple">
 <li><p>A primitive (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.11)"><code class="xref any docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.11)"><code class="xref any docutils literal notranslate"><span class="pre">int</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.11)"><code class="xref any docutils literal notranslate"><span class="pre">float</span></code></a>)</p></li>
-<li><p>An array (<a class="reference external" href="https://numpy.org/devdocs/reference/typing.html#numpy.typing.NDArray" title="(in NumPy v1.25rc1+257.g3205d8155)"><code class="xref any docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></a> or <code class="docutils literal notranslate"><span class="pre">Sequence[str]</span></code>)</p></li>
+<li><p>An array (<a class="reference external" href="https://numpy.org/devdocs/reference/typing.html#numpy.typing.NDArray" title="(in NumPy v1.25rc1+258.g51ddc1f2d)"><code class="xref any docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></a> or <code class="docutils literal notranslate"><span class="pre">Sequence[str]</span></code>)</p></li>
 <li><p>An enum (<a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Enum" title="(in Python v3.11)"><code class="xref any docutils literal notranslate"><span class="pre">enum.Enum</span></code></a>).</p></li>
 </ul>
 <p>The rest of the arguments are PV connection information, in this case the PV suffix.</p>
@@ -551,16 +550,22 @@ and implement some addition protocols:</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">precision</span> <span class="o">=</span> <span class="n">epics_signal_r</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s2">&quot;Readback.PREC&quot;</span><span class="p">)</span>
         <span class="c1"># Signals that collide with standard methods should have a trailing underscore</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stop_</span> <span class="o">=</span> <span class="n">epics_signal_x</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="s2">&quot;Stop.PROC&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_success</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="c1"># Set prefix, name, and signals for read() and read_configuration()</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
-            <span class="n">primary</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">readback</span><span class="p">,</span>
+        <span class="c1"># Whether set() should complete successfully or not</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_success</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="c1"># Set name and signals for read() and read_configuration()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_readable_signals</span><span class="p">(</span>
+            <span class="n">read</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">readback</span><span class="p">],</span>
             <span class="n">config</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">velocity</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">units</span><span class="p">],</span>
         <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">set_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_name</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="c1"># Readback should be named the same as its parent in read()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">readback</span><span class="o">.</span><span class="n">set_name</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_move</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_position</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">watchers</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_success</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_success</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="c1"># time.monotonic won&#39;t go backwards in case of NTP corrections</span>
         <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
         <span class="n">old_position</span><span class="p">,</span> <span class="n">units</span><span class="p">,</span> <span class="n">precision</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
@@ -583,7 +588,7 @@ and implement some addition protocols:</p>
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">current_position</span><span class="p">,</span> <span class="n">new_position</span><span class="p">):</span>
                 <span class="k">break</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_success</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_set_success</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Motor was stopped&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">move</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_position</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
@@ -601,7 +606,7 @@ and implement some addition protocols:</p>
         <span class="k">return</span> <span class="n">AsyncStatus</span><span class="p">(</span><span class="n">coro</span><span class="p">,</span> <span class="n">watchers</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_success</span> <span class="o">=</span> <span class="n">success</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_success</span> <span class="o">=</span> <span class="n">success</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">stop_</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -617,15 +622,15 @@ interrupted.</p>
 <section id="assembly">
 <h2>Assembly<a class="headerlink" href="#assembly" title="Permalink to this heading">#</a></h2>
 <p>Compound assemblies can be used to group Devices into larger logical Devices:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">SampleStage</span><span class="p">(</span><span class="n">StandardReadable</span><span class="p">):</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">SampleStage</span><span class="p">(</span><span class="n">Device</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A demo sample stage with X and Y movables&quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Define some child Devices</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">Mover</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="s2">&quot;X:&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">Mover</span><span class="p">(</span><span class="n">prefix</span> <span class="o">+</span> <span class="s2">&quot;Y:&quot;</span><span class="p">)</span>
-        <span class="c1"># Set prefix and name</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="c1"># Set name of device and child devices</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>This applies prefixes on construction:</p>
