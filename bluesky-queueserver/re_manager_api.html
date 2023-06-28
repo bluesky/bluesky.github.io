@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post191+gcc8bcc8 documentation</title>
+  <title>Run Engine Manager API &mdash; bluesky-queueserver 0.0.18.post211+g05ac2ed documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
@@ -35,7 +35,7 @@
             bluesky-queueserver
           </a>
               <div class="version">
-                0.0.18.post191+gcc8bcc8
+                0.0.18.post211+g05ac2ed
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -98,6 +98,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#environment-open"><strong>‘environment_open’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#environment-close"><strong>‘environment_close’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#environment-destroy"><strong>‘environment_destroy’</strong></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#environment-update"><strong>‘environment_update’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-mode-set"><strong>‘queue_mode_set’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-get"><strong>‘queue_get’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#queue-item-add"><strong>‘queue_item_add’</strong></a></li>
@@ -124,6 +125,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#lock"><strong>‘lock’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#lock-info"><strong>‘lock_info’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#unlock"><strong>‘unlock’</strong></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kernel-interrupt"><strong>‘kernel_interrupt’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#manager-stop"><strong>‘manager_stop’</strong></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#manager-kill"><strong>‘manager_kill’</strong></a></li>
 </ul>
@@ -255,6 +257,7 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <li><p><a class="reference internal" href="#method-environment-open"><span class="std std-ref">‘environment_open’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-environment-close"><span class="std std-ref">‘environment_close’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-environment-destroy"><span class="std std-ref">‘environment_destroy’</span></a></p></li>
+<li><p><a class="reference internal" href="#method-environment-update"><span class="std std-ref">‘environment_update’</span></a></p></li>
 </ul>
 <p>Operations with the plan queue:</p>
 <ul class="simple">
@@ -299,6 +302,10 @@ passed as <cite>msg_err</cite> parameter of the callback function</p>
 <li><p><a class="reference internal" href="#method-lock"><span class="std std-ref">‘lock’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-lock-info"><span class="std std-ref">‘lock_info’</span></a></p></li>
 <li><p><a class="reference internal" href="#method-unlock"><span class="std std-ref">‘unlock’</span></a></p></li>
+</ul>
+<p>Management of IPython kernel (IPython mode):</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#method-kernel-interrupt"><span class="std std-ref">‘kernel_interrupt’</span></a></p></li>
 </ul>
 <p>Stopping RE Manager (mostly used in testing):</p>
 <ul class="simple">
@@ -985,6 +992,53 @@ Monitor ‘manager_state’ and ‘worker_environment_exists’ status fields
 ‘destroying_environment’ while operation is in progress and switch to ‘idle’ when
 the operation completes and ‘worker_environment_exists’ is set False if environment
 was destroyed successfully.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="environment-update">
+<span id="method-environment-update"></span><h4><strong>‘environment_update’</strong><a class="headerlink" href="#environment-update" title="Permalink to this heading">¶</a></h4>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘environment_update’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Update the state and cached parameters of the worker environment based on contents of the
+worker namespace. The updated parameters include the reference to the Run Engine and lists of
+existing and available plans and devices. The API is intended for using in cases when
+users bypass RE Manager to modify contents of the namespace, for example by connecting
+directly to IPython kernel (IPython mode) and executing commands via Jupyter Console.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><dl class="simple">
+<dt><strong>run_in_background</strong>: <em>boolean</em> (optional, default <em>False</em>)</dt><dd><p>Set this parameter <em>True</em> to execute the update in the background thread (while a plan or
+another foreground task is running). Generally, it is recommended to run the update
+in the main thread. <strong>Developers of data acquisition workflows and/or user specific code
+are responsible for thread safety.</strong></p>
+</dd>
+<dt><strong>lock_key</strong>: <em>str</em> (optional)</dt><dd><p>Lock key. The API fails if <strong>the environment</strong> is locked and no valid key is submitted
+with the request. See documentation on <a class="reference internal" href="#method-lock"><span class="std std-ref">‘lock’</span></a> API for more details.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
+</dd>
+<dt><strong>task_uid</strong>: <em>str</em> or <em>None</em></dt><dd><p>Task UID can be used to check status of the task and download results once the task
+is completed (see <em>task_result</em> API).</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>The request initiates the update. The update is not instant, especially if the namespace
+is large. Monitor ‘manager_state’ (foreground task) or use ‘task_uid’ to check if
+the task execution is completed or the update is successful.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2400,6 +2454,53 @@ description.</p>
 </dd>
 <dt><strong>lock_info_uid</strong>: <em>str</em></dt><dd><p>UID of <em>lock_info</em>. The UID is also returned in RE Manager status and could be
 monitored to detect updates of <em>lock_info</em>.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Execution</p></td>
+<td><p>Immediate: no follow-up requests are required.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="kernel-interrupt">
+<span id="method-kernel-interrupt"></span><h4><strong>‘kernel_interrupt’</strong><a class="headerlink" href="#kernel-interrupt" title="Permalink to this heading">¶</a></h4>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>Method</p></td>
+<td><p><strong>‘kernel_interrupt’</strong></p></td>
+</tr>
+<tr class="row-even"><td><p>Description</p></td>
+<td><p>Send interrupt request (Ctrl-C) to the running IPython kernel. The API call fails if
+IPython mode is not enabled or environment does not exist (there is no IPython kernel).
+The API is primarily intended to interrupt tasks started by clients connected directly
+to IPython kernel (such as Jupyter Console) and by default it fails if the manager is
+executing a plan or a task. Set the <strong>interrupt_task</strong> and/or <strong>interrupt_plan</strong>
+parameters <em>True</em> in order to be able to interrupt a running foreground task or a plan
+(single interrupt initiates deferred pause, two consecutive interrupts initiate immediate
+pause). Note, that <a class="reference internal" href="#method-re-pause"><span class="std std-ref">‘re_pause’</span></a> API is more reliable method of pausing the plan.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Parameters</p></td>
+<td><dl class="simple">
+<dt><strong>interrupt_task</strong>: <em>boolean</em> (optional, default: <em>False</em>)</dt><dd><p>Allow interrupting a foreground task (e.g. a function or a script) started by RE Manager.</p>
+</dd>
+<dt><strong>interrupt_plan</strong>: <em>boolean</em> (optional, default: <em>False</em>)</dt><dd><p>Allow interrupting a running plan. By default the API fails if a plan is running in
+the worker environment (Run Engine is in the <em>‘running’</em> state), whether the plan
+was started by RE Manager or by connecting directly to the kernel (e.g. using Jupyter Console).
+Note, that using <a class="reference internal" href="#method-re-pause"><span class="std std-ref">‘re_pause’</span></a> API is the preferred way of pausing a running plan
+even if the plan was started bypassing the manager.</p>
+</dd>
+<dt><strong>task_uid</strong>: <em>str</em></dt><dd><p>Task UID.</p>
+</dd>
+</dl>
+</td>
+</tr>
+<tr class="row-even"><td><p>Returns</p></td>
+<td><dl class="simple">
+<dt><strong>success</strong>: <em>boolean</em></dt><dd><p>indicates if the request was processed successfully.</p>
+</dd>
+<dt><strong>msg</strong>: <em>str</em></dt><dd><p>error message in case of failure, empty string (‘’) otherwise.</p>
 </dd>
 </dl>
 </td>
