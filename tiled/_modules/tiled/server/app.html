@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a98.dev7+gf854755 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a98.dev8+g040305a documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a98.dev7+gf854755
+                0.1.0a98.dev8+g040305a
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -70,7 +70,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/tune-caches.html">Tune Caches to Balance Speed and Memory Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/docker.html">Run Tiled using Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../how-to/tiled-database.html">Set up a database for a scaled authenticated deloyment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanations</span></p>
 <ul>
@@ -646,12 +646,16 @@
         <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">AsyncSession</span>
 
-            <span class="kn">from</span> <span class="nn">..database</span> <span class="kn">import</span> <span class="n">orm</span>
-            <span class="kn">from</span> <span class="nn">..database.connection_pool</span> <span class="kn">import</span> <span class="n">open_database_connection_pool</span>
-            <span class="kn">from</span> <span class="nn">..database.core</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="kn">from</span> <span class="nn">..alembic_utils</span> <span class="kn">import</span> <span class="p">(</span>
                 <span class="n">DatabaseUpgradeNeeded</span><span class="p">,</span>
                 <span class="n">UninitializedDatabase</span><span class="p">,</span>
                 <span class="n">check_database</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="kn">from</span> <span class="nn">..authn_database</span> <span class="kn">import</span> <span class="n">orm</span>
+            <span class="kn">from</span> <span class="nn">..authn_database.connection_pool</span> <span class="kn">import</span> <span class="n">open_database_connection_pool</span>
+            <span class="kn">from</span> <span class="nn">..authn_database.core</span> <span class="kn">import</span> <span class="p">(</span>
+                <span class="n">ALL_REVISIONS</span><span class="p">,</span>
+                <span class="n">REQUIRED_REVISION</span><span class="p">,</span>
                 <span class="n">initialize_database</span><span class="p">,</span>
                 <span class="n">make_admin_by_identity</span><span class="p">,</span>
                 <span class="n">purge_expired</span><span class="p">,</span>
@@ -669,7 +673,7 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">redacted_url</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">password</span><span class="o">=</span><span class="s2">&quot;[redacted]&quot;</span><span class="p">)</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="k">await</span> <span class="n">check_database</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">check_database</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">REQUIRED_REVISION</span><span class="p">,</span> <span class="n">ALL_REVISIONS</span><span class="p">)</span>
                 <span class="k">except</span> <span class="n">UninitializedDatabase</span><span class="p">:</span>
                     <span class="nb">print</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
@@ -747,7 +751,7 @@
 
         <span class="n">settings</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span>
         <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">..database.connection_pool</span> <span class="kn">import</span> <span class="n">close_database_connection_pool</span>
+            <span class="kn">from</span> <span class="nn">..authn_database.connection_pool</span> <span class="kn">import</span> <span class="n">close_database_connection_pool</span>
 
             <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tasks</span><span class="p">:</span>
                 <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
@@ -1020,6 +1024,14 @@
 <span class="s2">    http://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">?api_key=</span><span class="si">{</span><span class="n">settings</span><span class="o">.</span><span class="n">single_user_api_key</span><span class="si">}</span>
 
 <span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
+            <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">allow_anonymous_access</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;    Because this server is public, the &#39;?api_key=...&#39; portion of</span>
+<span class="sd">    the URL is needed only for _writing_ data (if applicable).</span>
+
+<span class="sd">&quot;&quot;&quot;</span><span class="p">,</span>
             <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
         <span class="p">)</span>
 

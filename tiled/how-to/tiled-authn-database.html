@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Prometheus Metrics &mdash; tiled 0.1.0a98.dev8+g040305a documentation</title>
+  <title>Set up a database for a scaled authenticated deloyment &mdash; tiled 0.1.0a98.dev8+g040305a documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -21,8 +21,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Use Tiled in Python without an HTTP server" href="direct-client.html" />
-    <link rel="prev" title="Custom Python Client Objects" href="custom-clients.html" /> 
+    <link rel="next" title="Standards Used by Tiled" href="../explanations/standards.html" />
+    <link rel="prev" title="Run Tiled using Docker" href="docker.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -69,14 +69,16 @@
 <li class="toctree-l1"><a class="reference internal" href="profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api-keys.html">Create and Use API Keys</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom-clients.html">Custom Python Client Objects</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Prometheus Metrics</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#how-does-it-work">How does it work?</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="metrics.html">Prometheus Metrics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tune-caches.html">Tune Caches to Balance Speed and Memory Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docker.html">Run Tiled using Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Set up a database for a scaled authenticated deloyment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#create-a-database-and-user-for-tiled">Create a database and user for tiled</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configure-and-initialize-the-database">Configure and initialize the database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference">Reference</a></li>
+</ul>
+</li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanations</span></p>
 <ul>
@@ -121,9 +123,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Prometheus Metrics</li>
+      <li class="breadcrumb-item active">Set up a database for a scaled authenticated deloyment</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/how-to/metrics.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/how-to/tiled-authn-database.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -131,57 +133,53 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="prometheus-metrics">
-<h1>Prometheus Metrics<a class="headerlink" href="#prometheus-metrics" title="Permalink to this heading">¶</a></h1>
-<p>Tiled publishes <a class="reference external" href="https://prometheus.io/">Prometheus</a> metrics that can be used
-to monitor many aspects of its usage and performance over time. The metrics
-can be visualized in dashboards using, for example,
-<a class="reference external" href="https://grafana.com/">Grafana</a>.</p>
-<p><img alt="Grafana Dashboard with Tiled metrics" src="../_images/grafana-screenshot.png" /></p>
-<p>Tiled ships with some example configuration to make it easy to try this.</p>
-<ol class="arabic simple">
-<li><p>Install <a class="reference external" href="https://podman.io/">Podman</a> (recommended) or Docker (also works).</p></li>
-<li><p>Install <code class="docutils literal notranslate"><span class="pre">podman-compose</span></code> or <code class="docutils literal notranslate"><span class="pre">docker-compose</span></code>. Either can be installed using <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span></code>.</p></li>
-<li><p>Run <code class="docutils literal notranslate"><span class="pre">TILED_SINGLE_USER_API_KEY=secret</span> <span class="pre">podman-compose</span> <span class="pre">up</span></code>.</p></li>
-<li><p>Open Grafana by navigating a web browser to
-<a class="reference external" href="http://localhost:3000/d/Hnvd_TA4z/tiled-dashboard">http://localhost:3000/d/Hnvd_TA4z/tiled-dashboard</a>.</p></li>
-</ol>
-<p>The dashboard will be blank at first. To generate some activity, use the Tiled Python client.
-Authenticate using the dummy API key, <code class="docutils literal notranslate"><span class="pre">secret</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tiled.client</span> <span class="kn">import</span> <span class="n">from_uri</span>
-
-<span class="n">c</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="s2">&quot;http://localhost:8000&quot;</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;secret&quot;</span><span class="p">)</span>
-<span class="nb">list</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+  <section id="set-up-a-database-for-a-scaled-authenticated-deloyment">
+<h1>Set up a database for a scaled authenticated deloyment<a class="headerlink" href="#set-up-a-database-for-a-scaled-authenticated-deloyment" title="Permalink to this heading">¶</a></h1>
+<p>When Tiled is configured to use authentication provider(s), it employs a SQL
+database to store authenticaiton-related state, such as identities, sessions,
+and API keys. In single-process deployments, it creates a SQLite database
+automatically at startup. For scaled deployments, a proper scalable database
+should be used. Tiled supports any SQL dialect support by
+<a class="reference external" href="https://www.sqlalchemy.org/">SQLAlchemy</a>, but we recommend PostgreSQL for
+scaled deployments.</p>
+<section id="create-a-database-and-user-for-tiled">
+<h2>Create a database and user for tiled<a class="headerlink" href="#create-a-database-and-user-for-tiled" title="Permalink to this heading">¶</a></h2>
+<p>Invent a strong password, such as via:</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>openssl rand -hex 32
 </pre></div>
 </div>
-<p>To clean up, escape <code class="docutils literal notranslate"><span class="pre">podman-compose</span></code> using Ctrl+C, and then run <code class="docutils literal notranslate"><span class="pre">podman-compose</span> <span class="pre">down</span></code>. This must be run before running <code class="docutils literal notranslate"><span class="pre">podman-compose</span> <span class="pre">up</span></code> again. (Ditto for
-<code class="docutils literal notranslate"><span class="pre">docker-compose</span></code>.)</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p><strong>Security Notes</strong></p>
-<p>This example configuration disables authentication in Grafana so that no login
-is required to view or edit the dashboard. Do not use it “in production”, or
-anyone will be able to view (or vandalize) your dashboard.</p>
-<p>Also, the example Prometheus configuration in
-<code class="docutils literal notranslate"><span class="pre">montioring_example/prometheus/prometheus.yml</span></code> contains a dummy credential
-(<code class="docutils literal notranslate"><span class="pre">secret</span></code>). To run the example, it must match the secret set by
-<code class="docutils literal notranslate"><span class="pre">TILED_SINGLE_USER_API_KEY</span></code>.</p>
-<p>In real single-user deployments, the secret should be set to a secure value as described in
-<a class="reference external" href="https://blueskyproject.io/tiled/explanations/security.html">Tiled’s security documentation</a>.
-In multi-user deployments, an
-<a class="reference external" href="https://blueskyproject.io/tiled/how-to/api-keys.html">API key</a> with the
-<code class="docutils literal notranslate"><span class="pre">metrics</span></code> scope should be used.</p>
+<p>or</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>python -c &quot;import secrets; print(secrets.token_hex(32))&quot;
+</pre></div>
 </div>
-<section id="how-does-it-work">
-<h2>How does it work?<a class="headerlink" href="#how-does-it-work" title="Permalink to this heading">¶</a></h2>
-<ol class="arabic simple">
-<li><p>Tiled securely exposes an endpoint <code class="docutils literal notranslate"><span class="pre">/api/v1/metrics</span></code> with live metrics
-describing the activity and performance of the Tiled server.</p></li>
-<li><p>Prometheus polls this endpoints and stores the results in its database,
-accumulating a history.</p></li>
-<li><p>Grafana queries Prometheus for various metrics derived from this, which it
-then displays in dashboard.</p></li>
-</ol>
+<p>Create a user and a database in PostgreSQL. For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ sudo su postgres
+$ psql
+postgres=# CREATE USER &#39;tiled&#39; WITH SUPERUSER PASSWORD &#39;...&#39;;
+postgres=# CREATE DATABASE tiled ENCODING &#39;utf-8&#39; OWNER tiled;
+</pre></div>
+</div>
+</section>
+<section id="configure-and-initialize-the-database">
+<h2>Configure and initialize the database<a class="headerlink" href="#configure-and-initialize-the-database" title="Permalink to this heading">¶</a></h2>
+<p>Place the database URI in the configuration file, filling in the hostnmae
+in place of <code class="docutils literal notranslate"><span class="pre">...</span></code> below. Inject the password via an environment variable as shown;
+do not hard-code it in the configuration file. Be sure to quote the URI.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="l l-Scalar l-Scalar-Plain">database</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">uri</span><span class="p p-Indicator">:</span><span class="w"> </span><span class="s">&quot;postgresql://tiled:${TILED_DATABASE_PASSWORD}@.../tiled&quot;</span>
+</pre></div>
+</div>
+<p>Initialize the database. Initialization only has to be done once ever. (If you
+run this on an existing database Tiled will notice and refuse to initialize it.)</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tiled admin initialize-database postgresql://tiled:${TILED_DATABASE_PASSWORD}@.../tiled
+</pre></div>
+</div>
+<p>The database is ready to use.</p>
+</section>
+<section id="reference">
+<h2>Reference<a class="headerlink" href="#reference" title="Permalink to this heading">¶</a></h2>
+<p>See <code class="docutils literal notranslate"><span class="pre">database</span></code> in <a class="reference internal" href="../reference/service-configuration.html"><span class="doc">Service Configuration Reference</span></a> for comprehensive
+documentation of the options for tuning database performance and reliability.</p>
 </section>
 </section>
 
@@ -189,8 +187,8 @@ then displays in dashboard.</p></li>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="custom-clients.html" class="btn btn-neutral float-left" title="Custom Python Client Objects" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="direct-client.html" class="btn btn-neutral float-right" title="Use Tiled in Python without an HTTP server" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="docker.html" class="btn btn-neutral float-left" title="Run Tiled using Docker" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../explanations/standards.html" class="btn btn-neutral float-right" title="Standards Used by Tiled" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
