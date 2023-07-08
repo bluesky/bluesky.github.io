@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Caching Design and Roadmap &mdash; tiled 0.1.0a99.dev3+gf2bdb4f documentation</title>
+  <title>Caches &mdash; tiled 0.1.0a99.dev4+g458a8bd documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -37,7 +37,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a99.dev3+gf2bdb4f
+                0.1.0a99.dev4+g458a8bd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -52,7 +52,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/navigation.html">Navigate with the Python Client</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/slicing.html">Load Slices of Data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../tutorials/caching.html">Keep a Local Copy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Deliberate Export</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/serving-files.html">Serve a Directory of Files</a></li>
@@ -83,12 +82,13 @@
 <li class="toctree-l1"><a class="reference internal" href="security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="specialized-formats.html">Case Study: Reading and Exporting a Specialized Format</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Caching Design and Roadmap</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Caches</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#where-is-the-cache-content-stored">Where is the cache content stored?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#tiered-private-shared-caching">Tiered private/shared caching</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#connection-to-dask">Connection to Dask</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#what-other-kinds-of-caching-happen-in-tiled">What other kinds of caching happen in Tiled?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#client-side-http-response-cache">Client-side HTTP Response Cache</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#server-side-object-cache">Server-side Object Cache</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#connection-to-dask">Connection to Dask</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="access-control.html">Access Control</a></li>
@@ -125,7 +125,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Caching Design and Roadmap</li>
+      <li class="breadcrumb-item active">Caches</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/explanations/caching.md.txt" rel="nofollow"> View page source</a>
       </li>
@@ -135,32 +135,18 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="caching-design-and-roadmap">
-<h1>Caching Design and Roadmap<a class="headerlink" href="#caching-design-and-roadmap" title="Permalink to this heading">¶</a></h1>
-<p>For practical guides on client-side and service-side caching, see
-<a class="reference internal" href="../tutorials/caching.html"><span class="doc">Keep a Local Copy</span></a> and <a class="reference internal" href="../how-to/tune-caches.html"><span class="doc">Tune Caches to Balance Speed and Memory Usage</span></a>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This page discusses both current features and planned features. Italicized remarks
-in the discussion below makes clear what exists now and what is on the road map.</p>
-</div>
+  <section id="caches">
+<h1>Caches<a class="headerlink" href="#caches" title="Permalink to this heading">¶</a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Permalink to this heading">¶</a></h2>
 <p>Caching can make Tiled faster. Because, in general, caches make programs more
 complex and harder to trace, Tiled was designed without any caching at first.
 Caches were added with clear separation from the rest of Tiled and an easy
 opt-out path.</p>
-<p>There are three types of centrally-managed cache in Tiled:</p>
+<p>Tiled has two kinds of caching:</p>
 <ol class="arabic simple">
 <li><p><strong>Client-side response cache.</strong> The Tiled Python client implements a standard
-web cache, similar in both concept and implementation to a web browser’s cache.
-It enables an offline “airplane mode”. If a server is available, it enables the
-client to inexpensively check whether the version it has is the latest one.</p></li>
-<li><p><strong>Service-side response cache.</strong>
-<em>This is not yet implemented, but planned soon.</em>  This is also a standard web
-cache on the server side. It stores the content of the most frequent responses.
-This covers use cases such as, “Several users are asking for the exact same
-chunks of data in the exact same format.”</p></li>
+web cache, similar in both concept and implementation to a web browser’s cache.</p></li>
 <li><p><strong>Service-side object cache.</strong> The <em>response</em> caches operate near the outer
 edges of the application, stashing and retrieve HTTP response bytes. The
 <em>object</em> cache is more deeply integrated into the application: it is
@@ -174,66 +160,33 @@ resources differently for different requests. The object cache will not provide
 quite the same speed boost as a response cache, but it has a broader impact.</p></li>
 </ol>
 </section>
-<section id="where-is-the-cache-content-stored">
-<h2>Where is the cache content stored?<a class="headerlink" href="#where-is-the-cache-content-stored" title="Permalink to this heading">¶</a></h2>
-<p>Caches can be <em>private</em>, stored in the memory space of the worker process,
-or <em>shared</em> by multiple workers in a horizontally-scaled deployment via an
-external service such as Redis.</p>
-<p>The Tiled Python client currently supports a private, transient cache in memory
-and a shared, persistent cache backed by files on disk. (The disk cache uses
-file-based locking to ensure consistency.) The caching mechanism is pluggable:
-other storage mechanisms can be injected without changes to Tiled itself.</p>
-<p>On the service side, only the object cache is currently implemented, and it
-currently supports storage in worker memory only. Workers cannot currently
-access resources cached by other workers. In the future, Tiled will support
-(optionally) configuring the service-side response and object caches to sync
-with a shared Redis cache. Response data, being bytes, is straightforward to
-stored in a shared cache. But only a subset of the items in the object
-cache—those with known types and secure serialization schemes—will be
-eligible for the shared cache. For example, Tiled cannot place a file handle in
-Redis, and Tiled will not place unsigned pickled data in Redis (for security
-reasons).</p>
+<section id="client-side-http-response-cache">
+<h2>Client-side HTTP Response Cache<a class="headerlink" href="#client-side-http-response-cache" title="Permalink to this heading">¶</a></h2>
+<p>The client response cache is an LRU response cache backed by a SQLite file.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tiled.client</span> <span class="kn">import</span> <span class="n">from_uri</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+<span class="n">client</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>  <span class="c1"># clear cache</span>
+<span class="n">c</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">filepath</span>  <span class="c1"># locate SQLite file</span>
+
+<span class="c1"># Customize the cache.</span>
+
+<span class="kn">from</span> <span class="nn">tiled.client.cache</span> <span class="kn">import</span> <span class="n">Cache</span>
+
+<span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span>
+    <span class="n">capacity</span><span class="o">=</span><span class="mi">500_000_000</span><span class="p">,</span>  <span class="c1"># bytes</span>
+    <span class="n">max_item_size</span><span class="o">=</span><span class="mi">500_000</span><span class="p">,</span>  <span class="c1"># bytes</span>
+    <span class="n">filepath</span><span class="o">=</span><span class="s2">&quot;path/to/my_cache.db&quot;</span><span class="p">,</span>
+    <span class="n">readonly</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
-<section id="tiered-private-shared-caching">
-<h2>Tiered private/shared caching<a class="headerlink" href="#tiered-private-shared-caching" title="Permalink to this heading">¶</a></h2>
-<p>The planned syncing with a shared service-side cache will operate as follows:</p>
-<ul class="simple">
-<li><p>Worker A needs a resource. It checks its in-process cache and the shared cache,
-and it does not find it.</p></li>
-<li><p>Worker A creates the resource (e.g. a chunk of array data). It places a reference
-in its in-process cache. (This is very cheap.) It <em>also</em> places a copy into the
-shared Redis cache. This requires serialization and transport over the network.</p></li>
-<li><p>Worker A needs the resource again. It finds it in its in-process cache.</p></li>
-<li><p>Worker B needs the same resource. It checks its in-process cache and does not find
-it there. It checks the shared cache and does find it. It loads the data
-from the shared cache. This requires network transport and deserialization, but
-it is (likely) much cheaper that reading from disk. Worker B may place a
-reference in its in-process cache so that the next access will be faster.
-If Worker B’s in-process cache is near its maximum capacity, it will decide
-whether it is worthwhile to evict one of its existing items to make room for
-this latest one.</p></li>
-<li><p>Sometime later, both of these workers need the resource again and finds that
-the resource is no longer in their respective in-process caches—it has been
-evicted to make room for more frequently-used items. They find it in the shared
-cache. Again, they may restore it back into their in-process caches.</p></li>
-<li><p>Worker A processes a user request that <em>changes</em> the resource and invalidates the
-cached data. It evicts the stale data from its in-process cache and from the
-shared cache. It announces—via a publish/subscribe mechanism—that the
-item is stale. Worker B receives this announcement and evicts the stale data
-from its in-process cache as well.  When the data is next accessed from either
-worker, it will be loaded fresh.</p></li>
-<li><p>Suppose Worker C also held a copy of this cached stale data in its in-process
-cache. And suppose it has momentarily lost its connection to the
-publish/subscribe mechanism and missed this announcement. Therefore, it is
-momentarily unaware that it is holding stale data. Will it ever get back in
-sync? The announcements include a incrementing counter, so that whenever the
-<em>next</em> announcement is published or when Worker C performs a periodic
-check of the current counter value, Worker C will observe that it has missed
-one of more updates, and it will purge its in-process cache.</p></li>
-</ul>
-</section>
+<section id="server-side-object-cache">
+<h2>Server-side Object Cache<a class="headerlink" href="#server-side-object-cache" title="Permalink to this heading">¶</a></h2>
+<p>TO DO</p>
 <section id="connection-to-dask">
-<h2>Connection to Dask<a class="headerlink" href="#connection-to-dask" title="Permalink to this heading">¶</a></h2>
+<h3>Connection to Dask<a class="headerlink" href="#connection-to-dask" title="Permalink to this heading">¶</a></h3>
 <p>Dask provides an opt-in, experimental
 <a class="reference external" href="https://docs.dask.org/en/latest/caching.html">opportunistic caching</a> mechanism.
 It caches at the granularity of “tasks”, such as chunks of array or partitions
@@ -262,11 +215,6 @@ dask to leverage Tiled’s object cache very simply, like this:</p>
 </pre></div>
 </div>
 </section>
-<section id="what-other-kinds-of-caching-happen-in-tiled">
-<h2>What other kinds of caching happen in Tiled?<a class="headerlink" href="#what-other-kinds-of-caching-happen-in-tiled" title="Permalink to this heading">¶</a></h2>
-<p>The file-based directory-walking tree uses LRU caches, fixed at 10k items
-per subdirectory, to stash Adapter instances on first access. It discards them
-if the underlying file is removed or modified.</p>
 </section>
 </section>
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.base &mdash; tiled 0.1.0a99.dev3+gf2bdb4f documentation</title>
+  <title>tiled.client.base &mdash; tiled 0.1.0a99.dev4+g458a8bd documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a99.dev3+gf2bdb4f
+                0.1.0a99.dev4+g458a8bd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -49,7 +49,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/navigation.html">Navigate with the Python Client</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/slicing.html">Load Slices of Data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/caching.html">Keep a Local Copy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Deliberate Export</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
@@ -80,7 +79,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/specialized-formats.html">Case Study: Reading and Exporting a Specialized Format</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caching Design and Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caches</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/access-control.html">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/scaling-down.html">Scaling Tiled Down</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/faq.html">FAQ</a></li>
@@ -131,8 +130,8 @@
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
 
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">Spec</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">OneShotCachedMap</span>
-<span class="kn">from</span> <span class="nn">.cache</span> <span class="kn">import</span> <span class="n">Revalidate</span><span class="p">,</span> <span class="n">verify_cache</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">OneShotCachedMap</span><span class="p">,</span> <span class="n">safe_json_dump</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">handle_error</span>
 
 
 <span class="k">class</span> <span class="nc">MetadataRevisions</span><span class="p">:</span>
@@ -151,9 +150,13 @@
                 <span class="c1"># Used the cached value and do not make any request.</span>
                 <span class="k">return</span> <span class="n">length</span>
 
-        <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
-        <span class="p">)</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="n">length</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;count&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">LENGTH_CACHE_TTL</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">length</span>
@@ -165,10 +168,13 @@
             <span class="n">offset</span> <span class="o">=</span> <span class="n">item_</span>
             <span class="n">limit</span> <span class="o">=</span> <span class="mi">1</span>
 
-            <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="n">offset</span><span class="p">,</span> <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="n">limit</span><span class="p">}</span>
-            <span class="p">)</span>
-
+            <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                    <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="n">offset</span><span class="p">,</span> <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="n">limit</span><span class="p">},</span>
+                <span class="p">)</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
             <span class="p">(</span><span class="n">result</span><span class="p">,)</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
             <span class="k">return</span> <span class="n">result</span>
 
@@ -185,7 +191,12 @@
             <span class="n">next_page</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_link</span> <span class="o">+</span> <span class="n">params</span>
             <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">while</span> <span class="n">next_page</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="n">next_page</span><span class="p">)</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="n">next_page</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
                 <span class="k">else</span><span class="p">:</span>
@@ -195,7 +206,7 @@
             <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">delete_revision</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">delete_content</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="n">n</span><span class="p">})</span>
+        <span class="n">handle_error</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="n">n</span><span class="p">}))</span>
 
 
 <div class="viewcode-block" id="BaseClient"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.html#tiled.client.base.BaseClient">[docs]</a><span class="k">class</span> <span class="nc">BaseClient</span><span class="p">:</span>
@@ -264,14 +275,6 @@
         <span class="s2">&quot;Direct link to this entry&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">offline</span>
-
-    <span class="nd">@offline</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">offline</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-
 <div class="viewcode-block" id="BaseClient.new_variation"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.new_variation.html#tiled.client.base.BaseClient.new_variation">[docs]</a>    <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure_clients</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        This is intended primarily for internal use and use by subclasses.</span>
@@ -328,7 +331,11 @@
             <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalized_specs</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">put_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">],</span> <span class="n">data</span><span class="p">)</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">],</span> <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
@@ -363,33 +370,6 @@
             <span class="n">attributes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">]</span>
             <span class="n">structure_type</span> <span class="o">=</span> <span class="n">STRUCTURE_TYPES</span><span class="p">[</span><span class="n">attributes</span><span class="p">[</span><span class="s2">&quot;structure_family&quot;</span><span class="p">]]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span> <span class="o">=</span> <span class="n">structure_type</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">attributes</span><span class="p">[</span><span class="s2">&quot;structure&quot;</span><span class="p">])</span>
-
-<div class="viewcode-block" id="BaseStructureClient.download"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseStructureClient.download.html#tiled.client.base.BaseStructureClient.download">[docs]</a>    <span class="k">def</span> <span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Download all data into the cache.</span>
-
-<span class="sd">        This causes it to be cached if the context is configured with a cache.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">verify_cache</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span>
-        <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span></div>
-
-<div class="viewcode-block" id="BaseStructureClient.refresh"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseStructureClient.refresh.html#tiled.client.base.BaseStructureClient.refresh">[docs]</a>    <span class="k">def</span> <span class="nf">refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Refresh cached data for this node.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        force: bool</span>
-<span class="sd">            If False, (default) refresh only expired cache entries.</span>
-<span class="sd">            If True, refresh all cache entries.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">force</span><span class="p">:</span>
-            <span class="n">revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">FORCE</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_EXPIRED</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">revalidation</span><span class="p">(</span><span class="n">revalidate</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="BaseStructureClient.structure"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseStructureClient.structure.html#tiled.client.base.BaseStructureClient.structure">[docs]</a>    <span class="k">def</span> <span class="nf">structure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>

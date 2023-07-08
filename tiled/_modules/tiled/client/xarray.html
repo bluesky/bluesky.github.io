@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.xarray &mdash; tiled 0.1.0a99.dev3+gf2bdb4f documentation</title>
+  <title>tiled.client.xarray &mdash; tiled 0.1.0a99.dev4+g458a8bd documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a99.dev3+gf2bdb4f
+                0.1.0a99.dev4+g458a8bd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -49,7 +49,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/navigation.html">Navigate with the Python Client</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/slicing.html">Load Slices of Data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/caching.html">Keep a Local Copy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Deliberate Export</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
@@ -80,7 +79,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/specialized-formats.html">Case Study: Reading and Exporting a Specialized Format</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caching Design and Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caches</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/access-control.html">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/scaling-down.html">Scaling Tiled Down</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/faq.html">FAQ</a></li>
@@ -133,11 +132,11 @@
 <span class="kn">import</span> <span class="nn">pandas</span>
 <span class="kn">import</span> <span class="nn">xarray</span>
 
-<span class="kn">from</span> <span class="nn">..client.base</span> <span class="kn">import</span> <span class="n">BaseStructureClient</span>
 <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">deserialize_arrow</span>
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">Spec</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span>
 <span class="kn">from</span> <span class="nn">.container</span> <span class="kn">import</span> <span class="n">Container</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">handle_error</span>
 
 <span class="n">LENGTH_LIMIT_FOR_WIDE_TABLE_OPTIMIZATION</span> <span class="o">=</span> <span class="mi">1_000_000</span>
 
@@ -159,21 +158,16 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">download</span><span class="p">()</span>
-        <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
-
     <span class="k">def</span> <span class="nf">_build_arrays</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="p">):</span>
         <span class="n">data_vars</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="c1"># Optimization: Download scalar columns in batch as DataFrame.</span>
         <span class="c1"># on first access.</span>
         <span class="n">coords_fetcher</span> <span class="o">=</span> <span class="n">_WideTableFetcher</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_content</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">]</span>
         <span class="p">)</span>
         <span class="n">data_vars_fetcher</span> <span class="o">=</span> <span class="n">_WideTableFetcher</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">get_content</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">]</span>
         <span class="p">)</span>
         <span class="n">array_clients</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">array_structures</span> <span class="o">=</span> <span class="p">{}</span>
@@ -242,14 +236,7 @@
             <span class="nb">super</span><span class="p">()</span>
             <span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">variables</span><span class="o">=</span><span class="n">variables</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="o">=</span><span class="n">optimize_wide_table</span><span class="p">)</span>
             <span class="o">.</span><span class="n">load</span><span class="p">()</span>
-        <span class="p">)</span></div>
-
-    <span class="k">def</span> <span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c1"># Do not run super().download() because DaskDatasetClient calls compute()</span>
-        <span class="c1"># which does not apply here.</span>
-        <span class="n">BaseStructureClient</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ipython_key_completions_</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span></div>
+        <span class="p">)</span></div></div>
 
 
 <span class="n">URL_CHARACTER_LIMIT</span> <span class="o">=</span> <span class="mi">2000</span>  <span class="c1"># number of characters</span>
@@ -309,10 +296,12 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataframe</span>
 
     <span class="k">def</span> <span class="nf">_fetch_variables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="p">):</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">link</span><span class="p">,</span>
-            <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="n">variables</span><span class="p">},</span>
-        <span class="p">)</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">link</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">,</span> <span class="s2">&quot;field&quot;</span><span class="p">:</span> <span class="n">variables</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
 
 

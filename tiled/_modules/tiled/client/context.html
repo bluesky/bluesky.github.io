@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0a99.dev3+gf2bdb4f documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0a99.dev4+g458a8bd documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a99.dev3+gf2bdb4f
+                0.1.0a99.dev4+g458a8bd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -49,7 +49,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/navigation.html">Navigate with the Python Client</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/slicing.html">Load Slices of Data</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/caching.html">Keep a Local Copy</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/export.html">Deliberate Export</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/login.html">Log into an Authenticated Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
@@ -80,7 +79,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/security.html">Security</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/compression.html">Compression</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/specialized-formats.html">Case Study: Reading and Exporting a Specialized Format</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caching Design and Roadmap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../explanations/caching.html">Caches</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/access-control.html">Access Control</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/scaling-down.html">Scaling Tiled Down</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../explanations/faq.html">FAQ</a></li>
@@ -126,8 +125,7 @@
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.client.context</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">contextlib</span>
-<span class="kn">import</span> <span class="nn">getpass</span>
+<span></span><span class="kn">import</span> <span class="nn">getpass</span>
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">re</span>
@@ -139,20 +137,18 @@
 
 <span class="kn">import</span> <span class="nn">appdirs</span>
 <span class="kn">import</span> <span class="nn">httpx</span>
-<span class="kn">import</span> <span class="nn">msgpack</span>
 
 <span class="kn">from</span> <span class="nn">.._version</span> <span class="kn">import</span> <span class="n">__version__</span> <span class="k">as</span> <span class="n">tiled_version</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNSET</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">safe_json_dump</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNSET</span><span class="p">,</span> <span class="n">DictView</span>
 <span class="kn">from</span> <span class="nn">.auth</span> <span class="kn">import</span> <span class="n">CannotRefreshAuthentication</span><span class="p">,</span> <span class="n">TiledAuth</span><span class="p">,</span> <span class="n">build_refresh_request</span>
-<span class="kn">from</span> <span class="nn">.cache</span> <span class="kn">import</span> <span class="n">Revalidate</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">,</span>
-    <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span>
-    <span class="n">EVENT_HOOKS</span><span class="p">,</span>
-    <span class="n">NotAvailableOffline</span><span class="p">,</span>
-    <span class="n">handle_error</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">.cache</span> <span class="kn">import</span> <span class="n">Cache</span>
+<span class="kn">from</span> <span class="nn">.decoders</span> <span class="kn">import</span> <span class="n">SUPPORTED_DECODERS</span>
+<span class="kn">from</span> <span class="nn">.transport</span> <span class="kn">import</span> <span class="n">Transport</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">handle_error</span>
 
+<span class="n">ACCEPT_ENCODING</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">SUPPORTED_DECODERS</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="s2">&quot;identity&quot;</span><span class="p">]</span>
+<span class="p">)</span>
 <span class="n">USER_AGENT</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;python-tiled/</span><span class="si">{</span><span class="n">tiled_version</span><span class="si">}</span><span class="s2">&quot;</span>
 <span class="n">API_KEY_AUTH_HEADER_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^Apikey (\w+)$&quot;</span><span class="p">)</span>
 <span class="n">PROMPT_FOR_REAUTHENTICATION</span> <span class="o">=</span> <span class="kc">None</span>
@@ -170,8 +166,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">cache</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
         <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -181,7 +176,7 @@
         <span class="c1"># The uri is expected to reach the root API route.</span>
         <span class="n">uri</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
         <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept-encoding&quot;</span><span class="p">,</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">DEFAULT_ACCEPTED_ENCODINGS</span><span class="p">))</span>
+        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept-encoding&quot;</span><span class="p">,</span> <span class="n">ACCEPT_ENCODING</span><span class="p">)</span>
         <span class="c1"># Set the User Agent to help the server fail informatively if the client</span>
         <span class="c1"># version is too old.</span>
         <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;user-agent&quot;</span><span class="p">,</span> <span class="n">USER_AGENT</span><span class="p">)</span>
@@ -218,10 +213,15 @@
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">timeout</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">timeout</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Timeout</span><span class="p">(</span><span class="o">**</span><span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">:</span>
+            <span class="c1"># TODO Detect filesystem of TILED_CACHE_DIR. If it is a networked filesystem</span>
+            <span class="c1"># use a temporary database instead.</span>
+            <span class="n">filepath</span> <span class="o">=</span> <span class="n">TILED_CACHE_DIR</span> <span class="o">/</span> <span class="s2">&quot;http_response_cache.db&quot;</span>
+            <span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="n">filepath</span><span class="o">=</span><span class="n">filepath</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
+                <span class="n">transport</span><span class="o">=</span><span class="n">Transport</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">),</span>
                 <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
-                <span class="n">event_hooks</span><span class="o">=</span><span class="n">EVENT_HOOKS</span><span class="p">,</span>
                 <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
                 <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
                 <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -232,22 +232,17 @@
             <span class="c1"># verify parameter is dropped, as there is no SSL in ASGI mode</span>
             <span class="n">client</span> <span class="o">=</span> <span class="n">TestClient</span><span class="p">(</span>
                 <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
-                <span class="n">event_hooks</span><span class="o">=</span><span class="n">EVENT_HOOKS</span><span class="p">,</span>
                 <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
                 <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
                 <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="n">raise_server_exceptions</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">client</span><span class="o">.</span><span class="n">follow_redirects</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">client</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="n">Transport</span><span class="p">(</span><span class="n">transport</span><span class="o">=</span><span class="n">client</span><span class="o">.</span><span class="n">_transport</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">)</span>
             <span class="n">client</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
             <span class="c1"># The TestClient is meant to be used only as a context manager,</span>
             <span class="c1"># where the context starts and stops and the wrapped ASGI app.</span>
             <span class="c1"># We are abusing it slightly to enable interactive use of the</span>
             <span class="c1"># TestClient.</span>
-            <span class="c1">#</span>
-            <span class="c1"># Given a blank slate, we may not have chosen to support this at</span>
-            <span class="c1"># all; we may insist on using this only within a context manager.</span>
-            <span class="c1"># But for now it is necessary to suppot a smooth transition for</span>
-            <span class="c1"># databroker. We may revisit it later.</span>
             <span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">9</span><span class="p">):</span>
                 <span class="kn">import</span> <span class="nn">atexit</span>
 
@@ -265,8 +260,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span> <span class="o">=</span> <span class="n">client</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_verify</span> <span class="o">=</span> <span class="n">verify</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_WE_MUST</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">token_cache</span><span class="p">)</span>
 
         <span class="c1"># Make an initial &quot;safe&quot; request to:</span>
@@ -274,12 +267,15 @@
         <span class="c1"># (2) Let the server set the CSRF cookie.</span>
         <span class="c1"># No authentication has been set up yet, so these requests will be unauthenticated.</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-        <span class="k">if</span> <span class="n">offline</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># We need a CSRF token.</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_cache</span><span class="p">(</span><span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">,</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
+                    <span class="s2">&quot;Cache-Control&quot;</span><span class="p">:</span> <span class="s2">&quot;no-cache, no-store&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>  <span class="c1"># property setter sets Authorization header</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">admin</span> <span class="o">=</span> <span class="n">Admin</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>  <span class="c1"># accessor for admin-related requests</span></div>
 
@@ -306,8 +302,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_verify</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">offline</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span>
@@ -322,8 +316,6 @@
             <span class="n">timeout</span><span class="p">,</span>
             <span class="n">auth</span><span class="p">,</span>
             <span class="n">verify</span><span class="p">,</span>
-            <span class="n">offline</span><span class="p">,</span>
-            <span class="n">revalidate</span><span class="p">,</span>
             <span class="n">token_cache</span><span class="p">,</span>
             <span class="n">server_info</span><span class="p">,</span>
             <span class="n">cache</span><span class="p">,</span>
@@ -342,18 +334,15 @@
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
             <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
-            <span class="n">event_hooks</span><span class="o">=</span><span class="n">EVENT_HOOKS</span><span class="p">,</span>
             <span class="n">cookies</span><span class="o">=</span><span class="n">cookies</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
             <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">auth</span><span class="o">=</span><span class="n">auth</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span> <span class="o">=</span> <span class="n">revalidate</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">token_cache</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="n">server_info</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">offline</span> <span class="o">=</span> <span class="n">offline</span>
 
 <div class="viewcode-block" id="Context.from_any_uri"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.from_any_uri.html#tiled.client.context.Context.from_any_uri">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_any_uri</span><span class="p">(</span>
@@ -362,8 +351,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">cache</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
         <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -407,7 +395,6 @@
             <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
             <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
             <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
-            <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
             <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
@@ -420,8 +407,7 @@
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">app</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">cache</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
         <span class="n">token_cache</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -436,7 +422,6 @@
             <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
             <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
             <span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
-            <span class="n">offline</span><span class="o">=</span><span class="n">offline</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">token_cache</span><span class="o">=</span><span class="n">token_cache</span><span class="p">,</span>
             <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
@@ -477,29 +462,11 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">cache</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">cache</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span>
-
-    <span class="nd">@offline</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">offline</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="n">offline</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">offline</span> <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;To use offline mode,  Tiled must be configured with a Cache, as in</span>
-
-<span class="sd">&gt;&gt;&gt; from tiled.client import from_uri</span>
-<span class="sd">&gt;&gt;&gt; from tiled.client.cache import Cache</span>
-<span class="sd">&gt;&gt;&gt; client = from_uri(&quot;...&quot;, cache=Cache.on_disk(&quot;my_cache&quot;))</span>
-<span class="sd">&quot;&quot;&quot;</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span> <span class="o">=</span> <span class="n">offline</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
-            <span class="c1"># We need a CSRF token.</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_cache</span><span class="p">(</span><span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">)</span>
+    <span class="nd">@cache</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">cache</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cache</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">cache</span> <span class="o">=</span> <span class="n">cache</span>
 
     <span class="k">def</span> <span class="nf">which_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -507,7 +474,12 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Not API key is configured for the client.&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">create_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scopes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">expires_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">note</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -525,20 +497,22 @@
 <span class="sd">        note : Optional[str]</span>
 <span class="sd">            Description (for humans).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">post_json</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
-            <span class="p">{</span><span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="n">expires_in</span><span class="p">,</span> <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="n">note</span><span class="p">},</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="n">expires_in</span><span class="p">,</span> <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="n">note</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">revoke_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">first_eight</span><span class="p">):</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-            <span class="s2">&quot;DELETE&quot;</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
-            <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">first_eight</span><span class="p">},</span>
+        <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;apikey&quot;</span><span class="p">],</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">first_eight</span><span class="p">},</span>
+            <span class="p">)</span>
         <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">app</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -567,235 +541,6 @@
             <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">event_hooks</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">revalidate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        This controls how aggressively to check whether cache entries are out of date.</span>
-
-<span class="sd">        - FORCE: Always revalidate (generally too aggressive and expensive)</span>
-<span class="sd">        - IF_EXPIRED: Revalidate if the &quot;Expire&quot; date provided by the server has passed</span>
-<span class="sd">        - IF_WE_MUST: Only revalidate if the server indicated that is is a</span>
-<span class="sd">          particularly volatile entry, such as a search result to a dynamic query.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span>
-
-    <span class="nd">@revalidate</span><span class="o">.</span><span class="n">setter</span>
-    <span class="k">def</span> <span class="nf">revalidate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_revalidate</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-
-    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-    <span class="k">def</span> <span class="nf">revalidation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">revalidate</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Temporarily change the &#39;revalidate&#39; property in a context.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        revalidate: string or tiled.client.cache.Revalidate enum member</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">member</span> <span class="o">=</span> <span class="n">Revalidate</span><span class="p">(</span><span class="n">revalidate</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-            <span class="c1"># This raises a more helpful error that lists the valid options.</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Revalidation </span><span class="si">{</span><span class="n">revalidate</span><span class="si">}</span><span class="s2"> not recognized. Must be one of </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">Revalidate</span><span class="o">.</span><span class="n">__members__</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
-        <span class="n">original</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span> <span class="o">=</span> <span class="n">member</span>
-        <span class="k">yield</span>
-        <span class="c1"># Upon leaving context, set it back.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span> <span class="o">=</span> <span class="n">original</span>
-
-    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-    <span class="k">def</span> <span class="nf">disable_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">allow_read</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_write</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">allow_read</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_write</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">allow_write</span>
-        <span class="k">yield</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_write</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="k">def</span> <span class="nf">get_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">revalidate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">send_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="s2">&quot;auth&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="n">send_kwargs</span><span class="p">[</span><span class="s2">&quot;auth&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;auth&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">revalidate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Fallback to context default.</span>
-            <span class="n">revalidate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">revalidate</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">accept</span><span class="p">:</span>
-            <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Accept&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">accept</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offline</span><span class="p">:</span>
-            <span class="c1"># We must rely on the cache alone.</span>
-            <span class="c1"># The role of a &#39;reservation&#39; is to ensure that the content</span>
-            <span class="c1"># of interest is not evicted from the cache between the moment</span>
-            <span class="c1"># that we start verifying its validity and the moment that</span>
-            <span class="c1"># we actually read the content. It is used more extensively</span>
-            <span class="c1"># below.</span>
-            <span class="n">reservation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_reservation</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotAvailableOffline</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-            <span class="n">content</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">content</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># TODO Do we ever get here?</span>
-                <span class="k">raise</span> <span class="n">NotAvailableOffline</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">content</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># No cache, so we can use the client straightforwardly.</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
-            <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content-encoding&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;blosc&quot;</span><span class="p">:</span>
-                <span class="kn">import</span> <span class="nn">blosc</span>
-
-                <span class="k">return</span> <span class="n">blosc</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
-        <span class="c1"># If we get this far, we have an online client and a cache.</span>
-        <span class="c1"># Parse Cache-Control header directives.</span>
-        <span class="n">cache_control</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">directive</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">directive</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Cache-Control&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
-        <span class="p">}</span>
-        <span class="k">if</span> <span class="s2">&quot;no-cache&quot;</span> <span class="ow">in</span> <span class="n">cache_control</span><span class="p">:</span>
-            <span class="n">reservation</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">reservation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_reservation</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">is_stale</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">is_stale</span><span class="p">()</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
-                    <span class="c1"># This condition means &quot;client user wants us to unconditionally revalidate&quot;</span>
-                    <span class="p">(</span><span class="n">revalidate</span> <span class="o">==</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">FORCE</span><span class="p">)</span>
-                    <span class="ow">or</span>
-                    <span class="c1"># This condition means &quot;client user wants us to revalidate if expired&quot;</span>
-                    <span class="p">(</span><span class="n">is_stale</span> <span class="ow">and</span> <span class="p">(</span><span class="n">revalidate</span> <span class="o">==</span> <span class="n">Revalidate</span><span class="o">.</span><span class="n">IF_EXPIRED</span><span class="p">))</span>
-                    <span class="ow">or</span>
-                    <span class="c1"># This condition means &quot;server really wants us to revalidate&quot;</span>
-                    <span class="p">(</span><span class="n">is_stale</span> <span class="ow">and</span> <span class="n">reservation</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">must_revalidate</span><span class="p">)</span>
-                    <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span>
-                <span class="p">):</span>
-                    <span class="c1"># Short-circuit. Do not even bother consulting the server.</span>
-                    <span class="k">return</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_read</span><span class="p">:</span>
-                    <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;If-None-Match&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reservation</span><span class="o">.</span><span class="n">item</span><span class="o">.</span><span class="n">etag</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="o">**</span><span class="n">send_kwargs</span><span class="p">)</span>
-            <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">304</span><span class="p">:</span>  <span class="c1"># HTTP 304 Not Modified</span>
-                <span class="c1"># Update the expiration time.</span>
-                <span class="n">reservation</span><span class="o">.</span><span class="n">renew</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expires&quot;</span><span class="p">))</span>
-                <span class="c1"># Read from the cache</span>
-                <span class="k">return</span> <span class="n">reservation</span><span class="o">.</span><span class="n">load_content</span><span class="p">()</span>
-            <span class="k">elif</span> <span class="ow">not</span> <span class="n">response</span><span class="o">.</span><span class="n">is_error</span><span class="p">:</span>
-                <span class="n">etag</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ETag&quot;</span><span class="p">)</span>
-                <span class="n">encoding</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Content-Encoding&quot;</span><span class="p">)</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span>
-                <span class="c1"># httpx handles standard HTTP encodings transparently, but we have to</span>
-                <span class="c1"># handle &quot;blosc&quot; manually.</span>
-                <span class="k">if</span> <span class="n">encoding</span> <span class="o">==</span> <span class="s2">&quot;blosc&quot;</span><span class="p">:</span>
-                    <span class="kn">import</span> <span class="nn">blosc</span>
-
-                    <span class="n">content</span> <span class="o">=</span> <span class="n">blosc</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
-                <span class="k">if</span> <span class="p">(</span>
-                    <span class="p">(</span><span class="s2">&quot;no-store&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cache_control</span><span class="p">)</span>
-                    <span class="ow">and</span> <span class="p">(</span><span class="n">etag</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
-                    <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_disable_cache_write</span><span class="p">)</span>
-                <span class="p">):</span>
-                    <span class="c1"># Write to cache.</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
-                        <span class="n">url</span><span class="p">,</span>
-                        <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span>
-                        <span class="n">content</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="k">return</span> <span class="n">content</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Unexpected status_code </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-        <span class="k">finally</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">reservation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">reservation</span><span class="o">.</span><span class="n">ensure_released</span><span class="p">()</span>
-
-    <span class="k">def</span> <span class="nf">get_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">get_content</span><span class="p">(</span>
-                <span class="n">path</span><span class="p">,</span> <span class="n">accept</span><span class="o">=</span><span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-            <span class="p">),</span>
-            <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">post_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-            <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
-            <span class="n">path</span><span class="p">,</span>
-            <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">content</span><span class="p">),</span>
-            <span class="c1"># Submit CSRF token in both header and cookie.</span>
-            <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
-                <span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">],</span>
-                <span class="s2">&quot;accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span>
-            <span class="p">},</span>
-            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
-            <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-            <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">put_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-            <span class="s2">&quot;PUT&quot;</span><span class="p">,</span>
-            <span class="n">path</span><span class="p">,</span>
-            <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">content</span><span class="p">),</span>
-            <span class="c1"># Submit CSRF token in both header and cookie.</span>
-            <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
-                <span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">],</span>
-                <span class="s2">&quot;accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">,</span>
-            <span class="p">},</span>
-        <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
-            <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-            <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">put_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="c1"># Submit CSRF token in both header and cookie.</span>
-        <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-        <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">])</span>
-        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept&quot;</span><span class="p">,</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">)</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-            <span class="s2">&quot;PUT&quot;</span><span class="p">,</span>
-            <span class="n">path</span><span class="p">,</span>
-            <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
-            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
-            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
-            <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-            <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">delete_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="c1"># Submit CSRF token in both header and cookie.</span>
-        <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-        <span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">])</span>
-        <span class="n">headers</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;accept&quot;</span><span class="p">,</span> <span class="s2">&quot;application/x-msgpack&quot;</span><span class="p">)</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-            <span class="s2">&quot;DELETE&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span>
-        <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span>
-            <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-            <span class="n">timestamp</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Decode msgpack Timestamp as datetime.datetime object.</span>
-        <span class="p">)</span>
 
 <div class="viewcode-block" id="Context.authenticate"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.authenticate.html#tiled.client.context.Context.authenticate">[docs]</a>    <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -918,6 +663,8 @@
                 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">])</span>
                 <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">deadline</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Deadline expired.&quot;</span><span class="p">)</span>
+                <span class="c1"># Intentionally do not wrap this in handle_error(...).</span>
+                <span class="c1"># Check status codes manually below.</span>
                 <span class="n">access_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
                     <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">],</span>
                     <span class="n">json</span><span class="o">=</span><span class="p">{</span>
@@ -1025,7 +772,12 @@
 
     <span class="k">def</span> <span class="nf">whoami</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Return information about the currently-authenticated user or service.&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_json</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;whoami&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;whoami&quot;</span><span class="p">],</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
 <div class="viewcode-block" id="Context.logout"><a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.logout.html#tiled.client.context.Context.logout">[docs]</a>    <span class="k">def</span> <span class="nf">logout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1037,7 +789,7 @@
             <span class="k">return</span>
 
         <span class="c1"># Revoke the current session.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">auth/logout&quot;</span><span class="p">)</span>
+        <span class="n">handle_error</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">auth/logout&quot;</span><span class="p">))</span>
 
         <span class="c1"># Clear on-disk state.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span>
@@ -1053,15 +805,14 @@
 
 <span class="sd">        This may be done to ensure that a possibly-leaked refresh token cannot be used.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">build_request</span><span class="p">(</span>
-            <span class="s2">&quot;DELETE&quot;</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;revoke_session&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                <span class="n">session_id</span><span class="o">=</span><span class="n">session_id</span>
-            <span class="p">),</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
-        <span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span></div>
+        <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;revoke_session&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">session_id</span><span class="o">=</span><span class="n">session_id</span>
+                <span class="p">),</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
+            <span class="p">)</span>
+        <span class="p">)</span></div>
 
 
 <span class="k">def</span> <span class="nf">_choose_identity_provider</span><span class="p">(</span><span class="n">providers</span><span class="p">,</span> <span class="n">provider</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -1112,19 +863,17 @@
     <span class="k">def</span> <span class="nf">list_principals</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
         <span class="s2">&quot;List Principals (users and services) in the authenticaiton database.&quot;</span>
         <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span>
-        <span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">show_principal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">):</span>
         <span class="s2">&quot;Show one Principal (user or service) in the authenticaiton database.&quot;</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
 
 <span class="k">class</span> <span class="nc">CannotPrompt</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
