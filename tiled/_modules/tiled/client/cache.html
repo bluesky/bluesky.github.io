@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.cache &mdash; tiled 0.1.0a99.dev5+gcd11954 documentation</title>
+  <title>tiled.client.cache &mdash; tiled 0.1.0a99.dev6+g64ad791 documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a99.dev5+gcd11954
+                0.1.0a99.dev6+g64ad791
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -235,9 +235,17 @@
         <span class="n">conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
 
 
-<span class="k">def</span> <span class="nf">_prepare_database</span><span class="p">(</span><span class="n">filepath</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_prepare_database</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">readonly</span><span class="p">):</span>
     <span class="n">Path</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">conn</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">check_same_thread</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">readonly</span><span class="p">:</span>
+        <span class="c1"># The methods in Cache will not try to write when in readonly mode.</span>
+        <span class="c1"># For extra safety we open a readonly connection to the database, so</span>
+        <span class="c1"># that SQLite itself will prohibit writing.</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;file:</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">?mode=ro&quot;</span><span class="p">,</span> <span class="n">uri</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">check_same_thread</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">check_same_thread</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">cursor</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT name FROM sqlite_master WHERE type=&#39;table&#39;;&quot;</span><span class="p">)</span>
     <span class="n">tables</span> <span class="o">=</span> <span class="p">[</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()]</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">tables</span><span class="p">:</span>
@@ -271,46 +279,62 @@
         <span class="n">max_item_size</span><span class="o">=</span><span class="mi">500_000</span><span class="p">,</span>
         <span class="n">readonly</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="k">if</span> <span class="n">readonly</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;readonly cache is planned but not yet implemented&quot;</span>
-            <span class="p">)</span>
         <span class="k">if</span> <span class="n">capacity</span> <span class="o">&lt;=</span> <span class="n">max_item_size</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;capacity must be greater than max_item_size&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span> <span class="o">=</span> <span class="n">capacity</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">max_item_size</span> <span class="o">=</span> <span class="n">max_item_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span> <span class="o">=</span> <span class="n">capacity</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_item_size</span> <span class="o">=</span> <span class="n">max_item_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_readonly</span> <span class="o">=</span> <span class="n">readonly</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_filepath</span> <span class="o">=</span> <span class="n">filepath</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_owner_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span><span class="o">.</span><span class="n">ident</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span> <span class="o">=</span> <span class="n">_prepare_database</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span> <span class="o">=</span> <span class="n">_prepare_database</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">readonly</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">write_safe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="Cache.write_safe"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.write_safe.html#tiled.client.cache.Cache.write_safe">[docs]</a>    <span class="k">def</span> <span class="nf">write_safe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Check that it is safe to write.</span>
 
 <span class="sd">        SQLite is not threadsafe for concurrent _writes_.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span><span class="o">.</span><span class="n">ident</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owner_thread</span>
+        <span class="k">return</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span><span class="o">.</span><span class="n">ident</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owner_thread</span></div>
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filepath</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_item_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_readonly</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
         <span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">capacity</span><span class="p">,</span> <span class="n">max_item_size</span><span class="p">,</span> <span class="n">readonly</span><span class="p">)</span> <span class="o">=</span> <span class="n">state</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span> <span class="o">=</span> <span class="n">capacity</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">max_item_size</span> <span class="o">=</span> <span class="n">max_item_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span> <span class="o">=</span> <span class="n">capacity</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_item_size</span> <span class="o">=</span> <span class="n">max_item_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_readonly</span> <span class="o">=</span> <span class="n">readonly</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_filepath</span> <span class="o">=</span> <span class="n">filepath</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_owner_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span><span class="o">.</span><span class="n">ident</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span> <span class="o">=</span> <span class="n">_prepare_database</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span> <span class="o">=</span> <span class="n">_prepare_database</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">readonly</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">readonly</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;If True, cache be read but not updated.&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_readonly</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">filepath</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;Filepath of SQLite database storing cache data&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filepath</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">capacity</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;Max capacity in bytes. Includes response bodies only.&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span>
+
+    <span class="nd">@capacity</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">capacity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">capacity</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span> <span class="o">=</span> <span class="n">capacity</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">max_item_size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s2">&quot;Max size of a response body eligible for caching.&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_item_size</span>
+
+    <span class="nd">@max_item_size</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">max_item_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_item_size</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_item_size</span> <span class="o">=</span> <span class="n">max_item_size</span>
 
 <div class="viewcode-block" id="Cache.clear"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.clear.html#tiled.client.cache.Cache.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -322,7 +346,7 @@
             <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DELETE FROM responses&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
 
-    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">tp</span><span class="o">.</span><span class="n">Optional</span><span class="p">[</span><span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">]:</span>
+<div class="viewcode-block" id="Cache.get"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.get.html#tiled.client.cache.Cache.get">[docs]</a>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">tp</span><span class="o">.</span><span class="n">Optional</span><span class="p">[</span><span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get cached response from Cache.</span>
 
 <span class="sd">        We use the httpx.Request.url as key.</span>
@@ -354,9 +378,9 @@
                 <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
 
-        <span class="k">return</span> <span class="n">load</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">load</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span>
+<div class="viewcode-block" id="Cache.set"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.set.html#tiled.client.cache.Cache.set">[docs]</a>    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">request</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Request</span><span class="p">,</span>
@@ -368,11 +392,12 @@
 <span class="sd">        In case the response does not yet have a &#39;_content&#39; property, content should</span>
 <span class="sd">        be provided in the optional &#39;content&#39; kwarg (usually using a callback)</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            request: httpx.Request</span>
-<span class="sd">            response: httpx.Response, to cache</span>
-<span class="sd">            content (bytes, optional): Defaults to None, should be provided in case</span>
-<span class="sd">                response that not have yet content.</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        request: httpx.Request</span>
+<span class="sd">        response: httpx.Response, to cache</span>
+<span class="sd">        content (bytes, optional): Defaults to None, should be provided in case</span>
+<span class="sd">            response that not have yet content.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">readonly</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cache is readonly&quot;</span><span class="p">)</span>
@@ -384,7 +409,7 @@
             <span class="k">return</span> <span class="kc">False</span>
         <span class="k">with</span> <span class="n">closing</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">())</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
             <span class="p">(</span><span class="n">total_size</span><span class="p">,)</span> <span class="o">=</span> <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT SUM(size) FROM responses&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
-            <span class="n">total_size</span> <span class="o">=</span> <span class="n">total_size</span> <span class="ow">or</span> <span class="mi">0</span>  <span class="c1"># may be None</span>
+            <span class="n">total_size</span> <span class="o">=</span> <span class="n">total_size</span> <span class="ow">or</span> <span class="mi">0</span>  <span class="c1"># If empty, total_size is None.</span>
             <span class="k">while</span> <span class="p">(</span><span class="n">incoming_size</span> <span class="o">+</span> <span class="n">total_size</span><span class="p">)</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">capacity</span><span class="p">:</span>
                 <span class="c1"># Cull to make space.</span>
                 <span class="p">(</span><span class="n">cache_key</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span> <span class="o">=</span> <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
@@ -403,9 +428,9 @@
                 <span class="p">(</span><span class="n">get_cache_key</span><span class="p">(</span><span class="n">request</span><span class="p">),)</span> <span class="o">+</span> <span class="n">dump</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">content</span><span class="p">),</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
-        <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
 
-    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="Cache.delete"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.delete.html#tiled.client.cache.Cache.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete an entry from cache.</span>
 
 <span class="sd">        Args:</span>
@@ -419,63 +444,23 @@
             <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
                 <span class="s2">&quot;DELETE FROM responses WHERE cache_key=?&quot;</span><span class="p">,</span> <span class="p">(</span><span class="n">get_cache_key</span><span class="p">(</span><span class="n">request</span><span class="p">),)</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
 
-    <span class="k">def</span> <span class="nf">size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="Cache.size"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.size.html#tiled.client.cache.Cache.size">[docs]</a>    <span class="k">def</span> <span class="nf">size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Size of response bodies in bytes (does not count headers and other auxiliary info)&quot;</span>
         <span class="k">with</span> <span class="n">closing</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">())</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
             <span class="p">(</span><span class="n">total_size</span><span class="p">,)</span> <span class="o">=</span> <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT SUM(size) FROM responses&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">total_size</span>
+        <span class="k">return</span> <span class="n">total_size</span> <span class="ow">or</span> <span class="mi">0</span>  <span class="c1"># If emtpy, total_size is None.</span></div>
 
-    <span class="k">def</span> <span class="nf">count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="Cache.count"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.count.html#tiled.client.cache.Cache.count">[docs]</a>    <span class="k">def</span> <span class="nf">count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Number of responses cached&quot;</span>
         <span class="k">with</span> <span class="n">closing</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">())</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
             <span class="p">(</span><span class="n">count</span><span class="p">,)</span> <span class="o">=</span> <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;SELECT COUNT(*) FROM responses&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">count</span>
+        <span class="k">return</span> <span class="n">count</span> <span class="ow">or</span> <span class="mi">0</span>  <span class="c1"># If empty, count is None.</span></div>
 
-    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="Cache.close"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.close.html#tiled.client.cache.Cache.close">[docs]</a>    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Close cache.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
-
-    <span class="c1"># async def aget(self, request: httpx.Request) -&gt; tp.Optional[httpx.Response]:</span>
-    <span class="c1">#     &quot;&quot;&quot;(Async) Get cached response from Cache.</span>
-
-    <span class="c1">#     We use the httpx.Request.url as key.</span>
-
-    <span class="c1">#     Args:</span>
-    <span class="c1">#         request: httpx.Request</span>
-
-    <span class="c1">#     Returns:</span>
-    <span class="c1">#         tp.Optional[httpx.Response]</span>
-    <span class="c1">#     &quot;&quot;&quot;</span>
-
-    <span class="c1"># async def aset(</span>
-    <span class="c1">#     self,</span>
-    <span class="c1">#     *,</span>
-    <span class="c1">#     request: httpx.Request,</span>
-    <span class="c1">#     response: httpx.Response,</span>
-    <span class="c1">#     content: tp.Optional[bytes] = None,</span>
-    <span class="c1"># ) -&gt; None:</span>
-    <span class="c1">#     &quot;&quot;&quot;(Async) Set new response entry in cache.</span>
-
-    <span class="c1">#     In case the response does not yet have a &#39;_content&#39; property, content should</span>
-    <span class="c1">#     be provided in the optional &#39;content&#39; kwarg (usually using a callback)</span>
-
-    <span class="c1">#     Args:</span>
-    <span class="c1">#         request: httpx.Request</span>
-    <span class="c1">#         response: httpx.Response, to cache</span>
-    <span class="c1">#         content (bytes, optional): Defaults to None, should be provided in case</span>
-    <span class="c1">#             response that not have yet content.</span>
-    <span class="c1">#     &quot;&quot;&quot;</span>
-
-    <span class="c1"># async def adelete(self, request: httpx.Request) -&gt; None:</span>
-    <span class="c1">#     &quot;&quot;&quot;(Async) Delete an entry from cache.</span>
-
-    <span class="c1">#     Args:</span>
-    <span class="c1">#         request: httpx.Request</span>
-    <span class="c1">#     &quot;&quot;&quot;</span>
-    <span class="c1"># async def aclose(self) -&gt; None:</span>
-    <span class="c1">#     &quot;&quot;&quot;(Async) Close cache.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div></div>
 </pre></div>
 
            </div>
