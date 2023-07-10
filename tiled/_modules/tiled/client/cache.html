@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.cache &mdash; tiled 0.1.0a99.dev10+g8c1f951 documentation</title>
+  <title>tiled.client.cache &mdash; tiled 0.1.0a99.dev11+g2842dae documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a99.dev10+g8c1f951
+                0.1.0a99.dev11+g2842dae
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -126,6 +126,7 @@
              
   <h1>Source code for tiled.client.cache</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">sqlite3</span>
 <span class="kn">import</span> <span class="nn">threading</span>
 <span class="kn">import</span> <span class="nn">typing</span> <span class="k">as</span> <span class="nn">tp</span>
@@ -133,6 +134,7 @@
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
+<span class="kn">import</span> <span class="nn">appdirs</span>
 <span class="kn">import</span> <span class="nn">httpx</span>
 
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">TiledResponse</span>
@@ -274,11 +276,20 @@
 <div class="viewcode-block" id="Cache"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.html#tiled.client.cache.Cache">[docs]</a><span class="k">class</span> <span class="nc">Cache</span><span class="p">:</span>
 <div class="viewcode-block" id="Cache.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.html#tiled.client.cache.Cache.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">filepath</span><span class="p">,</span>
+        <span class="n">filepath</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">capacity</span><span class="o">=</span><span class="mi">500_000_000</span><span class="p">,</span>
         <span class="n">max_item_size</span><span class="o">=</span><span class="mi">500_000</span><span class="p">,</span>
         <span class="n">readonly</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="k">if</span> <span class="n">filepath</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Resolve this here, not at module scope, because the test suite</span>
+            <span class="c1"># injects TILED_CACHE_DIR env var to use a temporary directory.</span>
+            <span class="n">TILED_CACHE_DIR</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_CACHE_DIR&quot;</span><span class="p">,</span> <span class="n">appdirs</span><span class="o">.</span><span class="n">user_cache_dir</span><span class="p">(</span><span class="s2">&quot;tiled&quot;</span><span class="p">))</span>
+            <span class="p">)</span>
+            <span class="c1"># TODO Detect filesystem of TILED_CACHE_DIR. If it is a networked filesystem</span>
+            <span class="c1"># use a temporary database instead.</span>
+            <span class="n">filepath</span> <span class="o">=</span> <span class="n">TILED_CACHE_DIR</span> <span class="o">/</span> <span class="s2">&quot;http_response_cache.db&quot;</span>
         <span class="k">if</span> <span class="n">capacity</span> <span class="o">&lt;=</span> <span class="n">max_item_size</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;capacity must be greater than max_item_size&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_capacity</span> <span class="o">=</span> <span class="n">capacity</span>
@@ -287,6 +298,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_filepath</span> <span class="o">=</span> <span class="n">filepath</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_owner_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">current_thread</span><span class="p">()</span><span class="o">.</span><span class="n">ident</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span> <span class="o">=</span> <span class="n">_prepare_database</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="n">readonly</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&lt;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_filepath</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&gt;&quot;</span>
 
 <div class="viewcode-block" id="Cache.write_safe"><a class="viewcode-back" href="../../../reference/generated/tiled.client.cache.Cache.write_safe.html#tiled.client.cache.Cache.write_safe">[docs]</a>    <span class="k">def</span> <span class="nf">write_safe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -342,6 +356,10 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">readonly</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot clear read-only cache&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">write_safe</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot clear cache from a different thread than the one it was created on&quot;</span>
+            <span class="p">)</span>
         <span class="k">with</span> <span class="n">closing</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">())</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
             <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DELETE FROM responses&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
