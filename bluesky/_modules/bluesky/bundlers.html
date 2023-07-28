@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.bundlers &mdash; bluesky 1.11.0.post12+ge21ab25e documentation</title>
+  <title>bluesky.bundlers &mdash; bluesky 1.11.0.post24+g19a528bd documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -31,7 +31,7 @@
             bluesky
           </a>
               <div class="version">
-                1.11.0.post12+ge21ab25e
+                1.11.0.post24+g19a528bd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -116,10 +116,9 @@
   <h1>Source code for bluesky.bundlers</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
-<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">count</span><span class="p">,</span> <span class="n">tee</span>
 <span class="kn">import</span> <span class="nn">time</span> <span class="k">as</span> <span class="nn">ttime</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Deque</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">FrozenSet</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span>
-<span class="kn">from</span> <span class="nn">event_model</span> <span class="kn">import</span> <span class="n">DocumentNames</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Deque</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">FrozenSet</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Set</span>
+<span class="kn">from</span> <span class="nn">event_model</span> <span class="kn">import</span> <span class="n">DocumentNames</span><span class="p">,</span> <span class="n">compose_run</span><span class="p">,</span> <span class="n">ComposeDescriptorBundle</span>
 <span class="kn">from</span> <span class="nn">.log</span> <span class="kn">import</span> <span class="n">doc_logger</span>
 <span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">T</span><span class="p">,</span> <span class="n">Callback</span><span class="p">,</span> <span class="n">Configurable</span><span class="p">,</span> <span class="n">PartialEvent</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">,</span> <span class="n">Flyable</span><span class="p">,</span>
@@ -154,11 +153,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">:</span> <span class="n">ObjDict</span><span class="p">[</span><span class="n">Descriptor</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.describe_configuration()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_config_values_cache</span><span class="p">:</span> <span class="n">ObjDict</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.read_configuration() values</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_config_ts_cache</span><span class="p">:</span> <span class="n">ObjDict</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># &quot; obj.read_configuration() timestamps</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># cache of {name: (objs_frozen_set, doc)}</span>
-        <span class="c1"># cache of {obj: {objs_frozen_set: (name, uid)}}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_local_descriptors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">FrozenSet</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># a seq_num counter per stream</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_teed_sequence_counters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># for if we redo data-points</span>
+        <span class="c1"># cache of {name: (doc, compose_event, compose_event_page)}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">ComposeDescriptorBundle</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_descriptor_objs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Set</span><span class="p">[</span><span class="n">HasName</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="c1"># cache of {obj: {objs_frozen_set: (doc, compose_event, compose_event_page)}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_local_descriptors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">FrozenSet</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">ComposeDescriptorBundle</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="c1"># a seq_num counter per stream</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters_copy</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># for if we redo data-points</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Subscribable</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Callback</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1"># cache of {obj: (cb, kwargs)}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">run_is_open</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_uncollected</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>  <span class="c1"># objects after kickoff(), before collect()</span>
@@ -176,9 +178,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">run_is_open</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_desc_uid</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># uid for a special Event Desc.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_counter</span> <span class="o">=</span> <span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># seq_num, special Event stream</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_counter</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># seq_num, special Event stream</span>
 
-        <span class="n">doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">uid</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_md</span><span class="p">)</span>
+        <span class="n">run</span> <span class="o">=</span> <span class="n">compose_run</span><span class="p">(</span><span class="n">uid</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span> <span class="n">event_counters</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_md</span><span class="p">)</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">start_doc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">compose_descriptor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compose_stop</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">compose_stop</span>
+
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
         <span class="n">doc_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;[start] document is emitted (run_uid=</span><span class="si">%r</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
                          <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;doc_name&#39;</span><span class="p">:</span> <span class="s1">&#39;start&#39;</span><span class="p">,</span>
@@ -187,16 +193,15 @@
 
         <span class="c1"># Emit an Event Descriptor for recording any interruptions as Events.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">record_interruptions</span><span class="p">:</span>
+            <span class="c1"># To store the interruptions uid outside of event-model</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_desc_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
             <span class="n">dk</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;RunEngine&quot;</span><span class="p">}</span>
-            <span class="n">interruptions_desc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_desc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_compose_event</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor</span><span class="p">(</span>
                 <span class="n">uid</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_desc_uid</span><span class="p">,</span>
                 <span class="n">name</span><span class="o">=</span><span class="s2">&quot;interruptions&quot;</span><span class="p">,</span>
                 <span class="n">data_keys</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;interruption&quot;</span><span class="p">:</span> <span class="n">dk</span><span class="p">},</span>
-                <span class="n">run_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">descriptor</span><span class="p">,</span> <span class="n">interruptions_desc</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">descriptor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_desc</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span></div>
 
@@ -221,25 +226,14 @@
         <span class="k">for</span> <span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="n">cb</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_params</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
             <span class="n">obj</span><span class="o">.</span><span class="n">clear_sub</span><span class="p">(</span><span class="n">cb</span><span class="p">)</span>
             <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_params</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
-        <span class="c1"># Count the number of Events in each stream.</span>
-        <span class="n">num_events</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">bundle_name</span><span class="p">,</span> <span class="n">counter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">bundle_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># rare but possible via Msg(&#39;create&#39;, name=&#39;primary&#39;)</span>
-                <span class="k">continue</span>
-            <span class="n">num_events</span><span class="p">[</span><span class="n">bundle_name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
         <span class="n">reason</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;reason&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">reason</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="n">exit_status</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;exit_status&quot;</span><span class="p">,</span> <span class="s2">&quot;success&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;success&quot;</span>
 
-        <span class="n">doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-            <span class="n">run_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
-            <span class="n">uid</span><span class="o">=</span><span class="n">new_uid</span><span class="p">(),</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_stop</span><span class="p">(</span>
             <span class="n">exit_status</span><span class="o">=</span><span class="n">exit_status</span><span class="p">,</span>
             <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">,</span>
-            <span class="n">num_events</span><span class="o">=</span><span class="n">num_events</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
         <span class="n">doc_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;[stop] document is emitted (run_uid=</span><span class="si">%r</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
@@ -269,18 +263,14 @@
             <span class="n">config</span><span class="p">[</span><span class="n">obj_name</span><span class="p">][</span><span class="s2">&quot;timestamps&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_ts_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
             <span class="n">config</span><span class="p">[</span><span class="n">obj_name</span><span class="p">][</span><span class="s2">&quot;data_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">[</span><span class="n">obj</span><span class="p">]</span>
             <span class="n">maybe_update_hints</span><span class="p">(</span><span class="n">hints</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
-        <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
-        <span class="n">descriptor_doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-            <span class="n">run_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
-            <span class="n">data_keys</span><span class="o">=</span><span class="n">data_keys</span><span class="p">,</span>
-            <span class="n">uid</span><span class="o">=</span><span class="n">descriptor_uid</span><span class="p">,</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">desc_key</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor</span><span class="p">(</span>
+            <span class="n">desc_key</span><span class="p">,</span>
+            <span class="n">data_keys</span><span class="p">,</span>
             <span class="n">configuration</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
-            <span class="n">name</span><span class="o">=</span><span class="n">desc_key</span><span class="p">,</span>
             <span class="n">hints</span><span class="o">=</span><span class="n">hints</span><span class="p">,</span>
             <span class="n">object_keys</span><span class="o">=</span><span class="n">object_keys</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">descriptor</span><span class="p">,</span> <span class="n">descriptor_doc</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">descriptor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">desc_key</span><span class="p">]</span><span class="o">.</span><span class="n">descriptor_doc</span><span class="p">)</span>
         <span class="n">doc_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="s2">&quot;[descriptor] document emitted with name </span><span class="si">%r</span><span class="s2"> containing &quot;</span>
             <span class="s2">&quot;data keys </span><span class="si">%r</span><span class="s2"> (run_uid=</span><span class="si">%r</span><span class="s2">)&quot;</span><span class="p">,</span>
@@ -292,8 +282,8 @@
                 <span class="s1">&#39;run_uid&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
                 <span class="s1">&#39;data_keys&#39;</span><span class="p">:</span> <span class="n">data_keys</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">desc_key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">objs_read</span><span class="p">,</span> <span class="n">descriptor_doc</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">descriptor_doc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_descriptor_objs</span><span class="p">[</span><span class="n">desc_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">objs_read</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">desc_key</span><span class="p">]</span><span class="o">.</span><span class="n">descriptor_doc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">desc_key</span><span class="p">]</span><span class="o">.</span><span class="n">compose_event</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_ensure_cached</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_describe_cache</span><span class="p">:</span>
@@ -409,6 +399,7 @@
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_cache_describe_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
         <span class="s2">&quot;Read the object&#39;s describe_configuration and cache it.&quot;</span>
+
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Configurable</span><span class="p">):</span>
             <span class="n">conf_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">describe_configuration</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
@@ -460,9 +451,7 @@
 
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_cached</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
 
-        <span class="n">desc_doc</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_stream</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">obj</span><span class="p">,))</span>
-
-        <span class="n">seq_num_counter</span> <span class="o">=</span> <span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">compose_event</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_stream</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">obj</span><span class="p">,))</span>
 
         <span class="k">def</span> <span class="nf">emit_event</span><span class="p">(</span><span class="n">readings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Reading</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">readings</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -479,13 +468,9 @@
                     <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">readable_obj</span><span class="si">}</span><span class="s2"> has async read() method and the callback &quot;</span> \
                     <span class="s2">&quot;passed to subscribe() was not called with Dict[str, Reading]&quot;</span>
             <span class="n">data</span><span class="p">,</span> <span class="n">timestamps</span> <span class="o">=</span> <span class="n">_rearrange_into_parallel_dicts</span><span class="p">(</span><span class="n">readings</span><span class="p">)</span>
-            <span class="n">doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-                <span class="n">descriptor</span><span class="o">=</span><span class="n">desc_doc</span><span class="p">[</span><span class="s1">&#39;uid&#39;</span><span class="p">],</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
+            <span class="n">doc</span> <span class="o">=</span> <span class="n">compose_event</span><span class="p">(</span>
                 <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
                 <span class="n">timestamps</span><span class="o">=</span><span class="n">timestamps</span><span class="p">,</span>
-                <span class="n">seq_num</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span><span class="n">seq_num_counter</span><span class="p">),</span>
-                <span class="n">uid</span><span class="o">=</span><span class="n">new_uid</span><span class="p">(),</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">emit_sync</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">event</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
 
@@ -502,19 +487,16 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_desc_uid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># We are inside a run and self.record_interruptions is True.</span>
-            <span class="n">doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-                <span class="n">descriptor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_desc_uid</span><span class="p">,</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
-                <span class="n">uid</span><span class="o">=</span><span class="n">new_uid</span><span class="p">(),</span>
-                <span class="n">seq_num</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_counter</span><span class="p">),</span>
+            <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_compose_event</span><span class="p">(</span>
                 <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;interruption&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">},</span>
                 <span class="n">timestamps</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;interruption&quot;</span><span class="p">:</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">()},</span>
             <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_interruptions_counter</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">emit_sync</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">event</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="RunBundler.rewind"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.rewind.html#bluesky.bundlers.RunBundler.rewind">[docs]</a>    <span class="k">def</span> <span class="nf">rewind</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_teed_sequence_counters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters_copy</span><span class="p">)</span>
         <span class="c1"># This is needed to &#39;cancel&#39; an open bundling (e.g. create) if</span>
         <span class="c1"># the pause happens after a &#39;checkpoint&#39;, after a &#39;create&#39;, but</span>
         <span class="c1"># before the paired &#39;save&#39;.</span>
@@ -573,24 +555,25 @@
         <span class="c1"># This is a separate check because it can be reset on resume.</span>
         <span class="n">seq_num_key</span> <span class="o">=</span> <span class="n">desc_key</span>
         <span class="k">if</span> <span class="n">seq_num_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">:</span>
-            <span class="n">counter</span> <span class="o">=</span> <span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="n">counter_copy1</span><span class="p">,</span> <span class="n">counter_copy2</span> <span class="o">=</span> <span class="n">tee</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">seq_num_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">counter_copy1</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_teed_sequence_counters</span><span class="p">[</span><span class="n">seq_num_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">counter_copy2</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">seq_num_key</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters_copy</span><span class="p">[</span><span class="n">seq_num_key</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bundling</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_bundle_name</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="n">d_objs</span><span class="p">,</span> <span class="n">descriptor_doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">desc_key</span><span class="p">,</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+        <span class="n">descriptor_doc</span><span class="p">,</span> <span class="n">compose_event</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="n">desc_key</span><span class="p">,</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">d_objs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptor_objs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">desc_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
         <span class="c1"># we do not have the descriptor cached, make it</span>
         <span class="k">if</span> <span class="n">descriptor_doc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">descriptor_doc</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_stream</span><span class="p">(</span><span class="n">desc_key</span><span class="p">,</span> <span class="n">objs_read</span><span class="p">)</span>
-        <span class="c1"># do have the descriptor cached</span>
+            <span class="n">descriptor_doc</span><span class="p">,</span> <span class="n">compose_event</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_stream</span><span class="p">(</span><span class="n">desc_key</span><span class="p">,</span> <span class="n">objs_read</span><span class="p">)</span>
+            <span class="c1"># do have the descriptor cached</span>
         <span class="k">elif</span> <span class="n">d_objs</span> <span class="o">!=</span> <span class="n">objs_read</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;Mismatched objects read, expected </span><span class="si">{!s}</span><span class="s2">, &quot;</span>
-                <span class="s2">&quot;got </span><span class="si">{!s}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">d_objs</span><span class="p">,</span> <span class="n">objs_read</span><span class="p">)</span>
+                <span class="s2">&quot;got </span><span class="se">\n\n\n</span><span class="si">{!s}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">d_objs</span><span class="p">,</span> <span class="n">objs_read</span><span class="p">)</span>
             <span class="p">)</span>
-        <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">descriptor_doc</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span>
 
         <span class="c1"># Resource and Datum documents</span>
         <span class="k">for</span> <span class="n">resource_or_datum_name</span><span class="p">,</span> <span class="n">resource_or_datum_doc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_asset_docs_cache</span><span class="p">:</span>
@@ -615,9 +598,6 @@
                 <span class="n">resource_or_datum_doc</span>
             <span class="p">)</span>
 
-        <span class="c1"># Event document</span>
-        <span class="n">seq_num</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">seq_num_key</span><span class="p">])</span>
-        <span class="n">event_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
         <span class="c1"># Merge list of readings into single dict.</span>
         <span class="n">readings</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_cache</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">timestamps</span> <span class="o">=</span> <span class="n">_rearrange_into_parallel_dicts</span><span class="p">(</span><span class="n">readings</span><span class="p">)</span>
@@ -626,16 +606,12 @@
         <span class="c1"># data.</span>
         <span class="n">filled</span> <span class="o">=</span> <span class="p">{</span>
             <span class="n">k</span><span class="p">:</span> <span class="kc">False</span>
-            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">desc_key</span><span class="p">][</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;data_keys&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">desc_key</span><span class="p">]</span><span class="o">.</span><span class="n">descriptor_doc</span><span class="p">[</span><span class="s2">&quot;data_keys&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
             <span class="k">if</span> <span class="s2">&quot;external&quot;</span> <span class="ow">in</span> <span class="n">v</span>
         <span class="p">}</span>
-        <span class="n">event_doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-            <span class="n">descriptor</span><span class="o">=</span><span class="n">descriptor_uid</span><span class="p">,</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
+        <span class="n">event_doc</span> <span class="o">=</span> <span class="n">compose_event</span><span class="p">(</span>
             <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
             <span class="n">timestamps</span><span class="o">=</span><span class="n">timestamps</span><span class="p">,</span>
-            <span class="n">seq_num</span><span class="o">=</span><span class="n">seq_num</span><span class="p">,</span>
-            <span class="n">uid</span><span class="o">=</span><span class="n">event_uid</span><span class="p">,</span>
             <span class="n">filled</span><span class="o">=</span><span class="n">filled</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">event</span><span class="p">,</span> <span class="n">event_doc</span><span class="p">)</span>
@@ -662,10 +638,9 @@
 
         <span class="c1"># Keep a safe separate copy of the sequence counters to use if we</span>
         <span class="c1"># rewind and retake some data points.</span>
+
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">counter</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
-            <span class="n">counter_copy1</span><span class="p">,</span> <span class="n">counter_copy2</span> <span class="o">=</span> <span class="n">tee</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">counter_copy1</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_teed_sequence_counters</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">counter_copy2</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters_copy</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">counter</span></div>
 
 <div class="viewcode-block" id="RunBundler.reset_checkpoint_state_coro"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.reset_checkpoint_state_coro.html#bluesky.bundlers.RunBundler.reset_checkpoint_state_coro">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">reset_checkpoint_state_coro</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_checkpoint_state</span><span class="p">()</span></div>
@@ -679,7 +654,7 @@
             <span class="n">obj</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">cb</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="RunBundler.clear_checkpoint"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.clear_checkpoint.html#bluesky.bundlers.RunBundler.clear_checkpoint">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">clear_checkpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_teed_sequence_counters</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters_copy</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="RunBundler.drop"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.drop.html#bluesky.bundlers.RunBundler.drop">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">drop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop the event that is currently being bundled</span>
@@ -740,14 +715,13 @@
         <span class="s2">&quot;Read the object&#39;s describe_collect and cache it.&quot;</span>
         <span class="n">describe_collect</span> <span class="o">=</span> <span class="k">await</span> <span class="n">maybe_await</span><span class="p">(</span><span class="n">collect_obj</span><span class="o">.</span><span class="n">describe_collect</span><span class="p">())</span>
         <span class="n">collect_obj_config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">local_descriptors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">FrozenSet</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">local_descriptors</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">FrozenSet</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">ComposeDescriptorBundle</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="c1"># collect_obj.describe_collect() returns a dictionary like this:</span>
         <span class="c1">#     {name_for_desc1: data_keys_for_desc1,</span>
         <span class="c1">#      name_for_desc2: data_keys_for_desc2, ...}</span>
         <span class="k">for</span> <span class="n">stream_name</span><span class="p">,</span> <span class="n">stream_data_keys</span> <span class="ow">in</span> <span class="n">describe_collect</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">stream_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">:</span>
                 <span class="c1"># We do not have an Event Descriptor for this set.</span>
-                <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
                 <span class="c1"># if we have not yet read the configuration, do so</span>
                 <span class="k">if</span> <span class="n">collect_obj</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">collect_obj_config</span><span class="p">:</span>
                     <span class="k">if</span> <span class="n">collect_obj</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_desc_cache</span><span class="p">:</span>
@@ -760,27 +734,25 @@
                     <span class="p">}</span>
                 <span class="n">hints</span> <span class="o">=</span> <span class="p">{}</span>
                 <span class="n">maybe_update_hints</span><span class="p">(</span><span class="n">hints</span><span class="p">,</span> <span class="n">collect_obj</span><span class="p">)</span>
-                <span class="n">doc</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-                    <span class="n">run_start</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
-                    <span class="n">time</span><span class="o">=</span><span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
+                <span class="n">descriptor_bundle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor</span><span class="p">(</span>
                     <span class="n">data_keys</span><span class="o">=</span><span class="n">stream_data_keys</span><span class="p">,</span>
-                    <span class="n">uid</span><span class="o">=</span><span class="n">descriptor_uid</span><span class="p">,</span>
                     <span class="n">name</span><span class="o">=</span><span class="n">stream_name</span><span class="p">,</span>
                     <span class="n">configuration</span><span class="o">=</span><span class="n">collect_obj_config</span><span class="p">,</span>
                     <span class="n">hints</span><span class="o">=</span><span class="n">hints</span><span class="p">,</span>
                     <span class="n">object_keys</span><span class="o">=</span><span class="p">{</span><span class="n">collect_obj</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">stream_data_keys</span><span class="p">)},</span>
                 <span class="p">)</span>
-                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">descriptor</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n">DocumentNames</span><span class="o">.</span><span class="n">descriptor</span><span class="p">,</span> <span class="n">descriptor_bundle</span><span class="o">.</span><span class="n">descriptor_doc</span><span class="p">)</span>
                 <span class="n">doc_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;[descriptor] document is emitted with name </span><span class="si">%r</span><span class="s2"> &quot;</span>
                                  <span class="s2">&quot;containing data keys </span><span class="si">%r</span><span class="s2"> (run_uid=</span><span class="si">%r</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">stream_name</span><span class="p">,</span>
                                  <span class="n">stream_data_keys</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
                                  <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;doc_name&#39;</span><span class="p">:</span> <span class="s1">&#39;descriptor&#39;</span><span class="p">,</span>
                                         <span class="s1">&#39;run_uid&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
                                         <span class="s1">&#39;data_keys&#39;</span><span class="p">:</span> <span class="n">stream_data_keys</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">stream_data_keys</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_descriptor_objs</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">stream_data_keys</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">descriptor_bundle</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">objs_read</span><span class="p">,</span> <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span>
+                <span class="n">objs_read</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptor_objs</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span>
                 <span class="k">if</span> <span class="n">stream_data_keys</span> <span class="o">!=</span> <span class="n">objs_read</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                         <span class="s2">&quot;Mismatched objects read, &quot;</span>
@@ -788,8 +760,7 @@
                         <span class="s2">&quot;got </span><span class="si">{!s}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stream_data_keys</span><span class="p">,</span> <span class="n">objs_read</span><span class="p">)</span>
                     <span class="p">)</span>
 
-            <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span>
-            <span class="n">local_descriptors</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">stream_data_keys</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">stream_name</span><span class="p">,</span> <span class="n">descriptor_uid</span><span class="p">)</span>
+            <span class="n">local_descriptors</span><span class="p">[</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">stream_data_keys</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">stream_name</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_local_descriptors</span><span class="p">[</span><span class="n">collect_obj</span><span class="p">]</span> <span class="o">=</span> <span class="n">local_descriptors</span>
 
 <div class="viewcode-block" id="RunBundler.collect"><a class="viewcode-back" href="../../generated/bluesky.bundlers.RunBundler.collect.html#bluesky.bundlers.RunBundler.collect">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
@@ -839,17 +810,15 @@
                 <span class="n">payload</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ev</span><span class="p">)</span>
 
             <span class="n">objs_read</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="n">ev</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
-            <span class="n">stream_name</span><span class="p">,</span> <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">local_descriptors</span><span class="p">[</span><span class="n">objs_read</span><span class="p">]</span>
-            <span class="n">seq_num</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sequence_counters</span><span class="p">[</span><span class="n">stream_name</span><span class="p">])</span>
-            <span class="n">event_uid</span> <span class="o">=</span> <span class="n">new_uid</span><span class="p">()</span>
-            <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;descriptor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">descriptor_uid</span>
-            <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;seq_num&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">seq_num</span>
-            <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">event_uid</span>
+            <span class="n">descriptor_doc</span><span class="p">,</span> <span class="n">compose_event</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">local_descriptors</span><span class="p">[</span><span class="n">objs_read</span><span class="p">]</span>
+
+            <span class="n">descriptor_uid</span> <span class="o">=</span> <span class="n">descriptor_doc</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span>
+            <span class="n">ev</span> <span class="o">=</span> <span class="n">compose_event</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">ev</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">],</span> <span class="n">timestamps</span><span class="o">=</span><span class="n">ev</span><span class="p">[</span><span class="s2">&quot;timestamps&quot;</span><span class="p">])</span>
 
             <span class="k">if</span> <span class="n">stream</span><span class="p">:</span>
                 <span class="n">doc_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;[event] document is emitted with data keys </span><span class="si">%r</span><span class="s2"> (run_uid=</span><span class="si">%r</span><span class="s2">)&quot;</span><span class="p">,</span>
                                  <span class="n">ev</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
-                                 <span class="n">event_uid</span><span class="p">,</span>
+                                 <span class="n">ev</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">],</span>
                                  <span class="n">extra</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;doc_name&#39;</span><span class="p">:</span> <span class="s1">&#39;event&#39;</span><span class="p">,</span>
                                         <span class="s1">&#39;run_uid&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_start_uid</span><span class="p">,</span>
                                         <span class="s1">&#39;data_keys&#39;</span><span class="p">:</span> <span class="n">ev</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>
@@ -889,7 +858,7 @@
         <span class="c1"># New event descriptors, with this new configuration, will</span>
         <span class="c1"># be created for any future event documents.</span>
         <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">):</span>
-            <span class="n">obj_set</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="n">obj_set</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptor_objs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">obj_set</span><span class="p">:</span>
                 <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_descriptors</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
                 <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_stream</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">obj_set</span><span class="p">)</span>
