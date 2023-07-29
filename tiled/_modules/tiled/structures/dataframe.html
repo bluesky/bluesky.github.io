@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a104.dev2+g1894693 documentation</title>
+  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a104.dev3+g2af538f documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a104.dev2+g1894693
+                0.1.0a104.dev3+g2af538f
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -125,61 +125,65 @@
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.structures.dataframe</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span></span><span class="kn">import</span> <span class="nn">base64</span>
+<span class="kn">import</span> <span class="nn">io</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="n">B64_ENCODED_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;data:application/vnd.apache.arrow.file;base64,&quot;</span>
 
 
 <div class="viewcode-block" id="DataFrameMicroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameMicroStructure.html#tiled.structures.dataframe.DataFrameMicroStructure">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">DataFrameMicroStructure</span><span class="p">:</span>
-    <span class="n">meta</span><span class="p">:</span> <span class="nb">bytes</span>  <span class="c1"># Arrow-encoded DataFrame</span>
-    <span class="n">divisions</span><span class="p">:</span> <span class="nb">bytes</span>  <span class="c1"># Arrow-encoded DataFrame</span>
+    <span class="c1"># This holds a Arrow schema, base64-encoded so that it can be transported</span>
+    <span class="c1"># as JSON. For clarity, the encoded data (...) is prefixed like:</span>
+    <span class="c1">#</span>
+    <span class="c1"># data:application/vnd.apache.arrow.file;base64,...</span>
+    <span class="c1">#</span>
+    <span class="c1"># Arrow does not support an official JSON serialization, but it</span>
+    <span class="c1"># could in the future: https://github.com/apache/arrow/pull/7110</span>
+    <span class="c1"># If it does, we could switch to using that here.</span>
+    <span class="n">arrow_schema</span><span class="p">:</span> <span class="nb">str</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_dask_dataframe</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">ddf</span><span class="p">):</span>
-        <span class="c1"># Make an *empty* DataFrame with the same structure as ddf.</span>
-        <span class="c1"># TODO Look at make_meta_nonempty to see if the &quot;objects&quot; are str or</span>
-        <span class="c1"># datetime or actually generic objects.</span>
         <span class="kn">import</span> <span class="nn">dask.dataframe.utils</span>
-        <span class="kn">import</span> <span class="nn">pandas</span>
+        <span class="kn">import</span> <span class="nn">pyarrow</span>
 
-        <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">serialize_arrow</span>
-
-        <span class="n">meta</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">serialize_arrow</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">),</span> <span class="p">{}))</span>
-        <span class="n">divisions</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span>
-            <span class="n">serialize_arrow</span><span class="p">(</span><span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;divisions&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">divisions</span><span class="p">)}),</span> <span class="p">{})</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span> <span class="n">divisions</span><span class="o">=</span><span class="n">divisions</span><span class="p">)</span>
+        <span class="c1"># Make a pandas DataFrame with 0 rows.</span>
+        <span class="c1"># We can use this to define an Arrow schema without loading any row data.</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">)</span>
+        <span class="n">schema_bytes</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">meta</span><span class="p">)</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">serialize</span><span class="p">()</span>
+        <span class="n">schema_b64</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">schema_bytes</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+        <span class="n">data_uri</span> <span class="o">=</span> <span class="n">B64_ENCODED_PREFIX</span> <span class="o">+</span> <span class="n">schema_b64</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">arrow_schema</span><span class="o">=</span><span class="n">data_uri</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">from_dataframe</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">df</span><span class="p">):</span>
-        <span class="c1"># Make an *empty* DataFrame with the same structure as ddf.</span>
-        <span class="c1"># TODO Look at make_meta_nonempty to see if the &quot;objects&quot; are str or</span>
-        <span class="c1"># datetime or actually generic objects.</span>
-        <span class="kn">import</span> <span class="nn">dask.dataframe</span>
-        <span class="kn">import</span> <span class="nn">dask.dataframe.utils</span>
-        <span class="kn">import</span> <span class="nn">pandas</span>
+    <span class="k">def</span> <span class="nf">from_pandas</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">df</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pyarrow</span>
 
-        <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">serialize_arrow</span>
+        <span class="n">schema_bytes</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">serialize</span><span class="p">()</span>
+        <span class="n">schema_b64</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">schema_bytes</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+        <span class="n">data_uri</span> <span class="o">=</span> <span class="n">B64_ENCODED_PREFIX</span> <span class="o">+</span> <span class="n">schema_b64</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">arrow_schema</span><span class="o">=</span><span class="n">data_uri</span><span class="p">)</span>
 
-        <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">npartitions</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">meta</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span><span class="n">serialize_arrow</span><span class="p">(</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">make_meta</span><span class="p">(</span><span class="n">ddf</span><span class="p">),</span> <span class="p">{}))</span>
-        <span class="n">divisions</span> <span class="o">=</span> <span class="nb">bytes</span><span class="p">(</span>
-            <span class="n">serialize_arrow</span><span class="p">(</span><span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;divisions&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">divisions</span><span class="p">)}),</span> <span class="p">{})</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">arrow_schema_decoded</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pyarrow</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrow_schema</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">B64_ENCODED_PREFIX</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Expected base64-encoded data prefixed with </span><span class="si">{</span><span class="n">B64_ENCODED_PREFIX</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">payload</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrow_schema</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">B64_ENCODED_PREFIX</span><span class="p">)</span> <span class="p">:]</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span>  <span class="c1"># noqa: 203</span>
+            <span class="s2">&quot;utf-8&quot;</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span> <span class="n">divisions</span><span class="o">=</span><span class="n">divisions</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">ipc</span><span class="o">.</span><span class="n">read_schema</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">payload</span><span class="p">)))</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">meta_decoded</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">deserialize_arrow</span>
-
-        <span class="k">return</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">divisions_decoded</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="kn">from</span> <span class="nn">..serialization.dataframe</span> <span class="kn">import</span> <span class="n">deserialize_arrow</span>
-
-        <span class="n">divisions_wrapped_in_df</span> <span class="o">=</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">divisions</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">divisions_wrapped_in_df</span><span class="p">[</span><span class="s2">&quot;divisions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span></div>
+    <span class="k">def</span> <span class="nf">meta</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrow_schema_decoded</span><span class="o">.</span><span class="n">empty_table</span><span class="p">()</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="DataFrameMacroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameMacroStructure.html#tiled.structures.dataframe.DataFrameMacroStructure">[docs]</a><span class="nd">@dataclass</span>
