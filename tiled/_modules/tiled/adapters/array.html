@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.array &mdash; tiled 0.1.0a104.dev3+g2af538f documentation</title>
+  <title>tiled.adapters.array &mdash; tiled 0.1.0a104.dev4+g3c8ffdd documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a104.dev3+g2af538f
+                0.1.0a104.dev4+g3c8ffdd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -126,11 +126,9 @@
              
   <h1>Source code for tiled.adapters.array</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">dask.array</span>
-<span class="kn">import</span> <span class="nn">numpy</span>
-<span class="kn">from</span> <span class="nn">dask.array.core</span> <span class="kn">import</span> <span class="n">normalize_chunks</span>
 
 <span class="kn">from</span> <span class="nn">..server.object_cache</span> <span class="kn">import</span> <span class="n">get_object_cache</span>
-<span class="kn">from</span> <span class="nn">..structures.array</span> <span class="kn">import</span> <span class="n">ArrayMacroStructure</span><span class="p">,</span> <span class="n">BuiltinDtype</span><span class="p">,</span> <span class="n">StructDtype</span>
+<span class="kn">from</span> <span class="nn">..structures.array</span> <span class="kn">import</span> <span class="n">ArrayStructure</span>
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">StructureFamily</span>
 
 
@@ -143,9 +141,9 @@
 
 <span class="sd">    Wrap any array-like.</span>
 
-<span class="sd">    &gt;&gt;&gt; ArrayAdapter(numpy.random.random((100, 100)))</span>
+<span class="sd">    &gt;&gt;&gt; ArrayAdapter.from_array(numpy.random.random((100, 100)))</span>
 
-<span class="sd">    &gt;&gt;&gt; ArrayAdapter(dask.array.from_array(numpy.random.random((100, 100)), chunks=(100, 50)))</span>
+<span class="sd">    &gt;&gt;&gt; ArrayAdapter.from_array(dask.array.from_array(numpy.random.random((100, 100)), chunks=(100, 50)))</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -154,36 +152,15 @@
 <div class="viewcode-block" id="ArrayAdapter.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.adapters.array.ArrayAdapter.html#tiled.adapters.array.ArrayAdapter.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">array</span><span class="p">,</span>
+        <span class="n">structure</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">chunks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="c1"># Why would shape ever be different from array.shape, you ask?</span>
-        <span class="c1"># Some formats (notably Zarr) force shape to be a multiple of</span>
-        <span class="c1"># a chunk size, such that array.shape may include a margin beyond the</span>
-        <span class="c1"># actual data.</span>
-        <span class="k">if</span> <span class="n">shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">shape</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">shape</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_shape</span> <span class="o">=</span> <span class="n">shape</span>
-        <span class="k">if</span> <span class="n">chunks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="s2">&quot;chunks&quot;</span><span class="p">):</span>
-                <span class="n">chunks</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">chunks</span>  <span class="c1"># might be None</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">chunks</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="k">if</span> <span class="n">chunks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">chunks</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;auto&quot;</span><span class="p">,)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_chunks</span> <span class="o">=</span> <span class="n">normalize_chunks</span><span class="p">(</span>
-            <span class="n">chunks</span><span class="p">,</span>
-            <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
-            <span class="n">dtype</span><span class="o">=</span><span class="n">array</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
-        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_array</span> <span class="o">=</span> <span class="n">array</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span> <span class="o">=</span> <span class="n">structure</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dims</span> <span class="o">=</span> <span class="n">dims</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">specs</span> <span class="o">=</span> <span class="n">specs</span> <span class="ow">or</span> <span class="p">[]</span></div>
 
     <span class="nd">@classmethod</span>
@@ -191,17 +168,20 @@
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">array</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
+        <span class="n">shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">chunks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">dims</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="n">structure</span> <span class="o">=</span> <span class="n">ArrayStructure</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span>
+            <span class="n">array</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="n">chunks</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="n">dims</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">numpy</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">array</span><span class="p">),</span>
-            <span class="n">chunks</span><span class="o">=</span><span class="n">chunks</span><span class="p">,</span>
+            <span class="n">array</span><span class="p">,</span>
+            <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
-            <span class="n">dims</span><span class="o">=</span><span class="n">dims</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
             <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">,</span>
         <span class="p">)</span>
@@ -211,24 +191,13 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">dims</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dims</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span><span class="o">.</span><span class="n">dims</span>
 
     <span class="k">def</span> <span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span>
 
-    <span class="k">def</span> <span class="nf">macrostructure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="s2">&quot;Structures of the layout of blocks of this array&quot;</span>
-        <span class="k">return</span> <span class="n">ArrayMacroStructure</span><span class="p">(</span>
-            <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_chunks</span><span class="p">,</span> <span class="n">dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_dims</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">microstructure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="s2">&quot;Internal structure of a block of this array --- i.e. its data type&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">micro</span> <span class="o">=</span> <span class="n">StructDtype</span><span class="o">.</span><span class="n">from_numpy_dtype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">micro</span> <span class="o">=</span> <span class="n">BuiltinDtype</span><span class="o">.</span><span class="n">from_numpy_dtype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">micro</span>
+    <span class="k">def</span> <span class="nf">structure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span>
 
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span>
@@ -243,7 +212,7 @@
 
     <span class="k">def</span> <span class="nf">read_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="c1"># Slice the whole array to get this block.</span>
-        <span class="n">slice_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">slice_and_shape_from_block_and_chunks</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_chunks</span><span class="p">)</span>
+        <span class="n">slice_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">slice_and_shape_from_block_and_chunks</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
         <span class="n">array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="p">[</span><span class="n">slice_</span><span class="p">]</span>
         <span class="c1"># Slice within the block.</span>
         <span class="k">if</span> <span class="nb">slice</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

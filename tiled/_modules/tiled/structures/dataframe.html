@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a104.dev3+g2af538f documentation</title>
+  <title>tiled.structures.dataframe &mdash; tiled 0.1.0a104.dev4+g3c8ffdd documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -34,7 +34,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a104.dev3+g2af538f
+                0.1.0a104.dev4+g3c8ffdd
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -133,8 +133,8 @@
 <span class="n">B64_ENCODED_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;data:application/vnd.apache.arrow.file;base64,&quot;</span>
 
 
-<div class="viewcode-block" id="DataFrameMicroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameMicroStructure.html#tiled.structures.dataframe.DataFrameMicroStructure">[docs]</a><span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">DataFrameMicroStructure</span><span class="p">:</span>
+<div class="viewcode-block" id="DataFrameStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameStructure.html#tiled.structures.dataframe.DataFrameStructure">[docs]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">DataFrameStructure</span><span class="p">:</span>
     <span class="c1"># This holds a Arrow schema, base64-encoded so that it can be transported</span>
     <span class="c1"># as JSON. For clarity, the encoded data (...) is prefixed like:</span>
     <span class="c1">#</span>
@@ -144,6 +144,9 @@
     <span class="c1"># could in the future: https://github.com/apache/arrow/pull/7110</span>
     <span class="c1"># If it does, we could switch to using that here.</span>
     <span class="n">arrow_schema</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">npartitions</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">columns</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">resizable</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_dask_dataframe</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">ddf</span><span class="p">):</span>
@@ -156,7 +159,11 @@
         <span class="n">schema_bytes</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">meta</span><span class="p">)</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">serialize</span><span class="p">()</span>
         <span class="n">schema_b64</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">schema_bytes</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
         <span class="n">data_uri</span> <span class="o">=</span> <span class="n">B64_ENCODED_PREFIX</span> <span class="o">+</span> <span class="n">schema_b64</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">arrow_schema</span><span class="o">=</span><span class="n">data_uri</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">arrow_schema</span><span class="o">=</span><span class="n">data_uri</span><span class="p">,</span>
+            <span class="n">npartitions</span><span class="o">=</span><span class="n">ddf</span><span class="o">.</span><span class="n">npartitions</span><span class="p">,</span>
+            <span class="n">columns</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">columns</span><span class="p">),</span>
+        <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_pandas</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">df</span><span class="p">):</span>
@@ -165,7 +172,7 @@
         <span class="n">schema_bytes</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">serialize</span><span class="p">()</span>
         <span class="n">schema_b64</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">schema_bytes</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
         <span class="n">data_uri</span> <span class="o">=</span> <span class="n">B64_ENCODED_PREFIX</span> <span class="o">+</span> <span class="n">schema_b64</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">arrow_schema</span><span class="o">=</span><span class="n">data_uri</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">arrow_schema</span><span class="o">=</span><span class="n">data_uri</span><span class="p">,</span> <span class="n">npartitions</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">arrow_schema_decoded</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -183,30 +190,15 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">meta</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrow_schema_decoded</span><span class="o">.</span><span class="n">empty_table</span><span class="p">()</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span></div>
-
-
-<div class="viewcode-block" id="DataFrameMacroStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameMacroStructure.html#tiled.structures.dataframe.DataFrameMacroStructure">[docs]</a><span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">DataFrameMacroStructure</span><span class="p">:</span>
-    <span class="n">npartitions</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">columns</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-    <span class="n">resizable</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">from_dask_dataframe</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">ddf</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">npartitions</span><span class="o">=</span><span class="n">ddf</span><span class="o">.</span><span class="n">npartitions</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span></div>
-
-
-<div class="viewcode-block" id="DataFrameStructure"><a class="viewcode-back" href="../../../reference/generated/tiled.structures.dataframe.DataFrameStructure.html#tiled.structures.dataframe.DataFrameStructure">[docs]</a><span class="nd">@dataclass</span>
-<span class="k">class</span> <span class="nc">DataFrameStructure</span><span class="p">:</span>
-    <span class="n">micro</span><span class="p">:</span> <span class="n">DataFrameMicroStructure</span>
-    <span class="n">macro</span><span class="p">:</span> <span class="n">DataFrameMacroStructure</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrow_schema_decoded</span><span class="o">.</span><span class="n">empty_table</span><span class="p">()</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">micro</span><span class="o">=</span><span class="n">DataFrameMicroStructure</span><span class="p">(</span><span class="o">**</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;micro&quot;</span><span class="p">]),</span>
-            <span class="n">macro</span><span class="o">=</span><span class="n">DataFrameMacroStructure</span><span class="p">(</span><span class="o">**</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;macro&quot;</span><span class="p">]),</span>
+            <span class="n">arrow_schema</span><span class="o">=</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;arrow_schema&quot;</span><span class="p">],</span>
+            <span class="n">npartitions</span><span class="o">=</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;npartitions&quot;</span><span class="p">],</span>
+            <span class="n">columns</span><span class="o">=</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">],</span>
+            <span class="n">resizable</span><span class="o">=</span><span class="n">content</span><span class="p">[</span><span class="s2">&quot;resizable&quot;</span><span class="p">],</span>
         <span class="p">)</span></div>
 </pre></div>
 
