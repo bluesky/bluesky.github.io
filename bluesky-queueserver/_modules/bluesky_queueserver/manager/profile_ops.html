@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.0.19.post24+g9974c63 documentation</title>
+  <title>bluesky_queueserver.manager.profile_ops &mdash; bluesky-queueserver 0.0.19.post34+gaf6015b documentation</title>
       <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
@@ -32,7 +32,7 @@
             bluesky-queueserver
           </a>
               <div class="version">
-                0.0.19.post24+g9974c63
+                0.0.19.post34+gaf6015b
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -103,6 +103,7 @@
              
   <h1>Source code for bluesky_queueserver.manager.profile_ops</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">ast</span>
+<span class="kn">import</span> <span class="nn">collections</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">enum</span>
 <span class="kn">import</span> <span class="nn">glob</span>
@@ -1022,24 +1023,42 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">success</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validation of plan parameters failed: </span><span class="si">{</span><span class="n">errmsg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">ref_from_name</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">ref_from_name</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">eval_expressions</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="k">if</span> <span class="p">(</span><span class="n">v</span> <span class="ow">in</span> <span class="n">sel_object_names</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_is_object_name_in_list</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">allowed_objects</span><span class="o">=</span><span class="n">selected_object_tree</span><span class="p">):</span>
                 <span class="n">v</span> <span class="o">=</span> <span class="n">_get_nspace_object</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="o">=</span><span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="o">=</span><span class="n">nspace</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">eval_expressions</span> <span class="ow">and</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^[_A-Za-z][_A-Za-z0-9]*(\.[_A-Za-z][_A-Za-z0-9]*)*$&quot;</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">v</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="k">pass</span>
         <span class="k">return</span> <span class="n">v</span>
 
-    <span class="k">def</span> <span class="nf">process_argument</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">process_argument</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">eval_expressions</span><span class="p">):</span>
         <span class="c1"># Recursively process lists (iterables) and dictionaries</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="n">v</span> <span class="o">=</span> <span class="n">ref_from_name</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="n">ref_from_name</span><span class="p">(</span>
+                <span class="n">v</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">eval_expressions</span>
+            <span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">v</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">v</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+                <span class="n">v</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span>
+                    <span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">eval_expressions</span>
+                <span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
             <span class="n">v_original</span> <span class="o">=</span> <span class="n">v</span>
             <span class="n">v</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">v_original</span><span class="p">:</span>
-                <span class="n">v</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">process_argument</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">))</span>
+                <span class="n">v</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">process_argument</span><span class="p">(</span>
+                        <span class="n">item</span><span class="p">,</span>
+                        <span class="n">objects_in_nspace</span><span class="p">,</span>
+                        <span class="n">sel_object_names</span><span class="p">,</span>
+                        <span class="n">selected_object_tree</span><span class="p">,</span>
+                        <span class="n">nspace</span><span class="p">,</span>
+                        <span class="n">eval_expressions</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">v</span>
 
     <span class="k">def</span> <span class="nf">process_parameter_value</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">pp</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">group_devices</span><span class="p">,</span> <span class="n">nspace</span><span class="p">):</span>
@@ -1051,6 +1070,7 @@
         <span class="c1"># Include/exclude all devices/plans if required</span>
         <span class="n">convert_all_plan_names</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;convert_plan_names&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>  <span class="c1"># None - not defined</span>
         <span class="n">convert_all_device_names</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;convert_device_names&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">eval_all_expressions</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;eval_expressions&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
 
         <span class="c1"># A set of the selected device names (device names are listed explicitly, not as a tree)</span>
         <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">pname_list</span><span class="p">,</span> <span class="n">dname_list</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(),</span> <span class="nb">set</span><span class="p">(),</span> <span class="nb">set</span><span class="p">()</span>
@@ -1084,8 +1104,10 @@
 
         <span class="n">sel_object_names</span> <span class="o">=</span> <span class="n">pname_list</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">dname_list</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">sel_object_names</span> <span class="ow">or</span> <span class="n">selected_object_tree</span><span class="p">:</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sel_object_names</span> <span class="ow">or</span> <span class="n">selected_object_tree</span> <span class="ow">or</span> <span class="n">eval_all_expressions</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span>
+                <span class="n">value</span><span class="p">,</span> <span class="n">objects_in_nspace</span><span class="p">,</span> <span class="n">sel_object_names</span><span class="p">,</span> <span class="n">selected_object_tree</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="n">eval_all_expressions</span>
+            <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">value</span>
 
@@ -1118,7 +1140,7 @@
     <span class="n">items_in_nspace</span> <span class="o">=</span> <span class="n">devices_in_nspace</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="n">items_in_nspace</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">plans_in_nspace</span><span class="p">)</span>
 
-    <span class="n">plan_func</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">plan_name</span><span class="p">,</span> <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="nb">set</span><span class="p">(),</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">nspace</span><span class="p">)</span>
+    <span class="n">plan_func</span> <span class="o">=</span> <span class="n">process_argument</span><span class="p">(</span><span class="n">plan_name</span><span class="p">,</span> <span class="n">plans_in_nspace</span><span class="p">,</span> <span class="nb">set</span><span class="p">(),</span> <span class="n">group_plans</span><span class="p">,</span> <span class="n">nspace</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">plan_func</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">err_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Plan &#39;</span><span class="si">{</span><span class="n">plan_name</span><span class="si">}</span><span class="s2">&#39; is not allowed or does not exist&quot;</span>
@@ -2121,11 +2143,13 @@
 <span class="k">def</span> <span class="nf">_find_and_replace_built_in_types</span><span class="p">(</span><span class="n">annotation_type_str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">plans</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">devices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">enums</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Find and replace built-in types in parameter annotation type string. Built-in types are</span>
-<span class="sd">    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``. Since plan and device names are passed</span>
-<span class="sd">    as strings and then converted to respective object, the built-in plan names are replaced by ``str``</span>
-<span class="sd">    type, which is then used in parameter validation. The function also determines whether plans, devices</span>
-<span class="sd">    or both plans and devices need to be converted. If the name of the built-in type is redefined</span>
-<span class="sd">    in ``plans``, ``devices`` or ``enums`` section, then the keyword is ignored.</span>
+<span class="sd">    ``__PLAN__``, ``__DEVICE__``, ``__PLAN_OR_DEVICE__``, ``__READABLE__``, ``__MOVABLE__``,</span>
+<span class="sd">    ``__FLYABLE__``, ``__CALLABLE__``.</span>
+<span class="sd">    Since plan and device names are passed as strings and then converted to respective object,</span>
+<span class="sd">    the built-in plan names are replaced by ``str`` type, which is then used in parameter validation.</span>
+<span class="sd">    The function also determines whether plans, devices or both plans and devices need to be converted.</span>
+<span class="sd">    If the name of the built-in type is redefined in ``plans``, ``devices`` or ``enums`` section,</span>
+<span class="sd">    then the keyword is ignored.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -2142,10 +2166,9 @@
 <span class="sd">    -------</span>
 <span class="sd">    annotation_type_str: str</span>
 <span class="sd">        Modified parameter type</span>
-<span class="sd">    convert_plan_names: boolean</span>
-<span class="sd">        Indicates whether the plan names need to be converted based on the parameter type.</span>
-<span class="sd">    convert_device_names: boolean</span>
-<span class="sd">        Indicates whether the devices names need to be converted based on the parameter type.</span>
+<span class="sd">    convert_values: dict</span>
+<span class="sd">        Dictionary that contains information on how the parameter values should be processed.</span>
+<span class="sd">        Keys: ``convert_plan_names``, ``convert_device_names``, ``eval_expressions``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Built-in types that may be contained in &#39;annotation_type_str&#39; and</span>
     <span class="c1">#   should be converted to another known type</span>
@@ -2154,14 +2177,19 @@
     <span class="n">enums</span> <span class="o">=</span> <span class="n">enums</span> <span class="ow">or</span> <span class="p">{}</span>
 
     <span class="n">built_in_types</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;__PLAN__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-        <span class="s2">&quot;__DEVICE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
-        <span class="s2">&quot;__PLAN_OR_DEVICE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+        <span class="s2">&quot;__PLAN__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="s2">&quot;__DEVICE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="s2">&quot;__PLAN_OR_DEVICE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="s2">&quot;__READABLE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="s2">&quot;__MOVABLE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="s2">&quot;__FLYABLE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="s2">&quot;__CALLABLE__&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;str&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
     <span class="p">}</span>
     <span class="n">convert_plan_names</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">convert_device_names</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">eval_expressions</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="k">for</span> <span class="n">btype</span><span class="p">,</span> <span class="p">(</span><span class="n">btype_replace</span><span class="p">,</span> <span class="n">pl</span><span class="p">,</span> <span class="n">dev</span><span class="p">)</span> <span class="ow">in</span> <span class="n">built_in_types</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="k">for</span> <span class="n">btype</span><span class="p">,</span> <span class="p">(</span><span class="n">btype_replace</span><span class="p">,</span> <span class="n">pl</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">ev_expr</span><span class="p">)</span> <span class="ow">in</span> <span class="n">built_in_types</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="c1"># If &#39;plans&#39;, &#39;devices&#39; or &#39;enums&#39; contains the type name, then leave it as is</span>
         <span class="k">if</span> <span class="p">(</span><span class="n">btype</span> <span class="ow">in</span> <span class="n">plans</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">btype</span> <span class="ow">in</span> <span class="n">devices</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">btype</span> <span class="ow">in</span> <span class="n">enums</span><span class="p">):</span>
             <span class="k">continue</span>
@@ -2169,8 +2197,14 @@
             <span class="n">annotation_type_str</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">btype</span><span class="p">,</span> <span class="n">btype_replace</span><span class="p">,</span> <span class="n">annotation_type_str</span><span class="p">)</span>
             <span class="n">convert_plan_names</span> <span class="o">=</span> <span class="n">convert_plan_names</span> <span class="ow">or</span> <span class="n">pl</span>
             <span class="n">convert_device_names</span> <span class="o">=</span> <span class="n">convert_device_names</span> <span class="ow">or</span> <span class="n">dev</span>
+            <span class="n">eval_expressions</span> <span class="o">=</span> <span class="n">eval_expressions</span> <span class="ow">or</span> <span class="n">ev_expr</span>
 
-    <span class="k">return</span> <span class="n">annotation_type_str</span><span class="p">,</span> <span class="n">convert_plan_names</span><span class="p">,</span> <span class="n">convert_device_names</span>
+    <span class="n">convert_values</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">convert_plan_names</span><span class="o">=</span><span class="n">convert_plan_names</span><span class="p">,</span>
+        <span class="n">convert_device_names</span><span class="o">=</span><span class="n">convert_device_names</span><span class="p">,</span>
+        <span class="n">eval_expressions</span><span class="o">=</span><span class="n">eval_expressions</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">annotation_type_str</span><span class="p">,</span> <span class="n">convert_values</span>
 
 
 <span class="k">def</span> <span class="nf">_process_annotation</span><span class="p">(</span><span class="n">encoded_annotation</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">ns</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -2178,10 +2212,10 @@
 <span class="sd">    Processed annotation is encoded the same way as in the descriptions of existing plans.</span>
 <span class="sd">    Returns reference to the annotation (type object) and the list of temporary types</span>
 <span class="sd">    that needs to be deleted once the processing (parameter validation) is complete.</span>
-<span class="sd">    The built-in type names (__DEVICE__, __PLAN__, __PLAN_OR_DEVICE__) are replaced with ``str``</span>
-<span class="sd">    unless types with the same name are defined in ``plans``, ``devices`` or</span>
-<span class="sd">    ``enums`` sections of the annotation. Explicitly defined the types with the same names</span>
-<span class="sd">    as built-in types are treated as regular types.</span>
+<span class="sd">    The built-in type names (__DEVICE__, __PLAN__, __PLAN_OR_DEVICE__, ``__READABLE__``,</span>
+<span class="sd">    ``__MOVABLE__``, ``__FLYABLE__``, ``__CALLABLE__``) are replaced with ``str`` unless types with</span>
+<span class="sd">    the same name are defined in ``plans``, ``devices`` or ``enums`` sections of the annotation.</span>
+<span class="sd">    Explicitly defined the types with the same names as built-in types are treated as regular types.</span>
 
 <span class="sd">    The function validates annotation and raises exceptions in the following cases:</span>
 <span class="sd">    the types defined in &#39;plans&#39;, &#39;devices&#39; or &#39;enums&#39; sections are not lists or tuples;</span>
@@ -2206,12 +2240,9 @@
 <span class="sd">    -------</span>
 <span class="sd">    annotation_type: type</span>
 <span class="sd">        Type reconstructed from annotation.</span>
-<span class="sd">    convert_plan_names: bool</span>
-<span class="sd">        Indicates if __PLAN__ or __PLAN_OR_DEVICE__ built-in type was detected and matching</span>
-<span class="sd">        strings should be converted to plan objects.</span>
-<span class="sd">    convert_device_names: bool</span>
-<span class="sd">        Indicates if __DEVICE__ or __PLAN_OR_DEVICE__ built-in type was detected and matching</span>
-<span class="sd">        strings should be converted to devuce objects.</span>
+<span class="sd">    convert_values: dict</span>
+<span class="sd">        Dictionary that contains information on how the parameter values should be processed.</span>
+<span class="sd">        Keys: ``convert_plan_names``, ``convert_device_names``, ``eval_expressions``.</span>
 <span class="sd">    ns: dict</span>
 <span class="sd">        Namespace dictionary with created types.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -2250,7 +2281,7 @@
         <span class="n">items</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">plans</span><span class="p">)</span>
         <span class="n">items</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">enums</span><span class="p">)</span>
 
-        <span class="n">annotation_type_str</span><span class="p">,</span> <span class="n">convert_plan_names</span><span class="p">,</span> <span class="n">convert_device_names</span> <span class="o">=</span> <span class="n">_find_and_replace_built_in_types</span><span class="p">(</span>
+        <span class="n">annotation_type_str</span><span class="p">,</span> <span class="n">convert_values</span> <span class="o">=</span> <span class="n">_find_and_replace_built_in_types</span><span class="p">(</span>
             <span class="n">annotation_type_str</span><span class="p">,</span> <span class="n">plans</span><span class="o">=</span><span class="n">plans</span><span class="p">,</span> <span class="n">devices</span><span class="o">=</span><span class="n">devices</span><span class="p">,</span> <span class="n">enums</span><span class="o">=</span><span class="n">enums</span>
         <span class="p">)</span>
 
@@ -2293,7 +2324,7 @@
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">ex</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to process annotation &#39;</span><span class="si">{</span><span class="n">annotation_type_str</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">ex</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">annotation_type</span><span class="p">,</span> <span class="n">convert_plan_names</span><span class="p">,</span> <span class="n">convert_device_names</span><span class="p">,</span> <span class="n">ns</span>
+    <span class="k">return</span> <span class="n">annotation_type</span><span class="p">,</span> <span class="n">convert_values</span><span class="p">,</span> <span class="n">ns</span>
 
 
 <span class="k">def</span> <span class="nf">_process_default_value</span><span class="p">(</span><span class="n">encoded_default_value</span><span class="p">):</span>
@@ -2348,7 +2379,7 @@
             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No &#39;name&#39; key in the parameter description </span><span class="si">{</span><span class="n">p</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="s2">&quot;annotation&quot;</span> <span class="ow">in</span> <span class="n">p</span><span class="p">:</span>
-            <span class="n">p_type</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_process_annotation</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;annotation&quot;</span><span class="p">])</span>
+            <span class="n">p_type</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_process_annotation</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;annotation&quot;</span><span class="p">])</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">p_type</span> <span class="o">=</span> <span class="n">typing</span><span class="o">.</span><span class="n">Any</span>
 
@@ -2910,11 +2941,79 @@
 <span class="sd">        Error occurred while creating plan description.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">def</span> <span class="nf">_get_full_type_name</span><span class="p">(</span><span class="n">patterns</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the full name of the type with parameters. The function tries to find the name</span>
+<span class="sd">        of the type in the string ``s`` using the list of regular expressions ``patterns``.</span>
+<span class="sd">        For example, if the list of patterns is ``[&quot;typing.Callable&quot;, &quot;collections.abc.Callable&quot;]``</span>
+<span class="sd">        the function will find both isolated ``typing.Callable`` and ``collections.abc.Callable``</span>
+<span class="sd">        and the types with parameters such as ``typing.Callable[[int, str], float]``, whichever</span>
+<span class="sd">        comes first in the string ``s``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        patterns : list</span>
+<span class="sd">            List of regular expressions to find the type name in the string ``s``.</span>
+<span class="sd">        s : str</span>
+<span class="sd">            String to search for the type name.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str or None</span>
+<span class="sd">            Full name of the type with parameters or ``None`` if the type name was not found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">s</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Try all patterns. Use the first pattern that matches.</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="p">[</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">patterns</span><span class="p">]</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">m</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">match</span> <span class="ow">or</span> <span class="n">m</span><span class="o">.</span><span class="n">start</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">match</span><span class="o">.</span><span class="n">start</span><span class="p">():</span>
+                    <span class="n">match</span> <span class="o">=</span> <span class="n">m</span>
+
+        <span class="c1"># No patterns were found.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">match</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">name</span> <span class="o">=</span> <span class="n">match</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">start_ind</span><span class="p">,</span> <span class="n">end_name_ind</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">span</span><span class="p">()</span>
+
+        <span class="c1"># The type has no parameters</span>
+        <span class="k">if</span> <span class="n">end_name_ind</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="p">[</span><span class="n">end_name_ind</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;[&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">name</span>
+
+        <span class="c1"># Find full name with parameters (find the closing bracket)</span>
+        <span class="n">end_ind</span><span class="p">,</span> <span class="n">n_brackets</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">end_name_ind</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">s</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;[&quot;</span><span class="p">:</span>
+                <span class="n">n_brackets</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">elif</span> <span class="n">s</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;]&quot;</span><span class="p">:</span>
+                <span class="n">n_brackets</span> <span class="o">-=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">n_brackets</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">end_ind</span> <span class="o">=</span> <span class="n">n</span> <span class="o">+</span> <span class="mi">1</span>
+                    <span class="k">break</span>
+
+        <span class="k">if</span> <span class="n">end_ind</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">name</span>
+
+        <span class="k">return</span> <span class="n">s</span><span class="p">[</span><span class="n">start_ind</span><span class="p">:</span><span class="n">end_ind</span><span class="p">]</span>
+
     <span class="k">def</span> <span class="nf">convert_annotation_to_string</span><span class="p">(</span><span class="n">annotation</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Ignore the type if it can not be properly reconstructed using &#39;eval&#39;</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">ns</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;typing&quot;</span><span class="p">:</span> <span class="n">typing</span><span class="p">,</span> <span class="s2">&quot;NoneType&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="kc">None</span><span class="p">)}</span>
+        <span class="kn">from</span> <span class="nn">bluesky.protocols</span> <span class="kn">import</span> <span class="n">Flyable</span><span class="p">,</span> <span class="n">Movable</span><span class="p">,</span> <span class="n">Readable</span>
+
+        <span class="c1"># Patterns for callables</span>
+        <span class="n">callables_patterns</span> <span class="o">=</span> <span class="p">(</span><span class="sa">r</span><span class="s2">&quot;typing.Callable&quot;</span><span class="p">,</span> <span class="sa">r</span><span class="s2">&quot;collections.abc.Callable&quot;</span><span class="p">)</span>
+        <span class="n">n_callables</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Number of detected callables</span>
+
+        <span class="n">protocols_mapping</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;__READABLE__&quot;</span><span class="p">:</span> <span class="n">Readable</span><span class="p">,</span> <span class="s2">&quot;__MOVABLE__&quot;</span><span class="p">:</span> <span class="n">Movable</span><span class="p">,</span> <span class="s2">&quot;__FLYABLE__&quot;</span><span class="p">:</span> <span class="n">Flyable</span><span class="p">}</span>
+        <span class="n">protocols_inv</span> <span class="o">=</span> <span class="p">{</span><span class="n">v</span><span class="p">:</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">protocols_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+        <span class="n">ns</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;typing&quot;</span><span class="p">:</span> <span class="n">typing</span><span class="p">,</span> <span class="s2">&quot;collections&quot;</span><span class="p">:</span> <span class="n">collections</span><span class="p">,</span> <span class="s2">&quot;NoneType&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">**</span><span class="n">protocols_mapping</span><span class="p">}</span>
 
         <span class="c1"># This will work for generic types like &#39;typing.List[int]&#39;</span>
         <span class="n">a_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">annotation</span><span class="si">!r}</span><span class="s2">&quot;</span>
@@ -2925,12 +3024,42 @@
             <span class="c1"># Note, that starting with Python 3.10 parameter annotation always have</span>
             <span class="c1">#   &#39;__name__&#39;, which is meaningless for types other than base types.</span>
             <span class="n">a_str</span> <span class="o">=</span> <span class="n">annotation</span><span class="o">.</span><span class="vm">__name__</span>
+            <span class="n">mapping</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="o">.</span><span class="vm">__name__</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">protocols_inv</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="k">if</span> <span class="n">a_str</span> <span class="ow">in</span> <span class="n">mapping</span><span class="p">:</span>
+                <span class="n">a_str</span> <span class="o">=</span> <span class="n">mapping</span><span class="p">[</span><span class="n">a_str</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Replace each expression with a unique string in the form of &#39;__CALLABLE&lt;n&gt;__&#39;</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">pattern</span> <span class="o">=</span> <span class="n">_get_full_type_name</span><span class="p">(</span><span class="n">callables_patterns</span><span class="p">,</span> <span class="n">a_str</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">pattern</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">p_type</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">ns</span><span class="p">,</span> <span class="n">ns</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="n">p_type</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">p_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__CALLABLE</span><span class="si">{</span><span class="n">n_callables</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">__&quot;</span>
+                <span class="n">a_str</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">escape</span><span class="p">(</span><span class="n">pattern</span><span class="p">),</span> <span class="n">p_str</span><span class="p">,</span> <span class="n">a_str</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">p_type</span><span class="p">:</span>
+                    <span class="c1"># Evaluation of the annotation will fail later and the parameter</span>
+                    <span class="c1">#   will have no type annotation</span>
+                    <span class="n">ns</span><span class="p">[</span><span class="n">p_str</span><span class="p">]</span> <span class="o">=</span> <span class="n">p_type</span>
+                <span class="n">n_callables</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="n">mapping</span> <span class="o">=</span> <span class="p">{</span><span class="sa">f</span><span class="s2">&quot;bluesky.protocols.</span><span class="si">{</span><span class="n">k</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">protocols_inv</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="k">for</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">replacement</span> <span class="ow">in</span> <span class="n">mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">a_str</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">replacement</span><span class="p">,</span> <span class="n">a_str</span><span class="p">)</span>
 
         <span class="c1"># Verify if the type could be recreated by evaluating the string during validation.</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">an</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">a_str</span><span class="p">,</span> <span class="n">ns</span><span class="p">,</span> <span class="n">ns</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">an</span> <span class="o">!=</span> <span class="n">annotation</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">Exception</span><span class="p">()</span>
+
+            <span class="c1"># Replace all callables (&#39;__CALLABLE1__&#39;, &#39;__CALLABLE2__&#39;, etc.) with &#39;__CALLABLE__&#39; string</span>
+            <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_callables</span><span class="p">):</span>
+                <span class="n">p_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;__CALLABLE</span><span class="si">{</span><span class="n">n</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">__&quot;</span>
+                <span class="n">a_str</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="n">p_str</span><span class="p">,</span> <span class="s2">&quot;__CALLABLE__&quot;</span><span class="p">,</span> <span class="n">a_str</span><span class="p">)</span>
+
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="c1"># Ignore the type if it can not be recreated.</span>
             <span class="n">a_str</span> <span class="o">=</span> <span class="kc">None</span>
@@ -3089,14 +3218,17 @@
 
             <span class="k">if</span> <span class="n">annotation</span><span class="p">:</span>
                 <span class="c1"># Verify that the encoded type could be decoded (raises an exception if fails)</span>
-                <span class="n">_</span><span class="p">,</span> <span class="n">convert_plan_names</span><span class="p">,</span> <span class="n">convert_device_names</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_process_annotation</span><span class="p">(</span><span class="n">annotation</span><span class="p">)</span>
+                <span class="n">_</span><span class="p">,</span> <span class="n">convert_values</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_process_annotation</span><span class="p">(</span><span class="n">annotation</span><span class="p">)</span>
+                <span class="c1"># _, convert_plan_names, convert_device_names, _ = _process_annotation(annotation)</span>
                 <span class="n">working_dict</span><span class="p">[</span><span class="s2">&quot;annotation&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">annotation</span>
 
                 <span class="c1"># Set the following parameters True only if they do not already exist (ignore if False)</span>
-                <span class="k">if</span> <span class="n">convert_plan_names</span> <span class="ow">and</span> <span class="p">(</span><span class="s2">&quot;convert_plan_names&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">working_dict</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">convert_values</span><span class="p">[</span><span class="s2">&quot;convert_plan_names&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="p">(</span><span class="s2">&quot;convert_plan_names&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">working_dict</span><span class="p">):</span>
                     <span class="n">working_dict</span><span class="p">[</span><span class="s2">&quot;convert_plan_names&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="k">if</span> <span class="n">convert_device_names</span> <span class="ow">and</span> <span class="p">(</span><span class="s2">&quot;convert_device_names&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">working_dict</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">convert_values</span><span class="p">[</span><span class="s2">&quot;convert_device_names&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="p">(</span><span class="s2">&quot;convert_device_names&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">working_dict</span><span class="p">):</span>
                     <span class="n">working_dict</span><span class="p">[</span><span class="s2">&quot;convert_device_names&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">if</span> <span class="n">convert_values</span><span class="p">[</span><span class="s2">&quot;eval_expressions&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="p">(</span><span class="s2">&quot;eval_expressions&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">working_dict</span><span class="p">):</span>
+                    <span class="n">working_dict</span><span class="p">[</span><span class="s2">&quot;eval_expressions&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
 
             <span class="k">if</span> <span class="n">default</span><span class="p">:</span>
                 <span class="c1"># Verify that the encoded representation of the default can be decoded.</span>
