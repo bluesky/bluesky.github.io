@@ -2,7 +2,7 @@
 
 You can use an existing Github, Google, ORCID or possibly an institutional account to authenticate. Follow the steps below. It should take less than 5 mins.
 
-1. Use this [link](https://mattermost.hzdr.de/signup_user_complete/?id=xr4bwecii7n6j8sj63ktqnk13amd=linksbr=su). You'll be presented with the following page. When prompted press the button **"Gitlab"** under **"Create your account with one of the following:"**
+1. Use this [link](https://mattermost.hzdr.de/signup_user_complete/?id=xr4bwecii7n6j8sj63ktqnk13a&md=link&sbr=su). You'll be presented with the following page. When prompted press the button **"Gitlab"** under **"Create your account with one of the following:"**
 
 ![image_1_get_started](images/image_1_get_started.png)
 
