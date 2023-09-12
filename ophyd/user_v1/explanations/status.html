@@ -719,6 +719,43 @@ is marked finished based on some ophyd event. It reduces this:</p>
 handled automatically, internally. See
 <a class="reference internal" href="../generated/ophyd.status.SubscriptionStatus.html#ophyd.status.SubscriptionStatus" title="ophyd.status.SubscriptionStatus"><code class="xref py py-class docutils literal notranslate"><span class="pre">SubscriptionStatus</span></code></a> for additional options.</p>
 </section>
+<section id="stablesubscriptionstatus">
+<h2>StableSubscriptionStatus<a class="headerlink" href="#stablesubscriptionstatus" title="Permalink to this heading">#</a></h2>
+<p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">StableSubscriptionStatus</span></code> is a Status object that is
+similar to the <a class="reference internal" href="../generated/ophyd.status.SubscriptionStatus.html#ophyd.status.SubscriptionStatus" title="ophyd.status.SubscriptionStatus"><code class="xref py py-class docutils literal notranslate"><span class="pre">SubscriptionStatus</span></code></a> but is only marked
+finished based on an ophyd event remaining stable for some given time. For
+example, this could be used to ensure a temperature remains in a given range
+for a set amount of time:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ophyd</span> <span class="kn">import</span> <span class="n">Device</span><span class="p">,</span> <span class="n">Component</span><span class="p">,</span> <span class="n">StableSubscriptionStatus</span>
+
+<span class="k">class</span> <span class="nc">MyTempSensor</span><span class="p">(</span><span class="n">Device</span><span class="p">):</span>
+    <span class="o">...</span>
+    <span class="c1"># The set point and readback of a temperature that</span>
+    <span class="c1"># may fluctuate for a second before it can be considered set</span>
+    <span class="n">temp_sp</span> <span class="o">=</span> <span class="n">Component</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="n">temp_rbv</span> <span class="o">=</span> <span class="n">Component</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">set_value</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">check_value</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">old_value</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="s2">&quot;Return True when the temperature is in a valid range.&quot;</span>
+            <span class="k">return</span> <span class="n">set_value</span> <span class="o">-</span> <span class="mf">0.01</span> <span class="o">&lt;</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="n">set_value</span> <span class="o">+</span> <span class="mf">0.01</span>
+
+        <span class="n">status</span> <span class="o">=</span> <span class="n">StableSubscriptionStatus</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_rbv</span><span class="p">,</span> <span class="n">check_value</span><span class="p">,</span> <span class="n">stability_time</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temp_sp</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">set_value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">status</span>
+</pre></div>
+</div>
+<p>The timer for <code class="docutils literal notranslate"><span class="pre">stability_time</span></code> is started when the callback condition first
+becomes true and stopped if it becomes false. It is then restarted if the
+condition becomes true again. This will continue until either the condition
+stays true for the full <code class="docutils literal notranslate"><span class="pre">stability_time</span></code>, in which case the Status will succeed,
+or a timeout/exception is reached, in which it will fail.</p>
+<p>Note: Before using this status it’s recommended you think about implementing
+this check in the server side i.e. as the put callback in the associated IOC.
+This will allow multiple clients to easily share the same logic. However, this
+client-side status can be useful in cases where logic may need to be modified
+often or where different clients may have varying opinions on what stability
+means.</p>
+</section>
 <section id="partial-progress-updates">
 <h2>Partial Progress Updates<a class="headerlink" href="#partial-progress-updates" title="Permalink to this heading">#</a></h2>
 <p>Some Status objects provide an additional method named <code class="docutils literal notranslate"><span class="pre">watch</span></code>, as in
@@ -799,6 +836,7 @@ Device, when the action starts, and when the action ends.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#creation-and-marking-completion">Creation and Marking Completion</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#notification-of-completion">Notification of Completion</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#subscriptionstatus">SubscriptionStatus</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stablesubscriptionstatus">StableSubscriptionStatus</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#partial-progress-updates">Partial Progress Updates</a></li>
 </ul>
   </nav></div>
