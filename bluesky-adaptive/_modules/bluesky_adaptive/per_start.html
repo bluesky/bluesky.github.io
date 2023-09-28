@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bluesky_adaptive.per_start &mdash; bluesky-adaptive 0.post1+gedd7de8 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/copybutton.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=1325d5df"></script>
+        <script src="../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
+        <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+        <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            bluesky-adaptive
+          </a>
+              <div class="version">
+                0.post1+gedd7de8
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../release-history.html">Release History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../min_versions.html">Minimum Version of Python and NumPy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../distributed.html">Distributed Agents</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api_gen/bluesky_adaptive.per_event.recommender_factory.html">bluesky_adaptive.per_event.recommender_factory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_gen/bluesky_adaptive.per_event.adaptive_plan.html">bluesky_adaptive.per_event.adaptive_plan</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api_gen/bluesky_adaptive.per_start.recommender_factory.html">bluesky_adaptive.per_start.recommender_factory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_gen/bluesky_adaptive.per_start.adaptive_plan.html">bluesky_adaptive.per_start.adaptive_plan</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api_gen/bluesky_adaptive.on_stop.recommender_factory.html">bluesky_adaptive.on_stop.recommender_factory</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">bluesky-adaptive</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bluesky_adaptive.per_start</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bluesky_adaptive.per_start</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Per-Start adaptive integration.</span>
+
+<span class="sd">These functions are for integrating adaptive logic that works</span>
+<span class="sd">between runs.  The decision making process can expect to consume a</span>
+<span class="sd">full run before having to make a recommendation about what to do next.</span>
+<span class="sd">This may be desirable if there is a major time miss-match between the</span>
+<span class="sd">computation and the experiment, of the data collection is not amenable</span>
+<span class="sd">to streaming analysis, or the natural structure of the experiment</span>
+<span class="sd">dictates.</span>
+
+<span class="sd">This corresponds to a &quot;middle&quot; scale of adaptive integration into</span>
+<span class="sd">data collection.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">queue</span> <span class="kn">import</span> <span class="n">Empty</span><span class="p">,</span> <span class="n">Queue</span>
+
+<span class="kn">import</span> <span class="nn">bluesky.plan_stubs</span> <span class="k">as</span> <span class="nn">bps</span>
+<span class="kn">import</span> <span class="nn">bluesky.plans</span> <span class="k">as</span> <span class="nn">bp</span>
+<span class="kn">import</span> <span class="nn">bluesky.preprocessors</span> <span class="k">as</span> <span class="nn">bpp</span>
+<span class="kn">from</span> <span class="nn">event_model</span> <span class="kn">import</span> <span class="n">RunRouter</span>
+
+<span class="kn">from</span> <span class="nn">.recommendations</span> <span class="kn">import</span> <span class="n">NoRecommendation</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">extract_event_page</span>
+
+
+<div class="viewcode-block" id="recommender_factory"><a class="viewcode-back" href="../../api_gen/bluesky_adaptive.per_start.recommender_factory.html#bluesky_adaptive.per_start.recommender_factory">[docs]</a><span class="k">def</span> <span class="nf">recommender_factory</span><span class="p">(</span><span class="n">adaptive_obj</span><span class="p">,</span> <span class="n">independent_keys</span><span class="p">,</span> <span class="n">dependent_keys</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_count</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate the callback and queue for an Adaptive API backed reccomender.</span>
+
+<span class="sd">    This recommends a fixed step size independent of the measurement.</span>
+
+<span class="sd">    For each Run (aka Start) that the callback sees it will place</span>
+<span class="sd">    either a recommendation or `None` into the queue.  Recommendations</span>
+<span class="sd">    will be of a dict mapping the independent_keys to the recommended</span>
+<span class="sd">    values and should be interpreted by the plan as a request for more</span>
+<span class="sd">    data.  A `None` placed in the queue should be interpreted by the</span>
+<span class="sd">    plan as in instruction to terminate the run.</span>
+
+<span class="sd">    The StartDocuments in the stream must contain the key</span>
+<span class="sd">    ``&#39;batch_count&#39;``.</span>
+
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    adaptive_object : adaptive.BaseLearner</span>
+<span class="sd">        The recommendation engine</span>
+
+<span class="sd">    independent_keys : List[str]</span>
+<span class="sd">        The names of the independent keys in the events</span>
+
+<span class="sd">    dependent_keys : List[str]</span>
+<span class="sd">        The names of the dependent keys in the events</span>
+
+<span class="sd">    max_count : int, optional</span>
+<span class="sd">        The maximum number of measurements to take before poisoning the queue.</span>
+
+<span class="sd">    queue : Queue, optional</span>
+<span class="sd">        The communication channel for the callback to feedback to the plan.</span>
+<span class="sd">        If not given, a new queue will be created.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    callback : Callable[str, dict]</span>
+<span class="sd">        This function must be subscribed to RunEngine to receive the</span>
+<span class="sd">        document stream.</span>
+
+<span class="sd">    queue : Queue</span>
+<span class="sd">        The communication channel between the callback and the plan.  This</span>
+<span class="sd">        is always returned (even if the user passed it in).</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">queue</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">queue</span> <span class="o">=</span> <span class="n">Queue</span><span class="p">()</span>
+
+    <span class="n">poisoned</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">callback</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">):</span>
+        <span class="k">nonlocal</span> <span class="n">poisoned</span>
+        <span class="c1"># TODO handle multi-stream runs with more than 1 event!</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;batch_count&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">max_count</span><span class="p">:</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                <span class="n">poisoned</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">return</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">poisoned</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;event_page&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">poisoned</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="n">independent</span><span class="p">,</span> <span class="n">measurement</span> <span class="o">=</span> <span class="n">extract_event_page</span><span class="p">(</span><span class="n">independent_keys</span><span class="p">,</span> <span class="n">dependent_keys</span><span class="p">,</span> <span class="n">payload</span><span class="o">=</span><span class="n">doc</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
+            <span class="n">adaptive_obj</span><span class="o">.</span><span class="n">tell_many</span><span class="p">(</span><span class="n">independent</span><span class="p">,</span> <span class="n">measurement</span><span class="p">)</span>
+            <span class="c1"># pull the next point out of the adaptive API</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">next_point</span> <span class="o">=</span> <span class="n">adaptive_obj</span><span class="o">.</span><span class="n">ask</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">NoRecommendation</span><span class="p">:</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">independent_keys</span><span class="p">,</span> <span class="n">next_point</span><span class="p">)})</span>
+
+    <span class="n">rr</span> <span class="o">=</span> <span class="n">RunRouter</span><span class="p">([</span><span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">:</span> <span class="p">([</span><span class="n">callback</span><span class="p">],</span> <span class="p">[])])</span>
+    <span class="k">return</span> <span class="n">rr</span><span class="p">,</span> <span class="n">queue</span></div>
+
+
+<div class="viewcode-block" id="adaptive_plan"><a class="viewcode-back" href="../../api_gen/bluesky_adaptive.per_start.adaptive_plan.html#bluesky_adaptive.per_start.adaptive_plan">[docs]</a><span class="k">def</span> <span class="nf">adaptive_plan</span><span class="p">(</span><span class="n">dets</span><span class="p">,</span> <span class="n">first_point</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">to_recommender</span><span class="p">,</span> <span class="n">from_recommender</span><span class="p">,</span> <span class="n">md</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">take_reading</span><span class="o">=</span><span class="n">bp</span><span class="o">.</span><span class="n">count</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Execute an adaptive scan using an inter-run recommendation engine.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dets : List[OphydObj]</span>
+<span class="sd">       The detector to read at each point.  The dependent keys that the</span>
+<span class="sd">       recommendation engine is looking for must be provided by these</span>
+<span class="sd">       devices.</span>
+
+<span class="sd">    first_point : Dict[Settable, Any]</span>
+<span class="sd">       The first point of the scan.  The motors that will be scanned</span>
+<span class="sd">       are extracted from the keys.  The independent keys that the</span>
+<span class="sd">       recommendation engine is looking for / returning must be provided</span>
+<span class="sd">       by these devices.</span>
+
+<span class="sd">    to_recommender : Callable[document_name: str, document: dict]</span>
+<span class="sd">       This is the callback that will be registered to the RunEngine.</span>
+
+<span class="sd">       The expected contract is for each event it will place either a</span>
+<span class="sd">       dict mapping independent variable to recommended value or None.</span>
+
+<span class="sd">       This plan will either move to the new position and take data</span>
+<span class="sd">       if the value is a dict or end the run if `None`</span>
+
+<span class="sd">    from_recommender : Queue</span>
+<span class="sd">       The consumer side of the Queue that the recommendation engine is</span>
+<span class="sd">       putting the recommendations onto.</span>
+
+<span class="sd">    md : dict[str, Any], optional</span>
+<span class="sd">       Any extra meta-data to put in the Start document</span>
+
+<span class="sd">    take_reading : plan, optional</span>
+<span class="sd">        function to do the actual acquisition ::</span>
+
+<span class="sd">           def take_reading(dets, md={}):</span>
+<span class="sd">                yield from ...</span>
+
+<span class="sd">        Callable[List[OphydObj], Optional[Dict[str, Any]]] -&gt; Generator[Msg], optional</span>
+
+<span class="sd">        This plan must generate exactly 1 Run</span>
+
+<span class="sd">        Defaults to `bluesky.plans.count`</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># extract the motors</span>
+    <span class="n">motors</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">first_point</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="c1"># convert the first_point variable to from we will be getting</span>
+    <span class="c1"># from queue</span>
+    <span class="n">first_point</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">m</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">first_point</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+    <span class="n">_md</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;batch_id&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())}</span>
+
+    <span class="n">_md</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">md</span> <span class="ow">or</span> <span class="p">{})</span>
+
+    <span class="nd">@bpp</span><span class="o">.</span><span class="n">subs_decorator</span><span class="p">(</span><span class="n">to_recommender</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">gp_inner_plan</span><span class="p">():</span>
+        <span class="c1"># drain the queue in case there is anything left over from a previous</span>
+        <span class="c1"># run</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">from_recommender</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">block</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">Empty</span><span class="p">:</span>
+                <span class="k">break</span>
+        <span class="n">uids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">next_point</span> <span class="o">=</span> <span class="n">first_point</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">count</span><span class="p">():</span>
+            <span class="c1"># this assumes that m.name == the key in Event</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="p">:</span> <span class="n">next_point</span><span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">motors</span><span class="p">}</span>
+            <span class="n">motor_position_pairs</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="o">*</span><span class="n">target</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+
+            <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">mov</span><span class="p">(</span><span class="o">*</span><span class="n">motor_position_pairs</span><span class="p">)</span>
+            <span class="n">uid</span> <span class="o">=</span> <span class="k">yield from</span> <span class="n">take_reading</span><span class="p">(</span><span class="n">dets</span> <span class="o">+</span> <span class="n">motors</span><span class="p">,</span> <span class="n">md</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">_md</span><span class="p">,</span> <span class="s2">&quot;batch_count&quot;</span><span class="p">:</span> <span class="n">j</span><span class="p">})</span>
+            <span class="n">uids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span>
+
+            <span class="n">next_point</span> <span class="o">=</span> <span class="n">from_recommender</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">next_point</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span>
+
+        <span class="k">return</span> <span class="n">uids</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">gp_inner_plan</span><span class="p">())</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, NSLS-II.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

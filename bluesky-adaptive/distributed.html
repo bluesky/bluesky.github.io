@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Distributed Agents &mdash; bluesky-adaptive 0.post1+gedd7de8 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/plot_directive.css" type="text/css" />
+      <link rel="stylesheet" href="_static/copybutton.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js?v=1325d5df"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=4825356b"></script>
+        <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+        <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="bluesky_adaptive.per_event.recommender_factory" href="api_gen/bluesky_adaptive.per_event.recommender_factory.html" />
+    <link rel="prev" title="Examples" href="examples.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            bluesky-adaptive
+          </a>
+              <div class="version">
+                0.post1+gedd7de8
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release-history.html">Release History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="min_versions.html">Minimum Version of Python and NumPy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Distributed Agents</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api_gen/bluesky_adaptive.per_event.recommender_factory.html">bluesky_adaptive.per_event.recommender_factory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_gen/bluesky_adaptive.per_event.adaptive_plan.html">bluesky_adaptive.per_event.adaptive_plan</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api_gen/bluesky_adaptive.per_start.recommender_factory.html">bluesky_adaptive.per_start.recommender_factory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_gen/bluesky_adaptive.per_start.adaptive_plan.html">bluesky_adaptive.per_start.adaptive_plan</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api_gen/bluesky_adaptive.on_stop.recommender_factory.html">bluesky_adaptive.on_stop.recommender_factory</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">bluesky-adaptive</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Distributed Agents</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/distributed.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="distributed-agents">
+<span id="distributed"></span><h1>Distributed Agents<a class="headerlink" href="#distributed-agents" title="Permalink to this heading">¶</a></h1>
+<p>This section descibes how to work with agents whos distributed agents using the
+queueserver. It is particularly pertinent when:</p>
+<ul class="simple">
+<li><p>The agent is slower than the measurement</p></li>
+<li><p>lock-step behvior is not desired</p></li>
+<li><p>Multiple agents should run simultaneously</p></li>
+<li><p>Human’s and agents are meant to collaborate</p></li>
+</ul>
+<p>These agents depend on Kafka for communication. Each time they see a stop document,
+they check if the run is relevant to their decision making (<em>via</em> <code class="docutils literal notranslate"><span class="pre">trigger_condition</span></code>),
+then load the Bluesky Run through Tiled.
+The run is then processed, and unpacked into the relevant independent and dependent variables
+(<em>via</em> <code class="docutils literal notranslate"><span class="pre">unpack_run</span></code>).
+The agent then call’s its <code class="docutils literal notranslate"><span class="pre">tell</span></code> method on the independent and dependent variables. In this case
+The <code class="docutils literal notranslate"><span class="pre">unpack_run</span></code> might pull out some motor coordinates, and a 2-d detector image; and the <code class="docutils literal notranslate"><span class="pre">tell</span></code>
+might cache those as relative coordinates and some post-processing of the image.</p>
+<p>Agents should subclass the <code class="xref py py-obj docutils literal notranslate"><span class="pre">blusky_adaptive.agents.base.agent</span></code> and are responsible for implementing the
+following.</p>
+<section id="experiment-specific">
+<h2>Experiment specific<a class="headerlink" href="#experiment-specific" title="Permalink to this heading">¶</a></h2>
+<dl class="py method">
+<dt class="sig sig-object py" id="bluesky_adaptive.agents.base.Agent.measurement_plan">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Agent.</span></span><span class="sig-name descname"><span class="pre">measurement_plan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/bluesky_adaptive/agents/base.html#Agent.measurement_plan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bluesky_adaptive.agents.base.Agent.measurement_plan" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch the string name of a registered plan, as well as the positional and keyword
+arguments to pass that plan.</p>
+<p>Args/Kwargs is a common place to transform relative into absolute motor coords, or
+other device specific parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>point</strong><span class="classifier">ArrayLike</span></dt><dd><p>Next point to measure using a given plan</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><strong>plan_name</strong><span class="classifier">str</span></dt><dd></dd>
+<dt><strong>plan_args</strong><span class="classifier">List</span></dt><dd><p>List of arguments to pass to plan from a point to measure.</p>
+</dd>
+<dt><strong>plan_kwargs</strong><span class="classifier">dict</span></dt><dd><p>Dictionary of keyword arguments to pass the plan, from a point to measure.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="agent-brains-specific">
+<h2>Agent ‘brains’ specific<a class="headerlink" href="#agent-brains-specific" title="Permalink to this heading">¶</a></h2>
+<dl class="py method">
+<dt class="sig sig-object py" id="bluesky_adaptive.agents.base.Agent.ask">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Agent.</span></span><span class="sig-name descname"><span class="pre">ask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/bluesky_adaptive/agents/base.html#Agent.ask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bluesky_adaptive.agents.base.Agent.ask" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ask the agent for a new batch of points to measure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>batch_size</strong><span class="classifier">int</span></dt><dd><p>Number of new points to measure</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><strong>docs</strong><span class="classifier">Sequence[dict]</span></dt><dd><p>Documents of key metadata from the ask approach for each point in next_points.
+Must be length of batch size.</p>
+</dd>
+<dt><strong>next_points</strong><span class="classifier">Sequence</span></dt><dd><p>Sequence of independent variables of length batch size</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bluesky_adaptive.agents.base.Agent.report">
+<span class="sig-prename descclassname"><span class="pre">Agent.</span></span><span class="sig-name descname"><span class="pre">report</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">_SupportsArray</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">_NestedSequence</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">complex</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/bluesky_adaptive/agents/base.html#Agent.report"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bluesky_adaptive.agents.base.Agent.report" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a report given the data observed by the agent.
+This could be potentially implemented in the base class to write document stream.
+Additional functionality for converting the report dict into an image or formatted report is
+the duty of the child class.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="bluesky_adaptive.agents.base.Agent.name">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">Agent.</span></span><span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#bluesky_adaptive.agents.base.Agent.name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Short string name</p>
+</dd></dl>
+
+<p>The complete base class is given as follows:</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="bluesky_adaptive.agents.base.Agent">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bluesky_adaptive.agents.base.</span></span><span class="sig-name descname"><span class="pre">Agent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kafka_consumer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">AgentConsumer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tiled_data_node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Container</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tiled_agent_node</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Container</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qserver</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">API_Threads_Mixin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kafka_producer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Publisher</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">agent_run_suffix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ask_on_tell</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">direct_to_queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">report_on_tell</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default_report_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue_add_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'front'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'back'</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">endstation_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/bluesky_adaptive/agents/base.html#Agent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bluesky_adaptive.agents.base.Agent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Abstract base class for a single plan agent. These agents should consume data, decide where to measure next,
+and execute a single type of plan (something akin to move and count).
+Alternatively, these agents can be used for soley reporting.</p>
+<p>Base agent sets up a kafka subscription to listen to new stop documents, a catalog to read for experiments,
+a catalog to write agent status to, a kafka publisher to write agent documents to,
+and a manager API for the queue-server. Each time a stop document is read,
+the respective BlueskyRun is unpacked by the <code class="docutils literal notranslate"><span class="pre">unpack_run</span></code> method into an independent and dependent variable,
+and told to the agent by the <code class="docutils literal notranslate"><span class="pre">tell</span></code> method.</p>
+<p>Children of Agent should implment the following, through direct inheritence or mixin classes:
+Experiment specific:
+- measurement_plan
+- unpack_run
+Agent specific:
+- tell
+- ask
+- report (optional)
+- name (optional)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>kafka_consumer</strong><span class="classifier">AgentConsumer</span></dt><dd><p>Consumer (subscriber) of Kafka Bluesky documents. It should be subcribed to the sources of
+Bluesky stop documents that will trigger <code class="docutils literal notranslate"><span class="pre">tell</span></code>.
+AgentConsumer is a child class of bluesky_kafka.RemoteDispatcher that enables
+kafka messages to trigger agent directives.</p>
+</dd>
+<dt><strong>kafka_producer</strong><span class="classifier">Optional[Publisher]</span></dt><dd><p>Bluesky Kafka publisher to produce document stream of agent actions for optional Adjudicator.</p>
+</dd>
+<dt><strong>tiled_data_node</strong><span class="classifier">tiled.client.node.Node</span></dt><dd><p>Tiled node to serve as source of data (BlueskyRuns) for the agent.</p>
+</dd>
+<dt><strong>tiled_agent_node</strong><span class="classifier">tiled.client.node.Node</span></dt><dd><p>Tiled node to serve as storage for the agent documents.</p>
+</dd>
+<dt><strong>qserver</strong><span class="classifier">bluesky_queueserver_api.api_threads.API_Threads_Mixin</span></dt><dd><p>Object to manage communication with Queue Server</p>
+</dd>
+<dt><strong>agent_run_suffix</strong><span class="classifier">Optional[str], optional</span></dt><dd><p>Agent name suffix for the instance, by default generated using 2 hyphen separated words from xkcdpass.</p>
+</dd>
+<dt><strong>metadata</strong><span class="classifier">Optional[dict], optional</span></dt><dd><p>Optional extra metadata to add to agent start document, by default {}</p>
+</dd>
+<dt><strong>ask_on_tell</strong><span class="classifier">bool, optional</span></dt><dd><p>Whether to ask for new points every time an agent is told about new data.
+To create a truly passive agent, it is best to implement an <code class="docutils literal notranslate"><span class="pre">ask</span></code> as a method that does nothing.
+To create an agent that only suggests new points periodically or on another trigger, <code class="docutils literal notranslate"><span class="pre">ask_on_tell</span></code>
+should be set to False.
+By default True
+Can be adjusted using <code class="docutils literal notranslate"><span class="pre">enable_continuous_suggesting</span></code> and <code class="docutils literal notranslate"><span class="pre">disable_continuous_suggesting</span></code>.</p>
+</dd>
+<dt><strong>direct_to_queue</strong><span class="classifier">Optional[bool], optional</span></dt><dd><p>Whether the agent suggestions will be placed directly on the queue. If false,
+the suggestions will be sent to a Kafka topic for an Adjudicator to process.
+By default True
+Can be adjusted using <code class="docutils literal notranslate"><span class="pre">enable_direct_to_queue</span></code> and <code class="docutils literal notranslate"><span class="pre">disable_direct_to_queue</span></code>.</p>
+</dd>
+<dt><strong>report_on_tell</strong><span class="classifier">bool, optional</span></dt><dd><p>Whether to create a report every time an agent is told about new data.
+By default False.
+Can be adjusted using <code class="docutils literal notranslate"><span class="pre">enable_continuous_reporting</span></code> and <code class="docutils literal notranslate"><span class="pre">disable_continuous_reporting</span></code>.</p>
+</dd>
+<dt><strong>default_report_kwargs</strong><span class="classifier">Optional[dict], optional</span></dt><dd><p>Default kwargs for calling the <code class="docutils literal notranslate"><span class="pre">report</span></code> method, by default None</p>
+</dd>
+<dt><strong>queue_add_position</strong><span class="classifier">Optional[Union[int, Literal[&amp;quot;front&amp;quot;, &amp;quot;back&amp;quot;]]], optional</span></dt><dd><p>Starting postion to add to the queue if adding directly to the queue, by default “back”.</p>
+</dd>
+<dt><strong>endstation_key</strong><span class="classifier">Optional[str]</span></dt><dd><p>Optional string that is needed for Adjudicator functionality. This keys the qserver API instance to
+a particular endstation. This way child Agents can maintain multiple queues for different unit operations.
+For example, this could be a beamline three letter acronym or other distinct key.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Permalink to this heading">¶</a></h2>
+<p>The following example creates a simple hypothetical agent that only follows a sequence of
+predetermined points. While not clever, it shows the underlying mechanics.
+It copies some importable code from <code class="xref py py-obj docutils literal notranslate"><span class="pre">bluesky_adaptive.agents.simple</span></code>.
+In this case the user need only construct <code class="xref py py-obj docutils literal notranslate"><span class="pre">CMSBaseAgent</span></code> for some CMS specific values,
+and combine the <code class="xref py py-obj docutils literal notranslate"><span class="pre">SequentialAgent</span></code> and <code class="xref py py-obj docutils literal notranslate"><span class="pre">CMSBaseAgent</span></code>.
+This can be done through direct inheritence or mixins, as all necessary methods are declared
+as abstract in the base Agent.</p>
+<p>The default API supports passing the objects for communication, allowing for flexible customization.
+A convenience method <code class="xref py py-obj docutils literal notranslate"><span class="pre">from_config_kwargs</span></code> supports automatic construction of the Kafka producer and consumers,
+as well as the qserver API using some common configuration keys. Both are demonstrated below for reference.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">bluesky_queueserver_api.http</span> <span class="kn">import</span> <span class="n">REManagerAPI</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">nslsii.kafka_utils</span>
+<span class="kn">from</span> <span class="nn">numpy.typing</span> <span class="kn">import</span> <span class="n">ArrayLike</span>
+
+<span class="k">class</span> <span class="nc">SequentialAgentBase</span><span class="p">(</span><span class="n">Agent</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Agent Mixin to take a pre-defined sequence and walk through it on ``ask``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sequence : Sequence[Union[float, ArrayLike]]</span>
+<span class="sd">        Sequence of points to be queried</span>
+<span class="sd">    relative_bounds : Tuple[Union[float, ArrayLike]], optional</span>
+<span class="sd">        Relative bounds for the members of the sequence to follow, by default None</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    independent_cache : list</span>
+<span class="sd">        List of the independent variables at each observed point</span>
+<span class="sd">    observable_cache : list</span>
+<span class="sd">        List of all observables corresponding to the points in the independent_cache</span>
+<span class="sd">    sequence : Sequence[Union[float, ArrayLike]]</span>
+<span class="sd">        Sequence of points to be queried</span>
+<span class="sd">    relative_bounds : Tuple[Union[float, ArrayLike]], optional</span>
+<span class="sd">        Relative bounds for the members of the sequence to follow, by default None</span>
+<span class="sd">    ask_count : int</span>
+<span class="sd">        Number of queries this agent has made</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;sequential&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">sequence</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]],</span>
+        <span class="n">relative_bounds</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">independent_cache</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observable_cache</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence</span> <span class="o">=</span> <span class="n">sequence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">relative_bounds</span> <span class="o">=</span> <span class="n">relative_bounds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ask_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_position_generator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_position_generator</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_create_position_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield points from sequence if within bounds&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sequence</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">relative_bounds</span><span class="p">:</span>
+                <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">point</span><span class="p">)</span>
+                <span class="n">condition</span> <span class="o">=</span> <span class="n">arr</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relative_bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">or</span> <span class="n">arr</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relative_bounds</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">condition</span><span class="p">:</span>
+                        <span class="k">yield</span> <span class="n">point</span>
+                        <span class="k">continue</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Next point will be skipped.  </span><span class="si">{</span><span class="n">point</span><span class="si">}</span><span class="s2"> in sequence for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instance_name</span><span class="si">}</span><span class="s2">, &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;is out of bounds </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">relative_bounds</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>  <span class="c1"># Array not float</span>
+                    <span class="k">if</span> <span class="n">condition</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+                        <span class="k">yield</span> <span class="n">arr</span>
+                        <span class="k">continue</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Next point will be skipped.  </span><span class="si">{</span><span class="n">point</span><span class="si">}</span><span class="s2"> in sequence for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instance_name</span><span class="si">}</span><span class="s2">, &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;is out of bounds </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">relative_bounds</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">point</span>
+
+    <span class="k">def</span> <span class="nf">tell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">independent_cache</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observable_cache</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">independent_variable</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">observable</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">cache_len</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">independent_cache</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">ask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]],</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">]]:</span>
+        <span class="n">docs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">proposals</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ask_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">proposals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_position_generator</span><span class="p">))</span>
+            <span class="n">docs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">proposal</span><span class="o">=</span><span class="n">proposals</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">ask_count</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ask_count</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">docs</span><span class="p">,</span> <span class="n">proposals</span>
+
+    <span class="k">def</span> <span class="nf">report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">percent_completion</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ask_count</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sequence</span><span class="p">))</span>
+
+<span class="k">class</span> <span class="nc">CMSBaseAgent</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="nf">measurement_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">point</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;simple_scan&quot;</span><span class="p">,</span> <span class="n">point</span><span class="p">,</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">unpack_run</span><span class="p">(</span><span class="n">run</span><span class="p">:</span> <span class="n">BlueskyRun</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">],</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="n">run</span><span class="o">.</span><span class="n">start</span><span class="p">[</span><span class="s2">&quot;experiment_state&quot;</span><span class="p">],</span> <span class="n">run</span><span class="o">.</span><span class="n">primary</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;detector&quot;</span><span class="p">]</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">get_beamline_objects</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="n">beamline_tla</span> <span class="o">=</span> <span class="s2">&quot;cms&quot;</span>
+        <span class="n">kafka_config</span> <span class="o">=</span> <span class="n">nslsii</span><span class="o">.</span><span class="n">kafka_utils</span><span class="o">.</span><span class="n">_read_bluesky_kafka_config_file</span><span class="p">(</span>
+            <span class="n">config_file_path</span><span class="o">=</span><span class="s2">&quot;/etc/bluesky/kafka.yml&quot;</span>
+        <span class="p">)</span>
+        <span class="n">qs</span> <span class="o">=</span> <span class="n">REManagerAPI</span><span class="p">(</span><span class="n">http_server_uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;https://qserver.nsls2.bnl.gov/</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">qs</span><span class="o">.</span><span class="n">set_authorization_key</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">kafka_consumer</span> <span class="o">=</span> <span class="n">bluesky_adaptive</span><span class="o">.</span><span class="n">agents</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">AgentConsumer</span><span class="p">(</span>
+            <span class="n">topics</span><span class="o">=</span><span class="p">[</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">.bluesky.runengine.documents&quot;</span><span class="p">,</span>
+            <span class="p">],</span>
+            <span class="n">consumer_config</span><span class="o">=</span><span class="n">kafka_config</span><span class="p">[</span><span class="s2">&quot;runengine_producer_config&quot;</span><span class="p">],</span>
+            <span class="n">bootstrap_servers</span><span class="o">=</span><span class="n">kafka_config</span><span class="p">[</span><span class="s2">&quot;bootstrap_servers&quot;</span><span class="p">],</span>
+            <span class="n">group_id</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;echo-</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="n">kafka_producer</span> <span class="o">=</span> <span class="n">bluesky_kafka</span><span class="o">.</span><span class="n">Publisher</span><span class="p">(</span>
+            <span class="n">topic</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">.bluesky.adjudicators&quot;</span><span class="p">,</span>
+            <span class="n">bootstrap_servers</span><span class="o">=</span><span class="n">kafka_config</span><span class="p">[</span><span class="s2">&quot;bootstrap_servers&quot;</span><span class="p">],</span>
+            <span class="n">key</span><span class="o">=</span><span class="s2">&quot;cms.key&quot;</span><span class="p">,</span>
+            <span class="n">producer_config</span><span class="o">=</span><span class="n">kafka_config</span><span class="p">[</span><span class="s2">&quot;runengine_producer_config&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">kafka_consumer</span><span class="o">=</span><span class="n">kafka_consumer</span><span class="p">,</span>
+                    <span class="n">kafka_producer</span><span class="o">=</span><span class="n">kafka_producer</span><span class="p">,</span>
+                    <span class="n">tiled_data_node</span><span class="o">=</span><span class="n">tiled</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">),</span>
+                    <span class="n">tiled_agent_node</span><span class="o">=</span><span class="n">tiled</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">from_profile</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">_bluesky_sandbox&quot;</span><span class="p">),</span>
+                    <span class="n">qserver</span><span class="o">=</span><span class="n">qs</span><span class="p">)</span>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">get_beamline_kwargs</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="n">beamline_tla</span> <span class="o">=</span> <span class="s2">&quot;cms&quot;</span>
+        <span class="n">kafka_config</span> <span class="o">=</span> <span class="n">nslsii</span><span class="o">.</span><span class="n">kafka_utils</span><span class="o">.</span><span class="n">_read_bluesky_kafka_config_file</span><span class="p">(</span>
+            <span class="n">config_file_path</span><span class="o">=</span><span class="s2">&quot;/etc/bluesky/kafka.yml&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">kafka_group_id</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;echo-</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">kafka_bootstrap_servers</span><span class="o">=</span><span class="n">kafka_config</span><span class="p">[</span><span class="s2">&quot;bootstrap_servers&quot;</span><span class="p">],</span>
+            <span class="n">kafka_consumer_config</span><span class="o">=</span><span class="n">kafka_config</span><span class="p">[</span><span class="s2">&quot;runengine_producer_config&quot;</span><span class="p">],</span>
+            <span class="n">kafka_producer_config</span><span class="o">=</span><span class="n">kafka_config</span><span class="p">[</span><span class="s2">&quot;runengine_producer_config&quot;</span><span class="p">],</span>
+            <span class="n">publisher_topic</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">.bluesky.adjudicators&quot;</span><span class="p">,</span>
+            <span class="n">subscripion_topics</span><span class="o">=</span><span class="p">[</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">.bluesky.runengine.documents&quot;</span><span class="p">,</span>
+            <span class="p">],</span>
+            <span class="n">data_profile_name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">agent_profile_name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">_bluesky_sandbox&quot;</span><span class="p">,</span>
+            <span class="n">qserver_host</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;https://qserver.nsls2.bnl.gov/</span><span class="si">{</span><span class="n">beamline_tla</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">qserver_api_key</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+
+
+
+
+<span class="k">class</span> <span class="nc">CMSSequentialAgent</span><span class="p">(</span><span class="n">CMSBaseAgent</span><span class="p">,</span> <span class="n">SequentialAgentBase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">sequence</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]],</span>
+        <span class="n">relative_bounds</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">_default_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_beamline_objects</span><span class="p">()</span>
+        <span class="n">_default_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">sequence</span><span class="o">=</span><span class="n">sequence</span><span class="p">,</span> <span class="n">relative_bounds</span><span class="o">=</span><span class="n">relative_bounds</span><span class="p">,</span> <span class="o">**</span><span class="n">_default_kwargs</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_config_kwargs</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span>
+        <span class="n">sequence</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]],</span>
+        <span class="n">relative_bounds</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,):</span>
+        <span class="n">_default_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_beamline_kwargs</span><span class="p">()</span>
+        <span class="n">_default_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">sequence</span><span class="o">=</span><span class="n">sequence</span><span class="p">,</span> <span class="n">relative_bounds</span><span class="o">=</span><span class="n">relative_bounds</span><span class="p">,</span> <span class="o">**</span><span class="n">_default_kwargs</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="examples.html" class="btn btn-neutral float-left" title="Examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api_gen/bluesky_adaptive.per_event.recommender_factory.html" class="btn btn-neutral float-right" title="bluesky_adaptive.per_event.recommender_factory" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, NSLS-II.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

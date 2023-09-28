@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bluesky_adaptive.agents.base &mdash; bluesky-adaptive 0.post1+gedd7de8 documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/plot_directive.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/copybutton.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=1325d5df"></script>
+        <script src="../../../_static/doctools.js?v=888ff710"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+        <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+        <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            bluesky-adaptive
+          </a>
+              <div class="version">
+                0.post1+gedd7de8
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../release-history.html">Release History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../min_versions.html">Minimum Version of Python and NumPy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../distributed.html">Distributed Agents</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api_gen/bluesky_adaptive.per_event.recommender_factory.html">bluesky_adaptive.per_event.recommender_factory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api_gen/bluesky_adaptive.per_event.adaptive_plan.html">bluesky_adaptive.per_event.adaptive_plan</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api_gen/bluesky_adaptive.per_start.recommender_factory.html">bluesky_adaptive.per_start.recommender_factory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api_gen/bluesky_adaptive.per_start.adaptive_plan.html">bluesky_adaptive.per_start.adaptive_plan</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api_gen/bluesky_adaptive.on_stop.recommender_factory.html">bluesky_adaptive.on_stop.recommender_factory</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">bluesky-adaptive</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bluesky_adaptive.agents.base</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bluesky_adaptive.agents.base</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">time</span> <span class="k">as</span> <span class="nn">ttime</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span> <span class="nn">argparse</span> <span class="kn">import</span> <span class="n">ArgumentParser</span><span class="p">,</span> <span class="n">RawDescriptionHelpFormatter</span>
+<span class="kn">from</span> <span class="nn">logging</span> <span class="kn">import</span> <span class="n">getLogger</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">TypedDict</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">msgpack</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">tiled</span>
+<span class="kn">from</span> <span class="nn">bluesky_kafka</span> <span class="kn">import</span> <span class="n">Publisher</span><span class="p">,</span> <span class="n">RemoteDispatcher</span>
+<span class="kn">from</span> <span class="nn">bluesky_queueserver_api</span> <span class="kn">import</span> <span class="n">BPlan</span>
+<span class="kn">from</span> <span class="nn">bluesky_queueserver_api.api_threads</span> <span class="kn">import</span> <span class="n">API_Threads_Mixin</span>
+<span class="kn">from</span> <span class="nn">databroker.client</span> <span class="kn">import</span> <span class="n">BlueskyRun</span>
+<span class="kn">from</span> <span class="nn">event_model</span> <span class="kn">import</span> <span class="n">compose_run</span>
+<span class="kn">from</span> <span class="nn">numpy.typing</span> <span class="kn">import</span> <span class="n">ArrayLike</span>
+<span class="kn">from</span> <span class="nn">xkcdpass</span> <span class="kn">import</span> <span class="n">xkcd_password</span> <span class="k">as</span> <span class="n">xp</span>
+
+<span class="kn">from</span> <span class="nn">..adjudicators.msg</span> <span class="kn">import</span> <span class="n">DEFAULT_NAME</span> <span class="k">as</span> <span class="n">ADJUDICATOR_STREAM_NAME</span>
+<span class="kn">from</span> <span class="nn">..adjudicators.msg</span> <span class="kn">import</span> <span class="n">AdjudicatorMsg</span><span class="p">,</span> <span class="n">Suggestion</span>
+<span class="kn">from</span> <span class="nn">..server</span> <span class="kn">import</span> <span class="n">register_variable</span><span class="p">,</span> <span class="n">start_task</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;bluesky_adaptive.agents&quot;</span><span class="p">)</span>
+<span class="n">PASSWORD_LIST</span> <span class="o">=</span> <span class="n">xp</span><span class="o">.</span><span class="n">generate_wordlist</span><span class="p">(</span><span class="n">wordfile</span><span class="o">=</span><span class="n">xp</span><span class="o">.</span><span class="n">locate_wordfile</span><span class="p">(),</span> <span class="n">min_length</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">AgentConsumer</span><span class="p">(</span><span class="n">RemoteDispatcher</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">topics</span><span class="p">,</span>
+        <span class="n">bootstrap_servers</span><span class="p">,</span>
+        <span class="n">group_id</span><span class="p">,</span>
+        <span class="n">agent</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">consumer_config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">polling_duration</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">deserializer</span><span class="o">=</span><span class="n">msgpack</span><span class="o">.</span><span class="n">loads</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dispatch documents from Kafka to bluesky callbacks, modified for agent usage.</span>
+<span class="sd">        This allows subscribing the dispatcher to an on-stop protocol for agents to be told about</span>
+<span class="sd">        new Bluesky runs. It also provides an interface to trigger changes to the agent using the same</span>
+<span class="sd">        Kafka topics.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        topics : list</span>
+<span class="sd">            List of topics as strings such as [&quot;topic-1&quot;, &quot;topic-2&quot;]</span>
+<span class="sd">        bootstrap_servers : str</span>
+<span class="sd">            Comma-delimited list of Kafka server addresses as a string such as ``&#39;127.0.0.1:9092&#39;``</span>
+<span class="sd">        group_id : str</span>
+<span class="sd">            Required string identifier for Kafka Consumer group</span>
+<span class="sd">        agent : Agent</span>
+<span class="sd">            Instance of the agent to send directives to. Must be set to send directives.</span>
+<span class="sd">        consumer_config : dict</span>
+<span class="sd">            Override default configuration or specify additional configuration</span>
+<span class="sd">            options to confluent_kafka.Consumer.</span>
+<span class="sd">        polling_duration : float</span>
+<span class="sd">            Time in seconds to wait for a message before running function work_while_waiting.</span>
+<span class="sd">            Default is 0.05.</span>
+<span class="sd">        deserializer : function, optional</span>
+<span class="sd">            optional function to deserialize data. Default is msgpack.loads.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">topics</span><span class="p">,</span> <span class="n">bootstrap_servers</span><span class="p">,</span> <span class="n">group_id</span><span class="p">,</span> <span class="n">consumer_config</span><span class="p">,</span> <span class="n">polling_duration</span><span class="p">,</span> <span class="n">deserializer</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_agent</span> <span class="o">=</span> <span class="n">agent</span>
+
+    <span class="k">def</span> <span class="nf">_agent_action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">topic</span><span class="p">,</span> <span class="n">doc</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Exposes agent methods via the kafka topic.</span>
+<span class="sd">        This allows bluesky plans, or adjudicators to interface with agent hyperparameters or settings.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        topic : str</span>
+<span class="sd">            the Kafka topic of the message containing name and doc</span>
+<span class="sd">        doc : dict</span>
+<span class="sd">            agent document expecting</span>
+<span class="sd">            {</span>
+<span class="sd">            &#39;action&#39;: &#39;method_name&#39;,</span>
+<span class="sd">            &#39;args&#39;: [arg1,arg2,...],</span>
+<span class="sd">            &#39;kwargs&#39;: {kwarg1:val1, kwarg2:val2}</span>
+<span class="sd">            }</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        continue_polling : bool</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">]</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;kwargs&quot;</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_agent</span><span class="p">,</span> <span class="n">action</span><span class="p">)(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unavailable action sent to agent </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_agent</span><span class="o">.</span><span class="n">instance_name</span><span class="si">}</span><span class="s2"> on topic: </span><span class="si">{</span><span class="n">topic</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Type error for </span><span class="si">{</span><span class="n">action</span><span class="si">}</span><span class="s2"> sent to agent </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_agent</span><span class="o">.</span><span class="n">instance_name</span><span class="si">}</span><span class="s2"> on topic: </span><span class="si">{</span><span class="n">topic</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Are you sure your args and kwargs were appropriate?</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Args received: </span><span class="si">{</span><span class="n">args</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Kwargs received: </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Expected signature: </span><span class="si">{</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">agent</span><span class="p">,</span><span class="w"> </span><span class="n">action</span><span class="p">))</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">process_document</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">consumer</span><span class="p">,</span> <span class="n">topic</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Processes bluesky documents.</span>
+<span class="sd">        Optionally</span>
+<span class="sd">        Sends bluesky document to RemoteDispatcher.process(name, doc)</span>
+<span class="sd">        If this method returns False the BlueskyConsumer will break out of the</span>
+<span class="sd">        polling loop.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        topic : str</span>
+<span class="sd">            the Kafka topic of the message containing name and doc</span>
+<span class="sd">        name : str</span>
+<span class="sd">            bluesky document name: `start`, `descriptor`, `event`, etc.</span>
+<span class="sd">        doc : dict</span>
+<span class="sd">            bluesky document</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        continue_polling : bool</span>
+<span class="sd">            return False to break out of the polling loop, return True to continue polling</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_agent</span><span class="o">.</span><span class="n">instance_name</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_agent_action</span><span class="p">(</span><span class="n">topic</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">process_document</span><span class="p">(</span><span class="n">consumer</span><span class="p">,</span> <span class="n">topic</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">set_agent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">agent</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_agent</span> <span class="o">=</span> <span class="n">agent</span>
+
+
+<span class="k">class</span> <span class="nc">DataKeys</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">dtype_str</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">dtype_descr</span><span class="p">:</span> <span class="nb">list</span>
+    <span class="n">shape</span><span class="p">:</span> <span class="nb">list</span>
+
+
+<span class="k">def</span> <span class="nf">infer_data_keys</span><span class="p">(</span><span class="n">doc</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataKeys</span><span class="p">:</span>
+    <span class="n">data_keys</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="n">_bad_iterables</span> <span class="o">=</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+    <span class="n">_type_map</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">floating</span><span class="p">,</span> <span class="nb">complex</span><span class="p">),</span>
+        <span class="s2">&quot;array&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">),</span>
+        <span class="s2">&quot;string&quot;</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,),</span>
+        <span class="s2">&quot;integer&quot;</span><span class="p">:</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">doc</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">_bad_iterables</span><span class="p">):</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s2">&quot;array&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">json_type</span><span class="p">,</span> <span class="n">py_types</span> <span class="ow">in</span> <span class="n">_type_map</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">py_types</span><span class="p">):</span>
+                    <span class="n">dtype</span> <span class="o">=</span> <span class="n">json_type</span>
+                    <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">()</span>
+        <span class="n">arr_val</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="n">arr_dtype</span> <span class="o">=</span> <span class="n">arr_val</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">data_keys</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">dtype_str</span><span class="o">=</span><span class="n">arr_dtype</span><span class="o">.</span><span class="n">str</span><span class="p">,</span>
+            <span class="n">dtype_descr</span><span class="o">=</span><span class="n">arr_dtype</span><span class="o">.</span><span class="n">descr</span><span class="p">,</span>
+            <span class="n">shape</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">arr_val</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span>
+            <span class="n">source</span><span class="o">=</span><span class="s2">&quot;agent&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">data_keys</span>
+
+
+<div class="viewcode-block" id="Agent"><a class="viewcode-back" href="../../../distributed.html#bluesky_adaptive.agents.base.Agent">[docs]</a><span class="k">class</span> <span class="nc">Agent</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for a single plan agent. These agents should consume data, decide where to measure next,</span>
+<span class="sd">    and execute a single type of plan (something akin to move and count).</span>
+<span class="sd">    Alternatively, these agents can be used for soley reporting.</span>
+
+<span class="sd">    Base agent sets up a kafka subscription to listen to new stop documents, a catalog to read for experiments,</span>
+<span class="sd">    a catalog to write agent status to, a kafka publisher to write agent documents to,</span>
+<span class="sd">    and a manager API for the queue-server. Each time a stop document is read,</span>
+<span class="sd">    the respective BlueskyRun is unpacked by the ``unpack_run`` method into an independent and dependent variable,</span>
+<span class="sd">    and told to the agent by the ``tell`` method.</span>
+
+<span class="sd">    Children of Agent should implment the following, through direct inheritence or mixin classes:</span>
+<span class="sd">    Experiment specific:</span>
+<span class="sd">    - measurement_plan</span>
+<span class="sd">    - unpack_run</span>
+<span class="sd">    Agent specific:</span>
+<span class="sd">    - tell</span>
+<span class="sd">    - ask</span>
+<span class="sd">    - report (optional)</span>
+<span class="sd">    - name (optional)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kafka_consumer : AgentConsumer</span>
+<span class="sd">        Consumer (subscriber) of Kafka Bluesky documents. It should be subcribed to the sources of</span>
+<span class="sd">        Bluesky stop documents that will trigger ``tell``.</span>
+<span class="sd">        AgentConsumer is a child class of bluesky_kafka.RemoteDispatcher that enables</span>
+<span class="sd">        kafka messages to trigger agent directives.</span>
+<span class="sd">    kafka_producer : Optional[Publisher]</span>
+<span class="sd">        Bluesky Kafka publisher to produce document stream of agent actions for optional Adjudicator.</span>
+<span class="sd">    tiled_data_node : tiled.client.node.Node</span>
+<span class="sd">        Tiled node to serve as source of data (BlueskyRuns) for the agent.</span>
+<span class="sd">    tiled_agent_node : tiled.client.node.Node</span>
+<span class="sd">        Tiled node to serve as storage for the agent documents.</span>
+<span class="sd">    qserver : bluesky_queueserver_api.api_threads.API_Threads_Mixin</span>
+<span class="sd">        Object to manage communication with Queue Server</span>
+<span class="sd">    agent_run_suffix : Optional[str], optional</span>
+<span class="sd">        Agent name suffix for the instance, by default generated using 2 hyphen separated words from xkcdpass.</span>
+<span class="sd">    metadata : Optional[dict], optional</span>
+<span class="sd">        Optional extra metadata to add to agent start document, by default {}</span>
+<span class="sd">    ask_on_tell : bool, optional</span>
+<span class="sd">        Whether to ask for new points every time an agent is told about new data.</span>
+<span class="sd">        To create a truly passive agent, it is best to implement an ``ask`` as a method that does nothing.</span>
+<span class="sd">        To create an agent that only suggests new points periodically or on another trigger, ``ask_on_tell``</span>
+<span class="sd">        should be set to False.</span>
+<span class="sd">        By default True</span>
+<span class="sd">        Can be adjusted using ``enable_continuous_suggesting`` and ``disable_continuous_suggesting``.</span>
+<span class="sd">    direct_to_queue : Optional[bool], optional</span>
+<span class="sd">        Whether the agent suggestions will be placed directly on the queue. If false,</span>
+<span class="sd">        the suggestions will be sent to a Kafka topic for an Adjudicator to process.</span>
+<span class="sd">        By default True</span>
+<span class="sd">        Can be adjusted using ``enable_direct_to_queue`` and ``disable_direct_to_queue``.</span>
+<span class="sd">    report_on_tell : bool, optional</span>
+<span class="sd">        Whether to create a report every time an agent is told about new data.</span>
+<span class="sd">        By default False.</span>
+<span class="sd">        Can be adjusted using ``enable_continuous_reporting`` and ``disable_continuous_reporting``.</span>
+<span class="sd">    default_report_kwargs : Optional[dict], optional</span>
+<span class="sd">        Default kwargs for calling the ``report`` method, by default None</span>
+<span class="sd">    queue_add_position : Optional[Union[int, Literal[&amp;quot;front&amp;quot;, &amp;quot;back&amp;quot;]]], optional</span>
+<span class="sd">        Starting postion to add to the queue if adding directly to the queue, by default &quot;back&quot;.</span>
+<span class="sd">    endstation_key : Optional[str]</span>
+<span class="sd">        Optional string that is needed for Adjudicator functionality. This keys the qserver API instance to</span>
+<span class="sd">        a particular endstation. This way child Agents can maintain multiple queues for different unit operations.</span>
+<span class="sd">        For example, this could be a beamline three letter acronym or other distinct key.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">kafka_consumer</span><span class="p">:</span> <span class="n">AgentConsumer</span><span class="p">,</span>
+        <span class="n">tiled_data_node</span><span class="p">:</span> <span class="n">tiled</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">Node</span><span class="p">,</span>
+        <span class="n">tiled_agent_node</span><span class="p">:</span> <span class="n">tiled</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">Node</span><span class="p">,</span>
+        <span class="n">qserver</span><span class="p">:</span> <span class="n">API_Threads_Mixin</span><span class="p">,</span>
+        <span class="n">kafka_producer</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Publisher</span><span class="p">],</span>
+        <span class="n">agent_run_suffix</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ask_on_tell</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">direct_to_queue</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">report_on_tell</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">default_report_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">queue_add_position</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;front&quot;</span><span class="p">,</span> <span class="s2">&quot;back&quot;</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">endstation_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Initializing agent.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kafka_consumer</span> <span class="o">=</span> <span class="n">kafka_consumer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kafka_consumer</span><span class="o">.</span><span class="n">set_agent</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kafka_consumer</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_stop_router</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">kafka_producer</span> <span class="o">=</span> <span class="n">kafka_producer</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Kafka set up successfully.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">exp_catalog</span> <span class="o">=</span> <span class="n">tiled_data_node</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reading data from catalog: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">exp_catalog</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">agent_catalog</span> <span class="o">=</span> <span class="n">tiled_agent_node</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing data to catalog: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">agent_catalog</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">instance_name</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">agent_run_suffix</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">if</span> <span class="n">agent_run_suffix</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">xp</span><span class="o">.</span><span class="n">generate_xkcdpassword</span><span class="p">(</span><span class="n">PASSWORD_LIST</span><span class="p">,</span><span class="w"> </span><span class="n">numwords</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;agent_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">instance_name</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ask_on_tell</span> <span class="o">=</span> <span class="n">ask_on_tell</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_report_on_tell</span> <span class="o">=</span> <span class="n">report_on_tell</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">default_report_kwargs</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">default_report_kwargs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">default_report_kwargs</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compose_run_bundle</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor_bundles</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">re_manager</span> <span class="o">=</span> <span class="n">qserver</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endstation_key</span> <span class="o">=</span> <span class="n">endstation_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_queue_add_position</span> <span class="o">=</span> <span class="s2">&quot;back&quot;</span> <span class="k">if</span> <span class="n">queue_add_position</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">queue_add_position</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_direct_to_queue</span> <span class="o">=</span> <span class="n">direct_to_queue</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">default_plan_md</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">agent_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">instance_name</span><span class="p">,</span> <span class="n">agent_class</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tell_cache</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_registrations</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent server unable to make registrations. Continuing regardless of</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_kafka_thread</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="Agent.measurement_plan"><a class="viewcode-back" href="../../../distributed.html#bluesky_adaptive.agents.base.Agent.measurement_plan">[docs]</a>    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">measurement_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">point</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetch the string name of a registered plan, as well as the positional and keyword</span>
+<span class="sd">        arguments to pass that plan.</span>
+
+<span class="sd">        Args/Kwargs is a common place to transform relative into absolute motor coords, or</span>
+<span class="sd">        other device specific parameters.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        point : ArrayLike</span>
+<span class="sd">            Next point to measure using a given plan</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        plan_name : str</span>
+<span class="sd">        plan_args : List</span>
+<span class="sd">            List of arguments to pass to plan from a point to measure.</span>
+<span class="sd">        plan_kwargs : dict</span>
+<span class="sd">            Dictionary of keyword arguments to pass the plan, from a point to measure.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">unpack_run</span><span class="p">(</span><span class="n">run</span><span class="p">:</span> <span class="n">BlueskyRun</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">],</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Consume a Bluesky run from tiled and emit the relevant x and y for the agent.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        run : BlueskyRun</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        independent_var :</span>
+<span class="sd">            The independent variable of the measurement</span>
+<span class="sd">        dependent_var :</span>
+<span class="sd">            The measured data, processed for relevance</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">tell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Tell the agent about some new data</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        x :</span>
+<span class="sd">            Independent variable for data observed</span>
+<span class="sd">        y :</span>
+<span class="sd">            Dependent variable for data observed</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Dictionary to be unpacked or added to a document</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="Agent.ask"><a class="viewcode-back" href="../../../distributed.html#bluesky_adaptive.agents.base.Agent.ask">[docs]</a>    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">ask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]],</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Ask the agent for a new batch of points to measure.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_size : int</span>
+<span class="sd">            Number of new points to measure</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        docs : Sequence[dict]</span>
+<span class="sd">            Documents of key metadata from the ask approach for each point in next_points.</span>
+<span class="sd">            Must be length of batch size.</span>
+<span class="sd">        next_points : Sequence</span>
+<span class="sd">            Sequence of independent variables of length batch size</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div>
+
+<div class="viewcode-block" id="Agent.report"><a class="viewcode-back" href="../../../distributed.html#bluesky_adaptive.agents.base.Agent.report">[docs]</a>    <span class="k">def</span> <span class="nf">report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a report given the data observed by the agent.</span>
+<span class="sd">        This could be potentially implemented in the base class to write document stream.</span>
+<span class="sd">        Additional functionality for converting the report dict into an image or formatted report is</span>
+<span class="sd">        the duty of the child class.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+    <span class="k">def</span> <span class="nf">tell_many</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Tell the agent about some new data. It is likely that there is a more efficient approach to</span>
+<span class="sd">        handling multiple observations for an agent. The default behavior is to iterate over all</span>
+<span class="sd">        observations and call the ``tell`` method.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        xs : list, array</span>
+<span class="sd">            Array of independent variables for observations</span>
+<span class="sd">        ys : list, array</span>
+<span class="sd">            Array of dependent variables for observations</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list_of_dict</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tell_emits</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">xs</span><span class="p">,</span> <span class="n">ys</span><span class="p">):</span>
+            <span class="n">tell_emits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tell</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">tell_emits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">queue_add_position</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;front&quot;</span><span class="p">,</span> <span class="s2">&quot;back&quot;</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queue_add_position</span>
+
+    <span class="nd">@queue_add_position</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">queue_add_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;front&quot;</span><span class="p">,</span> <span class="s2">&quot;back&quot;</span><span class="p">]]):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_queue_add_position</span> <span class="o">=</span> <span class="n">position</span>
+
+    <span class="k">def</span> <span class="nf">update_priority</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;front&quot;</span><span class="p">,</span> <span class="s2">&quot;back&quot;</span><span class="p">]]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convenience method to update the priority of a direct to queue agent</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        position : Union[int, Literal[&amp;quot;front&amp;quot;, &amp;quot;back&amp;quot;]]</span>
+<span class="sd">            Position in priority for queue.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">queue_add_position</span> <span class="o">=</span> <span class="n">position</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">ask_on_tell</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ask_on_tell</span>
+
+    <span class="nd">@ask_on_tell</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">ask_on_tell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flag</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ask_on_tell</span> <span class="o">=</span> <span class="n">flag</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">report_on_tell</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_report_on_tell</span>
+
+    <span class="nd">@report_on_tell</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">report_on_tell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flag</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_report_on_tell</span> <span class="o">=</span> <span class="n">flag</span>
+
+    <span class="k">def</span> <span class="nf">enable_continuous_reporting</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enable agent to report each time it receives data.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">report_on_tell</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">disable_continuous_reporting</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Disable agent to report each time it receives data.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">report_on_tell</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">enable_continuous_suggesting</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enable agent to suggest new points to the queue each time it receives data.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ask_on_tell</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">disable_continuous_suggesting</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Disable agent to suggest new points to the queue each time it receives data.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ask_on_tell</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">enable_direct_to_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_direct_to_queue</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">disable_direct_to_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_direct_to_queue</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Short string name&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;agent&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">build_from_argparse</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">parser</span><span class="p">:</span> <span class="n">ArgumentParser</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+        <span class="n">_kwargs</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="n">_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">constructor_argparser</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArgumentParser</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convenience method to put all arguments into a parser&quot;&quot;&quot;</span>
+        <span class="n">parser</span> <span class="o">=</span> <span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__doc__</span><span class="p">,</span> <span class="n">formatter_class</span><span class="o">=</span><span class="n">RawDescriptionHelpFormatter</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--kafka-group-id&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--kafka-bootstrap-servers&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--kafka-consumer-config&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--kafka-producer-config&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--publisher-topic&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--subscription-topics&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--data-profile-name&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--agent-profile-name&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--qserver-host&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--qserver-api-key&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--metadata&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">parser</span>
+
+    <span class="k">def</span> <span class="nf">_write_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">,</span> <span class="n">doc</span><span class="p">,</span> <span class="n">uid</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add event to builder as event page, and publish to catalog&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">doc</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No doc presented to write_event for stream </span><span class="si">{</span><span class="n">stream</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">stream</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor_bundles</span><span class="p">:</span>
+            <span class="n">data_keys</span> <span class="o">=</span> <span class="n">infer_data_keys</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor_bundles</span><span class="p">[</span><span class="n">stream</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_run_bundle</span><span class="o">.</span><span class="n">compose_descriptor</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="n">data_keys</span><span class="o">=</span><span class="n">data_keys</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">agent_catalog</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="s2">&quot;descriptor&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor_bundles</span><span class="p">[</span><span class="n">stream</span><span class="p">]</span><span class="o">.</span><span class="n">descriptor_doc</span><span class="p">)</span>
+
+        <span class="n">t</span> <span class="o">=</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">event_doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_descriptor_bundles</span><span class="p">[</span><span class="n">stream</span><span class="p">]</span><span class="o">.</span><span class="n">compose_event</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">doc</span><span class="p">,</span> <span class="n">timestamps</span><span class="o">=</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">t</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">doc</span><span class="p">},</span> <span class="n">uid</span><span class="o">=</span><span class="n">uid</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">agent_catalog</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="s2">&quot;event&quot;</span><span class="p">,</span> <span class="n">event_doc</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">event_doc</span><span class="p">[</span><span class="s2">&quot;uid&quot;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_add_to_queue</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">re_manager</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;front&quot;</span><span class="p">,</span> <span class="s2">&quot;back&quot;</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds a single set of points to the queue as bluesky plans</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        next_points : Iterable</span>
+<span class="sd">            New points to measure</span>
+<span class="sd">        uid : str</span>
+<span class="sd">        re_manager : Optional[bluesky_queueserver_api.api_threads.API_Threads_Mixin]</span>
+<span class="sd">            Defaults to self.re_manager</span>
+<span class="sd">        position : Optional[Union[int, Literal[&#39;front&#39;, &#39;back&#39;]]]</span>
+<span class="sd">            Defaults to self.queue_add_position</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">next_points</span><span class="p">:</span>
+            <span class="n">plan_name</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurement_plan</span><span class="p">(</span><span class="n">point</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;md&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;md&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_plan_md</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;md&quot;</span><span class="p">][</span><span class="s2">&quot;agent_ask_uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">uid</span>
+            <span class="n">plan</span> <span class="o">=</span> <span class="n">BPlan</span><span class="p">(</span>
+                <span class="n">plan_name</span><span class="p">,</span>
+                <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">re_manager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">re_manager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">re_manager</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="n">re_manager</span><span class="o">.</span><span class="n">item_add</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">queue_add_position</span> <span class="k">if</span> <span class="n">position</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">position</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sent http-server request for point </span><span class="si">{</span><span class="n">point</span><span class="si">}</span><span class="se">\n</span><span class="s2">.&quot;</span> <span class="sa">f</span><span class="s2">&quot;Received reponse: </span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span> <span class="nf">_check_queue_and_start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        If the queue runs out of plans, it will stop.</span>
+<span class="sd">        That is, adding a plan to an empty queue will not run the plan.</span>
+<span class="sd">        This will not be an issue when there are many agents adding plans to a queue.</span>
+<span class="sd">        Giving agents the autonomy to start the queue is a risk that will be mitigated by</span>
+<span class="sd">        only allowing the beamline scientists to open and close the environment.</span>
+<span class="sd">        A queue cannot be started in a closed environment.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">re_manager</span><span class="o">.</span><span class="n">status</span><span class="p">(</span><span class="n">reload</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">status</span><span class="p">[</span><span class="s2">&quot;items_in_queue&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+            <span class="ow">and</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;worker_environment_exists&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span>
+            <span class="ow">and</span> <span class="n">status</span><span class="p">[</span><span class="s2">&quot;manager_state&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;idle&quot;</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">re_manager</span><span class="o">.</span><span class="n">queue_start</span><span class="p">()</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Agent is starting an idle queue with exactly 1 item.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_ask_and_write_events</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">ask_method</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">stream_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;ask&quot;</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Private ask method for consistency across calls and changes to docs streams.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_size : int</span>
+<span class="sd">            Size of batch passed to ask</span>
+<span class="sd">        ask_method : Optional[Callable]</span>
+<span class="sd">            self.ask, or self.subject_ask, or some target ask function.</span>
+<span class="sd">            Defaults to self.ask</span>
+<span class="sd">        stream_name : Optional[str]</span>
+<span class="sd">            Name for ask stream corresponding to `ask_method`. &#39;ask&#39;, &#39;subject_ask&#39;, or other.</span>
+<span class="sd">            Defaults to &#39;ask&#39;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        next_points : list</span>
+<span class="sd">            Next points to be sent to adjudicator or queue</span>
+<span class="sd">        uid : str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">ask_method</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ask_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ask</span>
+        <span class="n">docs</span><span class="p">,</span> <span class="n">next_points</span> <span class="o">=</span> <span class="n">ask_method</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="n">uid</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">batch_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">next_point</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="n">next_points</span><span class="p">)):</span>
+            <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;suggestion&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">next_point</span>
+            <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;batch_idx&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch_idx</span>
+            <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;batch_size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_points</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_write_event</span><span class="p">(</span><span class="n">stream_name</span><span class="p">,</span> <span class="n">doc</span><span class="p">,</span> <span class="n">uid</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">batch_idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span>
+
+    <span class="k">def</span> <span class="nf">add_suggestions_to_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calls ask, adds suggestions to queue, and writes out events.</span>
+<span class="sd">        This will create one event for each suggestion.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ask_and_write_events</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issued ask and adding to the queue. </span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_to_queue</span><span class="p">(</span><span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_queue_and_start</span><span class="p">()</span>  <span class="c1"># TODO: remove this and encourage updated qserver functionality</span>
+
+    <span class="k">def</span> <span class="nf">_create_suggestion_list</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">measurement_plan</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create suggestions for adjudicator&quot;&quot;&quot;</span>
+        <span class="n">suggestions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">points</span><span class="p">:</span>
+            <span class="n">plan_name</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">measurement_plan</span><span class="p">(</span><span class="n">point</span><span class="p">)</span> <span class="k">if</span> <span class="n">measurement_plan</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">measurement_plan</span><span class="p">(</span><span class="n">point</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;md&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;md&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_plan_md</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;md&quot;</span><span class="p">][</span><span class="s2">&quot;agent_ask_uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">uid</span>
+            <span class="n">suggestions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">Suggestion</span><span class="p">(</span>
+                    <span class="n">ask_uid</span><span class="o">=</span><span class="n">uid</span><span class="p">,</span>
+                    <span class="n">plan_name</span><span class="o">=</span><span class="n">plan_name</span><span class="p">,</span>
+                    <span class="n">plan_args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span>
+                    <span class="n">plan_kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">suggestions</span>
+
+    <span class="k">def</span> <span class="nf">generate_suggestions_for_adjudicator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calls ask, sends suggestions to adjudicator, and writes out events.</span>
+<span class="sd">        This will create one event for each suggestion.&quot;&quot;&quot;</span>
+        <span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ask_and_write_events</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issued ask and sending to the adjudicator. </span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">suggestions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_suggestion_list</span><span class="p">(</span><span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">AdjudicatorMsg</span><span class="p">(</span>
+            <span class="n">agent_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">instance_name</span><span class="p">,</span>
+            <span class="n">suggestions_uid</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()),</span>
+            <span class="n">suggestions</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">endstation_key</span><span class="p">:</span> <span class="n">suggestions</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kafka_producer</span><span class="p">(</span><span class="n">ADJUDICATOR_STREAM_NAME</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">dict</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">generate_report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_event</span><span class="p">(</span><span class="s2">&quot;report&quot;</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issued report request and writing event. </span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">trigger_condition</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">_tell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Private tell to encapsulate the processing of a uid.</span>
+<span class="sd">        This allows the user tell to just consume an independent and dependent variable.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Unique key to grab from Tiled.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exp_catalog</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">independent_variable</span><span class="p">,</span> <span class="n">dependent_variable</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">unpack_run</span><span class="p">(</span><span class="n">run</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ignoring key error in unpack for data </span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Telling agent about some new data.&quot;</span><span class="p">)</span>
+        <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tell</span><span class="p">(</span><span class="n">independent_variable</span><span class="p">,</span> <span class="n">dependent_variable</span><span class="p">)</span>
+        <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;exp_uid&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">uid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write_event</span><span class="p">(</span><span class="s2">&quot;tell&quot;</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tell_cache</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_on_stop_router</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Document router that runs each time a stop document is seen.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">uid</span> <span class="o">=</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;run_start&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">trigger_condition</span><span class="p">(</span><span class="n">uid</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;New data detected, but trigger condition not met. The agent will ignore this start doc: </span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Tell</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;New data detected, telling the agent about this start doc: </span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tell</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span>
+
+        <span class="c1"># Report</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">report_on_tell</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">generate_report</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">default_report_kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Ask</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ask_on_tell</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_direct_to_queue</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">add_suggestions_to_queue</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">generate_suggestions_for_adjudicator</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">tell_agent_by_uid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uids</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Give an agent an iterable of uids to learn from.</span>
+<span class="sd">        This is an optional behavior for priming an agent without a complete restart.&quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Telling agent list of uids&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">uid</span> <span class="ow">in</span> <span class="n">uids</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Telling agent about start document</span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_tell</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ask_at_start</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Starts kakfka listener in background thread</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        ask_at_start : bool, optional</span>
+<span class="sd">            Whether to ask for a suggestion immediately, by default False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Issuing Agent start document and starting to listen to Kafka&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compose_run_bundle</span> <span class="o">=</span> <span class="n">compose_run</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">agent_catalog</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_run_bundle</span><span class="o">.</span><span class="n">start_doc</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent name=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_compose_run_bundle</span><span class="o">.</span><span class="n">start_doc</span><span class="p">[</span><span class="s1">&#39;agent_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Agent start document uuid=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_compose_run_bundle</span><span class="o">.</span><span class="n">start_doc</span><span class="p">[</span><span class="s1">&#39;uid&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">ask_at_start</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add_suggestions_to_queue</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_kafka_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kafka_consumer</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;agent-loop&quot;</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_kafka_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exit_status</span><span class="o">=</span><span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Attempting agent stop.&quot;</span><span class="p">)</span>
+        <span class="n">stop_doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compose_run_bundle</span><span class="o">.</span><span class="n">compose_stop</span><span class="p">(</span><span class="n">exit_status</span><span class="o">=</span><span class="n">exit_status</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">agent_catalog</span><span class="o">.</span><span class="n">v1</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="n">stop_doc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kafka_producer</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kafka_consumer</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Stopped agent with exit status </span><span class="si">{</span><span class="n">exit_status</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">(</span><span class="s1">&#39; for reason: &#39;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">reason</span><span class="p">)</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">reason</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;.&#39;</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">close_and_restart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">clear_tell_cache</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retell_all</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Utility for closing and restarting an agent with the same name.</span>
+<span class="sd">        This is primarily for methods that change the hyperparameters of an agent on the fly,</span>
+<span class="sd">        but in doing so may change the shape/nature of the agent document stream. This will</span>
+<span class="sd">        keep the documents consistent between hyperparameters as individual BlueskyRuns.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        clear_tell_cache : bool, optional</span>
+<span class="sd">            Clears the cache of data the agent has been told about, by default False.</span>
+<span class="sd">            This is useful for a clean slate.</span>
+<span class="sd">        retell_all : bool, optional</span>
+<span class="sd">            Resets the cache and tells the agent about all previous data, by default False.</span>
+<span class="sd">            This can be useful if the agent has not retained knowledge from previous tells.</span>
+<span class="sd">        reason : str, optional</span>
+<span class="sd">            Reason for closing and restarting the agent, to be recorded to logs, by default &quot;&quot;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Close and Restart: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">clear_tell_cache</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tell_cache</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">retell_all</span><span class="p">:</span>
+            <span class="n">uids</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tell_cache</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tell_cache</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tell_agent_by_uid</span><span class="p">(</span><span class="n">uids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">signal_handler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">signal</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="n">exit_status</span><span class="o">=</span><span class="s2">&quot;abort&quot;</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;forced exit ctrl+c&quot;</span><span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_register_property</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">property_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wrapper to register property to bluesky-adaptive server instead of attribute or variable.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : str</span>
+<span class="sd">            Name by which the variable is accessible through the REST API. The PV name is generated by converting</span>
+<span class="sd">            the variable names to upper-case letters. The name does not need to match the actual name of</span>
+<span class="sd">            the variable used in the code. The name should be selected so that it could be conveniently used</span>
+<span class="sd">            in the API.</span>
+<span class="sd">        property_name : Optional[str]</span>
+<span class="sd">            The name of a class property, by default the same name used in the REST API.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="p">[</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;getter&quot;</span><span class="p">,</span> <span class="s2">&quot;setter&quot;</span><span class="p">)]</span>  <span class="c1"># Cannot pass getter/setter</span>
+        <span class="n">property_name</span> <span class="o">=</span> <span class="n">name</span> <span class="k">if</span> <span class="n">property_name</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">property_name</span>
+        <span class="n">register_variable</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">getter</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">,</span> <span class="n">property_name</span><span class="p">)</span><span class="o">.</span><span class="n">fget</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+            <span class="n">setter</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">,</span> <span class="n">property_name</span><span class="p">)</span><span class="o">.</span><span class="n">fset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">),</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_register_method</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">method_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Wrapper to register generic method to bluesky-adaptive server instead of attribute or variable.</span>
+<span class="sd">        To call the method, pass the setter a json with of form:</span>
+<span class="sd">        {value: [[args,],</span>
+<span class="sd">                 {kwargs}]}</span>
+<span class="sd">        This is a temporary solution that makes use of only the setter API and not a dedicated interface.</span>
+<span class="sd">        This will be deprecated in the future.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : str</span>
+<span class="sd">            Name by which the variable is accessible through the REST API. The PV name is generated by converting</span>
+<span class="sd">            the variable names to upper-case letters. The name does not need to match the actual name of</span>
+<span class="sd">            the variable used in the code. The name should be selected so that it could be conveniently used</span>
+<span class="sd">            in the API.</span>
+<span class="sd">        method_name : Optional[str]</span>
+<span class="sd">            The name of the method, by default the same name used in the REST API.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">[</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;getter&quot;</span><span class="p">,</span> <span class="s2">&quot;setter&quot;</span><span class="p">)]</span>  <span class="c1"># Cannot pass getter/setter</span>
+        <span class="n">method_name</span> <span class="o">=</span> <span class="n">name</span> <span class="k">if</span> <span class="n">method_name</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">method_name</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_name</span><span class="p">),</span> <span class="n">Callable</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Method </span><span class="si">{</span><span class="n">method_name</span><span class="si">}</span><span class="s2"> must be a callable function.&quot;</span><span class="p">)</span>
+        <span class="n">register_variable</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">setter</span><span class="o">=</span><span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">start_task</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_name</span><span class="p">)(</span><span class="o">*</span><span class="n">value</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">value</span><span class="p">[</span><span class="mi">1</span><span class="p">])))</span>
+
+    <span class="k">def</span> <span class="nf">server_registrations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Method to generate all server registrations during agent initialization.</span>
+<span class="sd">        This method can be used in subclasses, to override or extend the default registrations.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_method</span><span class="p">(</span><span class="s2">&quot;generate_report&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_method</span><span class="p">(</span><span class="s2">&quot;add_suggestions_to_queue&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_method</span><span class="p">(</span><span class="s2">&quot;tell_agent_by_uid&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_property</span><span class="p">(</span><span class="s2">&quot;queue_add_position&quot;</span><span class="p">,</span> <span class="n">pv_type</span><span class="o">=</span><span class="s2">&quot;str&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_property</span><span class="p">(</span><span class="s2">&quot;ask_on_tell&quot;</span><span class="p">,</span> <span class="n">pv_type</span><span class="o">=</span><span class="s2">&quot;bool&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_property</span><span class="p">(</span><span class="s2">&quot;report_on_tell&quot;</span><span class="p">,</span> <span class="n">pv_type</span><span class="o">=</span><span class="s2">&quot;bool&quot;</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">qserver_from_host_and_key</span><span class="p">(</span><span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convenience method to prouduce RE Manager object to manage communication with Queue Server.</span>
+<span class="sd">        This is one of several paradigms for communication, albeit a common one.</span>
+<span class="sd">        See bluesky_queueserver_api documentation for more details.</span>
+
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        host : str</span>
+<span class="sd">            URI for host of HTTP Server</span>
+<span class="sd">        key : str</span>
+<span class="sd">            Authorization key for HTTP Server API</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        qserver : bluesky_queueserver_api.api_threads.API_Threads_Mixin</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">bluesky_queueserver_api.http</span> <span class="kn">import</span> <span class="n">REManagerAPI</span>
+
+        <span class="n">qserver</span> <span class="o">=</span> <span class="n">REManagerAPI</span><span class="p">(</span><span class="n">http_server_uri</span><span class="o">=</span><span class="n">host</span><span class="p">)</span>
+        <span class="n">qserver</span><span class="o">.</span><span class="n">set_authorization_key</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">qserver</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_config_kwargs</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">kafka_group_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">kafka_bootstrap_servers</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">kafka_consumer_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">kafka_producer_config</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">publisher_topic</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">subscripion_topics</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">data_profile_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">agent_profile_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">qserver_host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">qserver_api_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convenience method for producing an Agent from keyword arguments describing the</span>
+<span class="sd">        Kafka, Tiled, and Qserver setup.</span>
+<span class="sd">        Assumes tiled is loaded from profile, and the REManagerAPI is based on the http api.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kafka_group_id : str</span>
+<span class="sd">            Required string identifier for the consumer&#39;s Kafka Consumer group.</span>
+<span class="sd">        kafka_bootstrap_servers : str</span>
+<span class="sd">            Comma-delimited list of Kafka server addresses as a string</span>
+<span class="sd">            such as ``&#39;broker1:9092,broker2:9092,127.0.0.1:9092&#39;``</span>
+<span class="sd">        kafka_consumer_config : dict</span>
+<span class="sd">            Override default configuration or specify additional configuration</span>
+<span class="sd">            options to confluent_kafka.Consumer.</span>
+<span class="sd">        kafka_producer_config : dict</span>
+<span class="sd">            Override default configuration or specify additional configuration</span>
+<span class="sd">            options to confluent_kafka.Producer.</span>
+<span class="sd">        publisher_topic : str</span>
+<span class="sd">            Existing topic to publish agent documents to.</span>
+<span class="sd">        subscripion_topics : List[str]</span>
+<span class="sd">            List of existing_topics as strings such as [&quot;topic-1&quot;, &quot;topic-2&quot;]. These should be</span>
+<span class="sd">            the sources of the Bluesky stop documents that trigger ``tell`` and agent directives.</span>
+<span class="sd">        data_profile_name : str</span>
+<span class="sd">            Tiled profile name to serve as source of data (BlueskyRuns) for the agent.</span>
+<span class="sd">        agent_profile_name : str</span>
+<span class="sd">            Tiled profile name to serve as storage for the agent documents.</span>
+<span class="sd">        qserver_host : str</span>
+<span class="sd">            Host to POST requests to. Something akin to &#39;http://localhost:60610&#39;</span>
+<span class="sd">        qserver_api_key : str</span>
+<span class="sd">            Key for API security.</span>
+<span class="sd">        kwargs : dict</span>
+<span class="sd">            Additional keyword arguments for init</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">bluesky_queueserver_api.http</span> <span class="kn">import</span> <span class="n">REManagerAPI</span>
+        <span class="kn">from</span> <span class="nn">tiled.client</span> <span class="kn">import</span> <span class="n">from_profile</span>
+
+        <span class="n">kafka_consumer</span> <span class="o">=</span> <span class="n">AgentConsumer</span><span class="p">(</span>
+            <span class="n">topics</span><span class="o">=</span><span class="n">subscripion_topics</span><span class="p">,</span>
+            <span class="n">bootstrap_servers</span><span class="o">=</span><span class="n">kafka_bootstrap_servers</span><span class="p">,</span>
+            <span class="n">group_id</span><span class="o">=</span><span class="n">kafka_group_id</span><span class="p">,</span>
+            <span class="n">consumer_config</span><span class="o">=</span><span class="n">kafka_consumer_config</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">kafka_producer</span> <span class="o">=</span> <span class="n">Publisher</span><span class="p">(</span>
+            <span class="n">topic</span><span class="o">=</span><span class="n">publisher_topic</span><span class="p">,</span>
+            <span class="n">bootstrap_servers</span><span class="o">=</span><span class="n">kafka_bootstrap_servers</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">producer_config</span><span class="o">=</span><span class="n">kafka_producer_config</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">tiled_data_node</span> <span class="o">=</span> <span class="n">from_profile</span><span class="p">(</span><span class="n">data_profile_name</span><span class="p">)</span>
+        <span class="n">tiled_agent_node</span> <span class="o">=</span> <span class="n">from_profile</span><span class="p">(</span><span class="n">agent_profile_name</span><span class="p">)</span>
+
+        <span class="n">re_manager</span> <span class="o">=</span> <span class="n">REManagerAPI</span><span class="p">(</span><span class="n">http_server_uri</span><span class="o">=</span><span class="n">qserver_host</span><span class="p">)</span>
+        <span class="n">re_manager</span><span class="o">.</span><span class="n">set_authorization_key</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="n">qserver_api_key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="nb">dict</span><span class="p">(</span><span class="n">tiled_data_profile</span><span class="o">=</span><span class="n">data_profile_name</span><span class="p">,</span> <span class="n">tiled_agent_profile</span><span class="o">=</span><span class="n">agent_profile_name</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">kafka_consumer</span><span class="o">=</span><span class="n">kafka_consumer</span><span class="p">,</span>
+            <span class="n">kafka_producer</span><span class="o">=</span><span class="n">kafka_producer</span><span class="p">,</span>
+            <span class="n">tiled_data_node</span><span class="o">=</span><span class="n">tiled_data_node</span><span class="p">,</span>
+            <span class="n">tiled_agent_node</span><span class="o">=</span><span class="n">tiled_agent_node</span><span class="p">,</span>
+            <span class="n">qserver</span><span class="o">=</span><span class="n">re_manager</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<span class="k">class</span> <span class="nc">MonarchSubjectAgent</span><span class="p">(</span><span class="n">Agent</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+    <span class="c1"># Drive a beamline. On stop doc check. By default manual trigger.</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+        <span class="n">subject_qserver</span><span class="p">:</span> <span class="n">API_Threads_Mixin</span><span class="p">,</span>
+        <span class="n">subject_kafka_producer</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Publisher</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">subject_endstation_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Abstract base class for a MonarchSubject agent. These agents only consume documents from one</span>
+<span class="sd">        (Monarch) source, and can dictate the behavior of a different (Subject) queue.</span>
+<span class="sd">        This can be useful in a multimodal measurement where</span>
+<span class="sd">        one measurement is very fast and the other is very slow: after some amount of data collection on the fast</span>
+<span class="sd">        measurement, the agent can dictate that the slow measurement probe what it considers as interesting. The</span>
+<span class="sd">        agent maintains the functionality of a regular Agent, and adds plans to the Monarch queue.</span>
+
+<span class="sd">        By default, the Subject is only directed when manually triggered by the agent server or by</span>
+<span class="sd">        a kafka directive. If an automated approach to asking the subject is required,</span>
+<span class="sd">        ``subject_ask_condition`` must be overriden. This is commonly done by using a wall-clock interval,</span>
+<span class="sd">        and/or a model confidence trigger.</span>
+
+<span class="sd">        Children of MonarchSubjectAgent must implment the following, through direct inheritence or mixin classes:</span>
+<span class="sd">        Experiment specific:</span>
+<span class="sd">        - measurement_plan</span>
+<span class="sd">        - unpack_run</span>
+<span class="sd">        - subject_measurement_plan</span>
+<span class="sd">        Agent specific:</span>
+<span class="sd">        - tell</span>
+<span class="sd">        - ask</span>
+<span class="sd">        - subject_ask</span>
+<span class="sd">        - report (optional)</span>
+<span class="sd">        - name (optional)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        subject_qserver : API_Threads_Mixin</span>
+<span class="sd">            Object to manage communication with the Subject Queue Server</span>
+<span class="sd">        subject_kafka_producer : Optional[Publisher]</span>
+<span class="sd">            Bluesky Kafka publisher to produce document stream of agent actions to Adjudicators</span>
+<span class="sd">        subject_endstation_key : Optional[str]</span>
+<span class="sd">            Optional string that is needed for Adjudicator functionality. This keys the qserver API instance to</span>
+<span class="sd">            a particular endstation. This way child Agents can maintain multiple queues for different unit ops.</span>
+<span class="sd">            For example, this could be a beamline three letter acronym or other distinct key.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subject_re_manager</span> <span class="o">=</span> <span class="n">subject_qserver</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subject_kafka_producer</span> <span class="o">=</span> <span class="n">subject_kafka_producer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subject_endstation_key</span> <span class="o">=</span> <span class="n">subject_endstation_key</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">subject_measurement_plan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">point</span><span class="p">:</span> <span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Details for subject plan.</span>
+<span class="sd">        Fetch the string name of a registered plan, as well as the positional and keyword</span>
+<span class="sd">        arguments to pass that plan.</span>
+
+<span class="sd">        Args/Kwargs is a common place to transform relative into absolute motor coords, or</span>
+<span class="sd">        other device specific parameters.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        point : ArrayLike</span>
+<span class="sd">            Next point to measure using a given plan</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        plan_name : str</span>
+<span class="sd">        plan_args : List</span>
+<span class="sd">            List of arguments to pass to plan from a point to measure.</span>
+<span class="sd">        plan_kwargs : dict</span>
+<span class="sd">            Dictionary of keyword arguments to pass the plan, from a point to measure.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">subject_ask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ArrayLike</span><span class="p">]],</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ArrayLike</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Ask the agent for a new batch of points to measure on the subject queue.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch_size : int</span>
+<span class="sd">            Number of new points to measure</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        docs : Sequence[dict]</span>
+<span class="sd">            Documents of key metadata from the ask approach for each point in next_points.</span>
+<span class="sd">            Must be length of batch size.</span>
+<span class="sd">        next_points : Sequence[ArrayLike]</span>
+<span class="sd">            Sequence of independent variables of length batch size</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+    <span class="k">def</span> <span class="nf">subject_ask_condition</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Option to build in a trigger method that is run on using the document router subcription.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">add_suggestions_to_subject_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calls ask, adds suggestions to queue, and writes out event&quot;&quot;&quot;</span>
+        <span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ask_and_write_events</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">subject_ask</span><span class="p">,</span> <span class="s2">&quot;subject_ask&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Issued ask to subject and adding to the queue. </span><span class="si">{uid}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_add_to_queue</span><span class="p">(</span><span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">re_manager</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">subject_re_manager</span><span class="p">,</span> <span class="n">position</span><span class="o">=</span><span class="s2">&quot;front&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_on_stop_router</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">):</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_on_stop_router</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="o">!=</span> <span class="s2">&quot;stop&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">ret</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subject_ask_condition</span><span class="p">():</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_direct_to_queue</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">add_suggestions_to_subject_queue</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">generate_suggestions_for_adjudicator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ask_and_write_events</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">subject_ask</span><span class="p">,</span> <span class="s2">&quot;subject_ask&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issued subject ask and sending to the adjudicator. </span><span class="si">{</span><span class="n">uid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">suggestions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_suggestion_list</span><span class="p">(</span><span class="n">next_points</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">subject_measurement_plan</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">AdjudicatorMsg</span><span class="p">(</span>
+            <span class="n">agent_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">instance_name</span><span class="p">,</span>
+            <span class="n">suggestions_uid</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()),</span>
+            <span class="n">suggestions</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">subject_endstation_key</span><span class="p">:</span> <span class="n">suggestions</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subject_kafka_producer</span><span class="p">(</span><span class="n">ADJUDICATOR_STREAM_NAME</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">dict</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">server_registrations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">server_registrations</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_register_method</span><span class="p">(</span><span class="s2">&quot;add_suggestions_to_subject_queue&quot;</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, NSLS-II.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
