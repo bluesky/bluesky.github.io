@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.protocols &mdash; bluesky 1.11.0.post33+g6e3c4721 documentation</title>
+  <title>bluesky.protocols &mdash; bluesky 1.11.0.post68+g9a9e76a9 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -11,7 +11,7 @@
     <script src="../../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=1b99f538"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=59593270"></script>
         <script src="../../_static/doctools.js?v=888ff710"></script>
         <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -31,7 +31,7 @@
             bluesky
           </a>
               <div class="version">
-                1.11.0.post33+g6e3c4721
+                1.11.0.post68+g9a9e76a9
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -115,8 +115,17 @@
              
   <h1>Source code for bluesky.protocols</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">abstractmethod</span>
+
+<span class="kn">from</span> <span class="nn">event_model.documents</span> <span class="kn">import</span> <span class="n">Datum</span><span class="p">,</span> <span class="n">StreamDatum</span><span class="p">,</span> <span class="n">StreamResource</span>
+<span class="c1"># Including Dtype here because ophyd imports Dtype directly from protocols, not event-model.</span>
+<span class="kn">from</span> <span class="nn">event_model.documents.event_descriptor</span> <span class="kn">import</span> <span class="n">DataKey</span><span class="p">,</span> <span class="n">Dtype</span>
+
+<span class="kn">from</span> <span class="nn">event_model.documents.resource</span> <span class="kn">import</span> <span class="n">PartialResource</span>
+<span class="kn">from</span> <span class="nn">event_model.documents.event</span> <span class="kn">import</span> <span class="n">PartialEvent</span>
+<span class="kn">from</span> <span class="nn">event_model.documents.event_page</span> <span class="kn">import</span> <span class="n">PartialEventPage</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
+    <span class="n">AsyncIterator</span><span class="p">,</span>
     <span class="n">Awaitable</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
@@ -126,15 +135,16 @@
     <span class="n">Literal</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
     <span class="n">Protocol</span><span class="p">,</span>
-    <span class="n">Sequence</span><span class="p">,</span>
     <span class="n">Tuple</span><span class="p">,</span>
     <span class="n">Type</span><span class="p">,</span>
     <span class="n">TypeVar</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
-    <span class="n">runtime_checkable</span><span class="p">,</span>
+    <span class="n">runtime_checkable</span>
 <span class="p">)</span>
-
 <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
+
+<span class="c1"># Squashes warning</span>
+<span class="n">Dtype</span> <span class="o">=</span> <span class="n">Dtype</span>  <span class="c1"># type: ignore</span>
 
 
 <span class="c1"># TODO: these are not placed in Events by RE yet</span>
@@ -158,93 +168,16 @@
     <span class="n">timestamp</span><span class="p">:</span> <span class="nb">float</span></div>
 
 
-<span class="n">Dtype</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;number&quot;</span><span class="p">,</span> <span class="s2">&quot;array&quot;</span><span class="p">,</span> <span class="s2">&quot;boolean&quot;</span><span class="p">,</span> <span class="s2">&quot;integer&quot;</span><span class="p">]</span>
-
-
-<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/event_descriptor.json</span>
-<span class="c1"># Just the data_key definition</span>
-<div class="viewcode-block" id="DescriptorOptional"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.DescriptorOptional">[docs]</a><span class="k">class</span> <span class="nc">DescriptorOptional</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dictionary containing optional per-scan metadata of a series of Readings&quot;&quot;&quot;</span>
-    <span class="c1">#: Where the data is stored if it is stored external to the events</span>
-    <span class="n">external</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: The names for dimensions of the data. Empty list if scalar data</span>
-    <span class="n">dims</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-    <span class="c1">#: Numpy dtype representation of the data. E.g. &lt;u2</span>
-    <span class="n">dtype_str</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: Number of digits after decimal place if a floating point number</span>
-    <span class="n">precision</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="c1">#: Engineering units of the value</span>
-    <span class="n">units</span><span class="p">:</span> <span class="nb">str</span></div>
-
-
-<div class="viewcode-block" id="Descriptor"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Descriptor">[docs]</a><span class="k">class</span> <span class="nc">Descriptor</span><span class="p">(</span><span class="n">DescriptorOptional</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dictionary containing the source and datatype of a series of Readings&quot;&quot;&quot;</span>
-    <span class="c1">#: The source of the data, e.g. an EPICS Process Variable</span>
-    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: The JSON type of the data in the event. Deprecated for dtype_str</span>
-    <span class="n">dtype</span><span class="p">:</span> <span class="n">Dtype</span>
-    <span class="c1">#: The shape of the data, e.g. ``[5,5 ]`` for a 5x5 array.</span>
-    <span class="c1">#: An empty list ``[]`` indicates scalar data.</span>
-    <span class="n">shape</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span></div>
-
-
-<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/event.json</span>
-<span class="c1"># But exclude descriptor, seq_num, uid added by RE</span>
-<div class="viewcode-block" id="PartialEventOptional"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialEventOptional">[docs]</a><span class="k">class</span> <span class="nc">PartialEventOptional</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dictionary containing optional Event data&quot;&quot;&quot;</span>
-    <span class="c1">#: If any data key is in an external asset it should be present in this</span>
-    <span class="c1">#: dictionary with value False</span>
-    <span class="n">filled</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span></div>
-
-
-<div class="viewcode-block" id="PartialEvent"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialEvent">[docs]</a><span class="k">class</span> <span class="nc">PartialEvent</span><span class="p">(</span><span class="n">PartialEventOptional</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dictionary containing Event data&quot;&quot;&quot;</span>
-    <span class="c1">#: The event data for each data key</span>
-    <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="c1">#: The timestamps for each data key</span>
-    <span class="n">timestamps</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
-    <span class="c1">#: The timestamp that the event was taken at</span>
-    <span class="n">time</span><span class="p">:</span> <span class="nb">float</span></div>
-
-
-<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/resource.json</span>
-<span class="c1"># But exclude run_start added by RE</span>
-<div class="viewcode-block" id="PartialResourceOptional"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialResourceOptional">[docs]</a><span class="k">class</span> <span class="nc">PartialResourceOptional</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dictionary containing optional information needed to load an external resource&quot;&quot;&quot;</span>
-    <span class="c1">#: Whether the path is a posix or windows path. If not given default to posix</span>
-    <span class="n">path_semantics</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;posix&quot;</span><span class="p">,</span> <span class="s2">&quot;windows&quot;</span><span class="p">]</span></div>
-
-
-<div class="viewcode-block" id="PartialResource"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.PartialResource">[docs]</a><span class="k">class</span> <span class="nc">PartialResource</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dictionary containing information needed to load an external resource&quot;&quot;&quot;</span>
-    <span class="c1">#: Hint about the format of the resource, and how it should be loaded</span>
-    <span class="n">spec</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: Relative path, should not change over lifecycle of the resource</span>
-    <span class="n">resource_path</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: Context-dependent root (which may change based on where data is accessed from)</span>
-    <span class="c1">#: that resource_path is relative to</span>
-    <span class="n">root</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: Additional parameters for reading the Resource</span>
-    <span class="n">resource_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="c1">#: UID that can be referenced in a Datum</span>
-    <span class="n">uid</span><span class="p">:</span> <span class="nb">str</span></div>
-
-
-<span class="c1"># https://github.com/bluesky/event-model/blob/master/event_model/schemas/datum.json</span>
-<div class="viewcode-block" id="Datum"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Datum">[docs]</a><span class="k">class</span> <span class="nc">Datum</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A dictionary containing information to load event data from a Resource&quot;&quot;&quot;</span>
-    <span class="c1">#: The UID of a Resource</span>
-    <span class="n">resource</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: UID that can be referenced in an Event</span>
-    <span class="n">datum_id</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="c1">#: Additional parameters for reading the Datum</span>
-    <span class="n">datum_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span></div>
-
-
-<span class="n">Asset</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;resource&quot;</span><span class="p">],</span> <span class="n">PartialResource</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;datum&quot;</span><span class="p">],</span> <span class="n">Datum</span><span class="p">]]</span>
+<span class="n">Asset</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span>
+    <span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;resource&quot;</span><span class="p">],</span> <span class="n">PartialResource</span><span class="p">],</span>
+    <span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;datum&quot;</span><span class="p">],</span> <span class="n">Datum</span><span class="p">],</span>
+    <span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;stream_resource&quot;</span><span class="p">],</span> <span class="n">StreamResource</span><span class="p">],</span>
+    <span class="n">Tuple</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;stream_datum&quot;</span><span class="p">],</span> <span class="n">StreamDatum</span><span class="p">]</span>
+    <span class="p">]</span>
 
 <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
 <span class="n">SyncOrAsync</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">T</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">[</span><span class="n">T</span><span class="p">]]</span>
+<span class="n">SyncOrAsyncIterator</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">]]</span>
 
 
 <div class="viewcode-block" id="Status"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Status">[docs]</a><span class="nd">@runtime_checkable</span>
@@ -282,7 +215,7 @@
     <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Used to populate object_keys in the Event Descriptor</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Used to populate object_keys in the Event DataKey</span>
 
 <span class="sd">        https://blueskyproject.io/event-model/event-descriptors.html#object-keys&quot;&quot;&quot;</span>
         <span class="o">...</span></div>
@@ -303,8 +236,9 @@
 <div class="viewcode-block" id="WritesExternalAssets"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.WritesExternalAssets">[docs]</a><span class="nd">@runtime_checkable</span>
 <span class="k">class</span> <span class="nc">WritesExternalAssets</span><span class="p">(</span><span class="n">Protocol</span><span class="p">):</span>
 <div class="viewcode-block" id="WritesExternalAssets.collect_asset_docs"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.WritesExternalAssets.collect_asset_docs">[docs]</a>    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">collect_asset_docs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Asset</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the resource and datum documents describing data in external source.</span>
+    <span class="k">def</span> <span class="nf">collect_asset_docs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsyncIterator</span><span class="p">[</span><span class="n">Iterator</span><span class="p">[</span><span class="n">Asset</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the resource, datum, stream_resource, and stream_datum</span>
+<span class="sd">        documents describing data in external source.</span>
 
 <span class="sd">        Example yielded values:</span>
 
@@ -324,7 +258,8 @@
 <span class="sd">                &#39;datum_kwargs&#39;: {&#39;point_number&#39;: 0},</span>
 <span class="sd">                &#39;resource&#39;: &#39;9123df61-a09f-49ae-9d23-41d4d6c6d788&#39;}</span>
 <span class="sd">            })</span>
-<span class="sd">        &quot;&quot;&quot;</span></div></div>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span></div></div>
 
 
 <div class="viewcode-block" id="Configurable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Configurable">[docs]</a><span class="nd">@runtime_checkable</span>
@@ -339,7 +274,7 @@
         <span class="o">...</span></div>
 
 <div class="viewcode-block" id="Configurable.describe_configuration"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Configurable.describe_configuration">[docs]</a>    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">describe_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">describe_configuration</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">DataKey</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Same API as ``describe``, but corresponding to the keys in</span>
 <span class="sd">        ``read_configuration``.</span>
 
@@ -378,7 +313,7 @@
         <span class="o">...</span></div>
 
 <div class="viewcode-block" id="Readable.describe"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Readable.describe">[docs]</a>    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">DataKey</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return an OrderedDict with exactly the same keys as the ``read``</span>
 <span class="sd">        method, here mapped to per-scan metadata about each field.</span>
 
@@ -398,6 +333,46 @@
 <span class="sd">                          &#39;shape&#39;: []}))</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
+
+
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">Collectable</span><span class="p">(</span><span class="n">HasName</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">describe_collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">DataKey</span><span class="p">],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">DataKey</span><span class="p">]]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This is like ``describe()`` on readable devices, but with an extra layer of nesting.</span>
+
+<span class="sd">        Since a flyer can potentially return more than one event stream, this is either</span>
+<span class="sd">            * a dict of stream names (strings) mapped to a ``describe()``-type output for each.</span>
+<span class="sd">            * a ``describe()``-type output of the descriptor name passed in with the ``name``</span>
+<span class="sd">                argument of the message.</span>
+
+<span class="sd">        This can be a standard function or an ``async`` function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">EventCollectable</span><span class="p">(</span><span class="n">Collectable</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Iterator</span><span class="p">[</span><span class="n">PartialEvent</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield dictionaries that are partial Event documents.</span>
+
+<span class="sd">        They should contain the keys &#39;time&#39;, &#39;data&#39;, and &#39;timestamps&#39;.</span>
+<span class="sd">        A &#39;uid&#39; is added by the RunEngine.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
+
+
+<span class="nd">@runtime_checkable</span>
+<span class="k">class</span> <span class="nc">EventPageCollectable</span><span class="p">(</span><span class="n">Collectable</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">):</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">collect_pages</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Iterator</span><span class="p">[</span><span class="n">PartialEventPage</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield dictionaries that are partial EventPage documents.</span>
+
+<span class="sd">        They should contain the keys &#39;time&#39;, &#39;data&#39;, and &#39;timestamps&#39;.</span>
+<span class="sd">        A &#39;uid&#39; is added by the RunEngine.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="o">...</span>
 
 
 <div class="viewcode-block" id="Movable"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Movable">[docs]</a><span class="nd">@runtime_checkable</span>
@@ -443,26 +418,6 @@
 <div class="viewcode-block" id="Flyable.complete"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.complete">[docs]</a>    <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">complete</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Status</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a ``Status`` and mark it done when acquisition has completed.&quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-<div class="viewcode-block" id="Flyable.collect"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.collect">[docs]</a>    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">PartialEvent</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Yield dictionaries that are partial Event documents.</span>
-
-<span class="sd">        They should contain the keys &#39;time&#39;, &#39;data&#39;, and &#39;timestamps&#39;.</span>
-<span class="sd">        A &#39;uid&#39; is added by the RunEngine.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="o">...</span></div>
-
-<div class="viewcode-block" id="Flyable.describe_collect"><a class="viewcode-back" href="../../hardware.html#bluesky.protocols.Flyable.describe_collect">[docs]</a>    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">describe_collect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Descriptor</span><span class="p">]]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;This is like ``describe()`` on readable devices, but with an extra layer of nesting.</span>
-
-<span class="sd">        Since a flyer can potentially return more than one event stream, this is a dict</span>
-<span class="sd">        of stream names (strings) mapped to a ``describe()``-type output for each.</span>
-
-<span class="sd">        This can be a standard function or an ``async`` function.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="o">...</span></div></div>
 
 
@@ -608,6 +563,10 @@
     <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">protocol</span><span class="p">),</span> \
         <span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> does not implement all </span><span class="si">%s</span><span class="s2"> methods&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">protocol</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">obj</span></div>
+
+
+<span class="c1"># Descriptor with previous name on imports for backwards compatibility.</span>
+<span class="n">Descriptor</span> <span class="o">=</span> <span class="n">DataKey</span>
 </pre></div>
 
            </div>

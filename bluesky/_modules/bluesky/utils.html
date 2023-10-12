@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.utils &mdash; bluesky 1.11.0.post33+g6e3c4721 documentation</title>
+  <title>bluesky.utils &mdash; bluesky 1.11.0.post68+g9a9e76a9 documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -11,7 +11,7 @@
     <script src="../../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=1b99f538"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=59593270"></script>
         <script src="../../_static/doctools.js?v=888ff710"></script>
         <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -31,7 +31,7 @@
             bluesky
           </a>
               <div class="version">
-                1.11.0.post33+g6e3c4721
+                1.11.0.post68+g9a9e76a9
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -139,6 +139,7 @@
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
 <span class="kn">from</span> <span class="nn">tqdm.utils</span> <span class="kn">import</span> <span class="n">_screen_shape_wrapper</span><span class="p">,</span> <span class="n">_term_move_up</span><span class="p">,</span> <span class="n">_unicode</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">AsyncIterator</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 
 <span class="kn">import</span> <span class="nn">msgpack</span>
@@ -147,7 +148,7 @@
 
 <span class="kn">from</span> <span class="nn">bluesky.protocols</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">T</span><span class="p">,</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">HasParent</span><span class="p">,</span> <span class="n">HasHints</span><span class="p">,</span> <span class="n">Hints</span><span class="p">,</span> <span class="n">Movable</span><span class="p">,</span> <span class="n">Readable</span><span class="p">,</span>
-    <span class="n">SyncOrAsync</span><span class="p">,</span> <span class="n">WritesExternalAssets</span><span class="p">,</span> <span class="n">check_supports</span>
+    <span class="n">SyncOrAsync</span><span class="p">,</span> <span class="n">SyncOrAsyncIterator</span><span class="p">,</span> <span class="n">WritesExternalAssets</span><span class="p">,</span> <span class="n">check_supports</span>
 <span class="p">)</span>
 
 <span class="k">try</span><span class="p">:</span>
@@ -1939,10 +1940,20 @@
         <span class="n">hints</span><span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">hints</span>
 
 
-<span class="k">def</span> <span class="nf">maybe_collect_asset_docs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Asset</span><span class="p">]:</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">iterate_maybe_async</span><span class="p">(</span><span class="n">iterator</span><span class="p">:</span> <span class="n">SyncOrAsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isasyncgen</span><span class="p">(</span><span class="n">iterator</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">iterator</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">v</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">iterator</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">v</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">maybe_collect_asset_docs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Asset</span><span class="p">]:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">WritesExternalAssets</span><span class="p">):</span>
         <span class="n">warn_if_msg_args_or_kwargs</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">obj</span><span class="o">.</span><span class="n">collect_asset_docs</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">yield from</span> <span class="n">obj</span><span class="o">.</span><span class="n">collect_asset_docs</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">iterate_maybe_async</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">collect_asset_docs</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)):</span>
+            <span class="k">yield</span> <span class="n">v</span>
 
 
 <span class="k">async</span> <span class="k">def</span> <span class="nf">maybe_await</span><span class="p">(</span><span class="n">ret</span><span class="p">:</span> <span class="n">SyncOrAsync</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
