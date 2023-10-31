@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Run Tiled Server in a Container &mdash; tiled 0.1.0a110.dev2+gd2064c4 documentation</title>
+  <title>Run Tiled Server in a Container &mdash; tiled 0.1.0a110.dev3+g4ef1716 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../_static/plot_directive.css" type="text/css" />
@@ -15,7 +15,7 @@
   
         <script src="../_static/jquery.js?v=5d32c60e"></script>
         <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js?v=76a07dca"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js?v=5ea49457"></script>
         <script src="../_static/doctools.js?v=888ff710"></script>
         <script src="../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -39,7 +39,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a110.dev2+gd2064c4
+                0.1.0a110.dev3+g4ef1716
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -68,7 +68,12 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Run Tiled Server in a Container</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#example-a-writable-catalog">Example: A writable catalog</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example-a-persistent-writable-catalog">Example: A persistent writable catalog</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#example-serve-a-directory-of-existing-files">Example: Serve a directory of existing files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-serve-a-directory-of-existing-files">Example: Serve a directory of existing files</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#quick-start-not-scalable">Quick Start (Not Scalable)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#scalable-to-multiple-processes">Scalable to Multiple Processes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#scalable-to-multiple-hosts">Scalable to Multiple Hosts</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#example-custom-configuration">Example: Custom configuration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example-run-tiled-with-a-dashboard-of-metrics">Example: Run Tiled with a dashboard of metrics</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#next-steps">Next Steps</a></li>
@@ -192,20 +197,110 @@ hold uploaded data and # a (SQLite) database to index the metadata.</p>
 serve them. If you don’t have scientific data files at hand to try this with, you can
 quickly generate some with:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Optional: Generate sample files... TIFF, Excel, HDF5, etc.</span>
-<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">tiled</span><span class="o">.</span><span class="n">examples</span><span class="o">.</span><span class="n">generate_files</span> <span class="n">files</span><span class="o">/</span>
+<span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">tiled</span><span class="o">.</span><span class="n">examples</span><span class="o">.</span><span class="n">generate_files</span> <span class="n">data</span><span class="o">/</span>
 </pre></div>
 </div>
+<section id="quick-start-not-scalable">
+<h3>Quick Start (Not Scalable)<a class="headerlink" href="#quick-start-not-scalable" title="Permalink to this heading">¶</a></h3>
+<p>This approach is nice for development and rapid iteration. It indexes the files
+at server startup.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">docker</span> <span class="n">run</span> \
   <span class="o">-</span><span class="n">p</span> <span class="mi">8000</span><span class="p">:</span><span class="mi">8000</span> \
   <span class="o">-</span><span class="n">e</span> <span class="n">TILED_SINGLE_USER_API_KEY</span><span class="o">=</span><span class="n">secret</span> \
-  <span class="o">-</span><span class="n">v</span> <span class="o">./</span><span class="n">files</span><span class="p">:</span><span class="o">/</span><span class="n">files</span><span class="p">:</span><span class="n">ro</span> <span class="n">ghcr</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">bluesky</span><span class="o">/</span><span class="n">tiled</span><span class="p">:</span><span class="n">latest</span> \
-  <span class="n">tiled</span> <span class="n">serve</span> <span class="n">directory</span> <span class="o">--</span><span class="n">host</span> <span class="mf">0.0.0.0</span> <span class="o">/</span><span class="n">files</span>
+  <span class="o">-</span><span class="n">v</span> <span class="o">./</span><span class="n">data</span><span class="p">:</span><span class="o">/</span><span class="n">data</span><span class="p">:</span><span class="n">ro</span> \
+  <span class="n">ghcr</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">bluesky</span><span class="o">/</span><span class="n">tiled</span><span class="p">:</span><span class="n">latest</span> \
+  <span class="n">tiled</span> <span class="n">serve</span> <span class="n">directory</span> <span class="o">--</span><span class="n">host</span> <span class="mf">0.0.0.0</span> <span class="o">/</span><span class="n">data</span>
+</pre></div>
+</div>
+<p>Two problems with this one-line approach:</p>
+<ul class="simple">
+<li><p>If you restart the server, all the indexing work is re-done from scratch.</p></li>
+<li><p>If you horizontally scale with multiple containers, each one will crawl the
+filesystem individually, putting load on the filesystem and potentially getting
+views of the filesystem that are out of sync.</p></li>
+</ul>
+<p>Read on for a scalable approach.</p>
+</section>
+<section id="scalable-to-multiple-processes">
+<h3>Scalable to Multiple Processes<a class="headerlink" href="#scalable-to-multiple-processes" title="Permalink to this heading">¶</a></h3>
+<p>Create a place outside the container to store the “catalog”, <code class="docutils literal notranslate"><span class="pre">catalog.db</span></code>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mkdir</span> <span class="n">storage</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>Start the server, potentially multiple on different ports.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">docker</span> <span class="n">run</span> \
+  <span class="o">-</span><span class="n">p</span> <span class="mi">8000</span><span class="p">:</span><span class="mi">8000</span> \
+  <span class="o">-</span><span class="n">e</span> <span class="n">TILED_SINGLE_USER_API_KEY</span><span class="o">=</span><span class="n">secret</span> \
+  <span class="o">-</span><span class="n">v</span> <span class="o">./</span><span class="n">data</span><span class="p">:</span><span class="o">/</span><span class="n">data</span><span class="p">:</span><span class="n">ro</span> \
+  <span class="o">-</span><span class="n">v</span> <span class="o">./</span><span class="n">storage</span><span class="p">:</span><span class="o">/</span><span class="n">storage</span> \
+  <span class="n">ghcr</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">bluesky</span><span class="o">/</span><span class="n">tiled</span><span class="p">:</span><span class="n">latest</span>
+</pre></div>
+</div>
+<p>Register the files in the directory <code class="docutils literal notranslate"><span class="pre">data/</span></code> with the catalog.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">docker</span> <span class="n">run</span> \
+  <span class="o">-</span><span class="n">e</span> <span class="n">TILED_SINGLE_USER_API_KEY</span><span class="o">=</span><span class="n">secret</span> \
+  <span class="o">-</span><span class="n">v</span> <span class="o">./</span><span class="n">data</span><span class="p">:</span><span class="o">/</span><span class="n">data</span><span class="p">:</span><span class="n">ro</span> \
+  <span class="o">-</span><span class="n">v</span> <span class="o">./</span><span class="n">storage</span><span class="p">:</span><span class="o">/</span><span class="n">storage</span> \
+  <span class="n">ghcr</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">bluesky</span><span class="o">/</span><span class="n">tiled</span><span class="p">:</span><span class="n">latest</span> \
+  <span class="n">tiled</span> <span class="n">catalog</span> <span class="n">register</span> <span class="o">/</span><span class="n">storage</span><span class="o">/</span><span class="n">catalog</span><span class="o">.</span><span class="n">db</span> <span class="o">/</span><span class="n">data</span> <span class="o">--</span><span class="n">verbose</span>
 </pre></div>
 </div>
 </section>
+<section id="scalable-to-multiple-hosts">
+<h3>Scalable to Multiple Hosts<a class="headerlink" href="#scalable-to-multiple-hosts" title="Permalink to this heading">¶</a></h3>
+<p>Instead of the default SQLite database, we need to use a PostgreSQL database.
+One way to run a PostgresSQL database is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>export TILED_DATABASE_PASSWORD=db_secret
+docker run --name tiled-test-postgres -p 5432:5432 -e POSTGRES_PASSWORD=${TILED_DATABASE_PASSWORD} -d docker.io/postgres
+</pre></div>
+</div>
+<p>Initialize the database. (This creates the tables, indexes, and so on used by Tiled.)</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>export TILED_DATABASE_URI=postgresql+asyncpg://postgres:${TILED_DATABASE_PASSWORD}@localhost:5432
+
+docker run --net=host ghcr.io/bluesky/tiled:latest tiled catalog init $TILED_DATABASE_URI
+</pre></div>
+</div>
+<p>Create a directory for Tiled configuration, e.g. <code class="docutils literal notranslate"><span class="pre">config/</span></code>.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">mkdir</span> <span class="n">config</span><span class="o">/</span>
+</pre></div>
+</div>
+<p>Place a copy of <code class="docutils literal notranslate"><span class="pre">example_configs/single_catalog_single_user.yml</span></code>, from the Tiled
+repository root, in this <code class="docutils literal notranslate"><span class="pre">config/</span></code> directory.</p>
+<p>Replace the line:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;sqlite+aiosqlite:////storage/catalog.db&quot;</span>
+</pre></div>
+</div>
+<p>with a PostgreSQL database URI, such as:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;postgresql+asyncpg://postgres:${TILED_DATABASE_PASSWORD}@localhost:5432&quot;</span>
+</pre></div>
+</div>
+<p>Start the server, potentially multiple servers across many hosts.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>docker run \
+  --net=host \
+  -p 8000:8000 \
+  -e TILED_SINGLE_USER_API_KEY=secret \
+  -e TILED_DATABASE_PASSWORD=${TILED_DATABASE_PASSWORD} \
+  -v ./config:/deploy/config:ro \
+  -v ./data:/data:ro \
+  ghcr.io/bluesky/tiled:latest
+</pre></div>
+</div>
+<p>Register the files in the directory <code class="docutils literal notranslate"><span class="pre">data/</span></code> with this catalog.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>docker run \
+  --net=host \
+  -e TILED_SINGLE_USER_API_KEY=secret \
+  -e TILED_DATABASE_PASSWORD=${TILED_DATABASE_PASSWORD} \
+  -v ./config:/deploy/config:ro \
+  -v ./data:/data:ro \
+  ghcr.io/bluesky/tiled:latest \
+  tiled catalog register ${TILED_DATABASE_URI} /data--verbose
+</pre></div>
+</div>
+</section>
+</section>
 <section id="example-custom-configuration">
 <h2>Example: Custom configuration<a class="headerlink" href="#example-custom-configuration" title="Permalink to this heading">¶</a></h2>
-<p>There are configuration examples locate in the directory <code class="docutils literal notranslate"><span class="pre">example_configs</span></code>
+<p>There are configuration examples located in the directory <code class="docutils literal notranslate"><span class="pre">example_configs</span></code>
 under the Tiled repository root. The container image has one in particular,
 <code class="docutils literal notranslate"><span class="pre">single_user_single_catalog.yml</span></code>, copied into the container under
 <code class="docutils literal notranslate"><span class="pre">/deploy/config/</span></code>. Override it by mounting a local directory an
