@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky.preprocessors &mdash; bluesky 1.11.0.post80+g0e252159 documentation</title>
+  <title>bluesky.preprocessors &mdash; bluesky 1.11.0.post84+g4850185b documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/plot_directive.css" type="text/css" />
@@ -11,7 +11,7 @@
     <script src="../../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=5f85daaa"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=3eb5e3f5"></script>
         <script src="../../_static/doctools.js?v=888ff710"></script>
         <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -31,7 +31,7 @@
             bluesky
           </a>
               <div class="version">
-                1.11.0.post80+g0e252159
+                1.11.0.post84+g4850185b
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -330,7 +330,7 @@
 
 <div class="viewcode-block" id="msg_mutator"><a class="viewcode-back" href="../../generated/bluesky.preprocessors.msg_mutator.html#bluesky.preprocessors.msg_mutator">[docs]</a><span class="k">def</span> <span class="nf">msg_mutator</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">msg_proc</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    A simple preprocessor that mutates or deletes single messages in a plan</span>
+<span class="sd">    A simple preprocessor that mutates or deletes single messages in a plan.</span>
 
 <span class="sd">    To *insert* messages, use ``plan_mutator`` instead.</span>
 
@@ -350,20 +350,38 @@
 <span class="sd">    --------</span>
 <span class="sd">    :func:`bluesky.plans.plan_mutator`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">ret</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">ret</span><span class="p">)</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="n">msg_proc</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
-            <span class="c1"># if None, just skip message</span>
-            <span class="c1"># feed &#39;None&#39; back down into the base plan,</span>
-            <span class="c1"># this may break some plans</span>
-            <span class="k">if</span> <span class="n">msg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">ret</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="k">continue</span>
-            <span class="n">ret</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">msg</span>
-        <span class="k">except</span> <span class="ne">StopIteration</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">e</span><span class="o">.</span><span class="n">value</span></div>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">StopIteration</span> <span class="k">as</span> <span class="n">_e</span><span class="p">:</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">_e</span><span class="o">.</span><span class="n">value</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">while</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="n">msg_proc</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="c1"># if None, just skip message</span>
+                <span class="c1"># feed &#39;None&#39; back down into the base plan,</span>
+                <span class="c1"># this may break some plans</span>
+                <span class="k">if</span> <span class="n">msg</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">_s</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">_s</span> <span class="o">=</span> <span class="k">yield</span> <span class="n">msg</span>
+            <span class="k">except</span> <span class="ne">GeneratorExit</span><span class="p">:</span>
+                <span class="n">plan</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="k">raise</span>
+            <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">_e</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">throw</span><span class="p">(</span><span class="n">_e</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">StopIteration</span> <span class="k">as</span> <span class="n">_e</span><span class="p">:</span>
+                    <span class="n">ret</span> <span class="o">=</span> <span class="n">_e</span><span class="o">.</span><span class="n">value</span>
+                    <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="n">plan</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">_s</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">StopIteration</span> <span class="k">as</span> <span class="n">_e</span><span class="p">:</span>
+                    <span class="n">ret</span> <span class="o">=</span> <span class="n">_e</span><span class="o">.</span><span class="n">value</span>
+                    <span class="k">break</span>
+
+    <span class="k">return</span> <span class="n">ret</span></div>
 
 
 <div class="viewcode-block" id="pchain"><a class="viewcode-back" href="../../generated/bluesky.preprocessors.pchain.html#bluesky.preprocessors.pchain">[docs]</a><span class="k">def</span> <span class="nf">pchain</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
@@ -405,7 +423,10 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">read_cache</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="nf">spy</span><span class="p">(</span><span class="n">msg</span><span class="p">):</span>
+        <span class="k">nonlocal</span> <span class="n">read_cache</span>
+
         <span class="n">cmd</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">command</span>
         <span class="k">if</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s1">&#39;open_run&#39;</span><span class="p">:</span>
             <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{:=^80}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s1">&#39; Open Run &#39;</span><span class="p">))</span>
@@ -420,7 +441,9 @@
             <span class="n">read_cache</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">cmd</span> <span class="o">==</span> <span class="s1">&#39;save&#39;</span><span class="p">:</span>
             <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;  Read </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">read_cache</span><span class="p">))</span>
-        <span class="k">yield</span> <span class="n">msg</span>
+        <span class="k">return</span> <span class="n">msg</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">msg_mutator</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="n">spy</span><span class="p">))</span>
 
 
 <div class="viewcode-block" id="run_wrapper"><a class="viewcode-back" href="../../generated/bluesky.preprocessors.run_wrapper.html#bluesky.preprocessors.run_wrapper">[docs]</a><span class="k">def</span> <span class="nf">run_wrapper</span><span class="p">(</span><span class="n">plan</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">md</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
