@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.base &mdash; tiled 0.1.0a115.dev1+g2b402c0 documentation</title>
+  <title>tiled.client.base &mdash; tiled 0.1.0a115.dev26+gfcf0146 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=ab85d3ba"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=2872f587"></script>
         <script src="../../../_static/doctools.js?v=888ff710"></script>
         <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -38,7 +38,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a115.dev1+g2b402c0
+                0.1.0a115.dev26+gfcf0146
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -131,7 +131,11 @@
   <h1>Source code for tiled.client.base</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">importlib</span>
 <span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">URL</span>
 
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">OneShotCachedMap</span><span class="p">,</span> <span class="n">safe_json_dump</span>
@@ -214,12 +218,21 @@
 
 
 <div class="viewcode-block" id="BaseClient"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.html#tiled.client.base.BaseClient">[docs]</a><span class="k">class</span> <span class="nc">BaseClient</span><span class="p">:</span>
-<div class="viewcode-block" id="BaseClient.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.html#tiled.client.base.BaseClient.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">structure_clients</span><span class="p">,</span> <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="BaseClient.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.html#tiled.client.base.BaseClient.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">item</span><span class="p">,</span>
+        <span class="n">structure_clients</span><span class="p">,</span>
+        <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">include_data_sources</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_context</span> <span class="o">=</span> <span class="n">context</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_item</span> <span class="o">=</span> <span class="n">item</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># a cache just for __len__</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span> <span class="o">=</span> <span class="n">structure_clients</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metadata_revisions</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span> <span class="o">=</span> <span class="n">include_data_sources</span>
         <span class="n">attributes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">]</span>
         <span class="n">structure_family</span> <span class="o">=</span> <span class="n">attributes</span><span class="p">[</span><span class="s2">&quot;structure_family&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">structure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -280,6 +293,17 @@
     <span class="k">def</span> <span class="nf">context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_context</span>
 
+    <span class="k">def</span> <span class="nf">refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">,</span>
+                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;include_data_sources&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">item</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;JSON payload describing this item. Mostly for internal use.&quot;</span>
@@ -308,17 +332,149 @@
         <span class="s2">&quot;Quick access to this entry&quot;</span>
         <span class="k">return</span> <span class="n">StructureFamily</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure_family&quot;</span><span class="p">]]</span>
 
-<div class="viewcode-block" id="BaseClient.new_variation"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.new_variation.html#tiled.client.base.BaseClient.new_variation">[docs]</a>    <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">structure_clients</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">data_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;Calling include_data_sources().refresh().</span>
+<span class="sd">To fetch the data sources up front, call include_data_sources() on the</span>
+<span class="sd">client or pass the optional parameter `include_data_sources=True` to</span>
+<span class="sd">`from_uri(...)` or similar.&quot;&quot;&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;data_sources&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">include_data_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Ensure that data source and asset information is fetched.</span>
+
+<span class="sd">        If it has already been fetched, this is a no-op.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>  <span class="c1"># no op</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">include_data_sources</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">refresh</span><span class="p">()</span>
+
+<div class="viewcode-block" id="BaseClient.new_variation"><a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.new_variation.html#tiled.client.base.BaseClient.new_variation">[docs]</a>    <span class="k">def</span> <span class="nf">new_variation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">structure_clients</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
+        <span class="n">include_data_sources</span><span class="o">=</span><span class="n">UNCHANGED</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        This is intended primarily for internal use and use by subclasses.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">structure_clients</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
             <span class="n">structure_clients</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span>
+        <span class="k">if</span> <span class="n">include_data_sources</span> <span class="ow">is</span> <span class="n">UNCHANGED</span><span class="p">:</span>
+            <span class="n">include_data_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span>
         <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
             <span class="n">item</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">,</span>
             <span class="n">structure_clients</span><span class="o">=</span><span class="n">structure_clients</span><span class="p">,</span>
+            <span class="n">include_data_sources</span><span class="o">=</span><span class="n">include_data_sources</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">asset_manifest</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data_sources</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return a manifest of the relative paths of the contents in each asset.</span>
+
+<span class="sd">        This return a dictionary keyed on asset ID.</span>
+<span class="sd">        Assets backed by a single file are mapped to None (no manifest).</span>
+<span class="sd">        Asset backed by a directory of files are mapped to a list of relative paths.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data_sources : dict</span>
+<span class="sd">            The value returned by ``.data_sources()``. This is passed in explicitly</span>
+<span class="sd">            to avoid fetching it twice in common usages. It also enables passing in</span>
+<span class="sd">            a subset of the data_sources of interest.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">manifests</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">:</span>
+            <span class="n">manifest_link</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                <span class="s2">&quot;/metadata&quot;</span><span class="p">,</span> <span class="s2">&quot;/asset/manifest&quot;</span><span class="p">,</span> <span class="mi">1</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">asset</span> <span class="ow">in</span> <span class="n">data_source</span><span class="p">[</span><span class="s2">&quot;assets&quot;</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="n">asset</span><span class="p">[</span><span class="s2">&quot;is_directory&quot;</span><span class="p">]:</span>
+                    <span class="n">manifest</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="n">manifest_link</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">asset</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]}</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;manifest&quot;</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">manifest</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="n">manifests</span><span class="p">[</span><span class="n">asset</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">manifest</span>
+        <span class="k">return</span> <span class="n">manifests</span>
+
+    <span class="k">def</span> <span class="nf">raw_export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">destination_directory</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Download the raw assets backing this node.</span>
+
+<span class="sd">        This may produce a single file or a directory.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        destination_directory : Path, optional</span>
+<span class="sd">            Destination for downloaded assets. Default is current working directory</span>
+<span class="sd">        max_workers : int, optional</span>
+<span class="sd">            Number of parallel workers downloading data. Default is 4.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        paths : List[Path]</span>
+<span class="sd">            Filepaths of exported files</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">destination_directory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">destination_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">destination_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination_directory</span><span class="p">)</span>
+
+        <span class="c1"># Import here to defer the import of rich (for progress bar).</span>
+        <span class="kn">from</span> <span class="nn">.download</span> <span class="kn">import</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">,</span> <span class="n">download</span>
+
+        <span class="n">urls</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">data_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">()</span><span class="o">.</span><span class="n">data_sources</span><span class="p">()</span>
+        <span class="n">asset_manifest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">asset_manifest</span><span class="p">(</span><span class="n">data_sources</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_sources</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Export of multiple data sources not yet supported&quot;</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">:</span>
+            <span class="n">bytes_link</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                <span class="s2">&quot;/metadata&quot;</span><span class="p">,</span> <span class="s2">&quot;/asset/bytes&quot;</span><span class="p">,</span> <span class="mi">1</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">asset</span> <span class="ow">in</span> <span class="n">data_source</span><span class="p">[</span><span class="s2">&quot;assets&quot;</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_source</span><span class="p">[</span><span class="s2">&quot;assets&quot;</span><span class="p">])</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># Only one asset: keep the name simple.</span>
+                    <span class="n">base_path</span> <span class="o">=</span> <span class="n">destination_directory</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Multiple assets: Add a subdirectory named for the asset</span>
+                    <span class="c1"># id to namespace each asset.</span>
+                    <span class="n">base_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination_directory</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">asset</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]))</span>
+                <span class="k">if</span> <span class="n">asset</span><span class="p">[</span><span class="s2">&quot;is_directory&quot;</span><span class="p">]:</span>
+                    <span class="n">relative_paths</span> <span class="o">=</span> <span class="n">asset_manifest</span><span class="p">[</span><span class="n">asset</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]]</span>
+                    <span class="n">urls</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="n">URL</span><span class="p">(</span>
+                                <span class="n">bytes_link</span><span class="p">,</span>
+                                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                                    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">asset</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                                    <span class="s2">&quot;relative_path&quot;</span><span class="p">:</span> <span class="n">relative_path</span><span class="p">,</span>
+                                <span class="p">},</span>
+                            <span class="p">)</span>
+                            <span class="k">for</span> <span class="n">relative_path</span> <span class="ow">in</span> <span class="n">relative_paths</span>
+                        <span class="p">]</span>
+                    <span class="p">)</span>
+                    <span class="n">paths</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="n">Path</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">relative_path</span><span class="p">)</span>
+                            <span class="k">for</span> <span class="n">relative_path</span> <span class="ow">in</span> <span class="n">relative_paths</span>
+                        <span class="p">]</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">URL</span><span class="p">(</span><span class="n">bytes_link</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">asset</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]}))</span>
+                    <span class="n">paths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">download</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span> <span class="n">urls</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">formats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
