@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a115.dev69+g5fa30b3 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a115.dev73+g48b726e documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=1d26effb"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=57e569f2"></script>
         <script src="../../../_static/doctools.js?v=888ff710"></script>
         <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -38,7 +38,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a115.dev69+g5fa30b3
+                0.1.0a115.dev73+g48b726e
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -561,6 +561,8 @@
             <span class="n">settings</span><span class="o">.</span><span class="n">database_pool_pre_ping</span> <span class="o">=</span> <span class="n">database</span><span class="p">[</span><span class="s2">&quot;pool_pre_ping&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">database</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_overflow&quot;</span><span class="p">):</span>
             <span class="n">settings</span><span class="o">.</span><span class="n">database_max_overflow</span> <span class="o">=</span> <span class="n">database</span><span class="p">[</span><span class="s2">&quot;max_overflow&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">database</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;init_if_not_exists&quot;</span><span class="p">):</span>
+            <span class="n">settings</span><span class="o">.</span><span class="n">database_init_if_not_exists</span> <span class="o">=</span> <span class="n">database</span><span class="p">[</span><span class="s2">&quot;init_if_not_exists&quot;</span><span class="p">]</span>
         <span class="n">object_cache_available_bytes</span> <span class="o">=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;object_cache&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="s2">&quot;available_bytes&quot;</span>
         <span class="p">)</span>
@@ -690,8 +692,28 @@
                 <span class="k">try</span><span class="p">:</span>
                     <span class="k">await</span> <span class="n">check_database</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">REQUIRED_REVISION</span><span class="p">,</span> <span class="n">ALL_REVISIONS</span><span class="p">)</span>
                 <span class="k">except</span> <span class="n">UninitializedDatabase</span><span class="p">:</span>
-                    <span class="nb">print</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+                    <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_init_if_not_exists</span><span class="p">:</span>
+                        <span class="c1"># The alembic stamping can only be does synchronously.</span>
+                        <span class="c1"># The cleanest option available is to start a subprocess</span>
+                        <span class="c1"># because SQLite is allergic to threads.</span>
+                        <span class="kn">import</span> <span class="nn">subprocess</span>
+
+                        <span class="c1"># TODO Check if catalog exists.</span>
+                        <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                            <span class="p">[</span>
+                                <span class="n">sys</span><span class="o">.</span><span class="n">executable</span><span class="p">,</span>
+                                <span class="s2">&quot;-m&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;tiled&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;initialize-database&quot;</span><span class="p">,</span>
+                                <span class="nb">str</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">url</span><span class="p">),</span>
+                            <span class="p">],</span>
+                            <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                            <span class="n">check</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
 
 <span class="s2">No database found at </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span>
 
@@ -699,9 +721,9 @@
 
 <span class="s2">    tiled admin init-database </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span>
 <span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
-                        <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="k">raise</span>
+                            <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
+                        <span class="p">)</span>
+                        <span class="k">raise</span>
                 <span class="k">except</span> <span class="n">DatabaseUpgradeNeeded</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
                     <span class="nb">print</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
