@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.container &mdash; tiled 0.1.0a115.dev73+g48b726e documentation</title>
+  <title>tiled.client.container &mdash; tiled 0.1.0a115.dev108+g89f7106 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=57e569f2"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=cfbdd755"></script>
         <script src="../../../_static/doctools.js?v=888ff710"></script>
         <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -38,7 +38,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a115.dev73+g48b726e
+                0.1.0a115.dev108+g89f7106
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -74,6 +74,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/tune-caches.html">Tune Caches to Balance Speed and Memory Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/register.html">Register Content in Tiled</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanations</span></p>
 <ul>
@@ -144,8 +145,9 @@
 <span class="kn">from</span> <span class="nn">..queries</span> <span class="kn">import</span> <span class="n">KeyLookup</span>
 <span class="kn">from</span> <span class="nn">..query_registration</span> <span class="kn">import</span> <span class="n">query_registry</span>
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
+<span class="kn">from</span> <span class="nn">..structures.data_source</span> <span class="kn">import</span> <span class="n">DataSource</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">OneShotCachedMap</span><span class="p">,</span> <span class="n">Sentinel</span><span class="p">,</span> <span class="n">node_repr</span><span class="p">,</span> <span class="n">safe_json_dump</span>
-<span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">BaseClient</span>
+<span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">STRUCTURE_TYPES</span><span class="p">,</span> <span class="n">BaseClient</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
     <span class="n">ClientError</span><span class="p">,</span>
@@ -701,7 +703,7 @@
 <div class="viewcode-block" id="Container.new"><a class="viewcode-back" href="../../../reference/generated/tiled.client.container.Container.new.html#tiled.client.container.Container.new">[docs]</a>    <span class="k">def</span> <span class="nf">new</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">structure_family</span><span class="p">,</span>
-        <span class="n">structure</span><span class="p">,</span>
+        <span class="n">data_sources</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -726,30 +728,34 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                 <span class="n">spec</span> <span class="o">=</span> <span class="n">Spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
             <span class="n">normalized_specs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">spec</span><span class="p">))</span>
-        <span class="n">data_sources</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="n">structure_family</span> <span class="o">!=</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">:</span>
-            <span class="c1"># TODO Handle multiple data sources.</span>
-            <span class="n">data_sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="p">{</span><span class="s2">&quot;structure&quot;</span><span class="p">:</span> <span class="n">asdict</span><span class="p">(</span><span class="n">structure</span><span class="p">),</span> <span class="s2">&quot;structure_family&quot;</span><span class="p">:</span> <span class="n">structure_family</span><span class="p">}</span>
-            <span class="p">)</span>
         <span class="n">item</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;attributes&quot;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
                 <span class="s2">&quot;structure_family&quot;</span><span class="p">:</span> <span class="n">StructureFamily</span><span class="p">(</span><span class="n">structure_family</span><span class="p">),</span>
                 <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalized_specs</span><span class="p">,</span>
-                <span class="s2">&quot;data_sources&quot;</span><span class="p">:</span> <span class="n">data_sources</span><span class="p">,</span>
+                <span class="s2">&quot;data_sources&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">asdict</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span> <span class="k">for</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">],</span>
             <span class="p">}</span>
         <span class="p">}</span>
         <span class="n">body</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">body</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">data_source</span><span class="o">.</span><span class="n">assets</span> <span class="k">for</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">):</span>
+            <span class="n">endpoint</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/metadata/&quot;</span><span class="p">,</span> <span class="s2">&quot;/register/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">endpoint</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">uri</span>
         <span class="n">document</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">,</span>
+                <span class="n">endpoint</span><span class="p">,</span>
                 <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
                 <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">body</span><span class="p">),</span>
             <span class="p">)</span>
         <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">structure_family</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">:</span>
+            <span class="n">structure</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;contents&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Only containers can have multiple data_sources right now.</span>
+            <span class="p">(</span><span class="n">data_source</span><span class="p">,)</span> <span class="o">=</span> <span class="n">data_sources</span>
+            <span class="n">structure</span> <span class="o">=</span> <span class="n">data_source</span><span class="o">.</span><span class="n">structure</span>
         <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">structure</span>
 
         <span class="c1"># if server returned modified metadata update the local copy</span>
@@ -757,7 +763,9 @@
             <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">document</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">)</span>
         <span class="c1"># Ditto for structure</span>
         <span class="k">if</span> <span class="s2">&quot;structure&quot;</span> <span class="ow">in</span> <span class="n">document</span><span class="p">:</span>
-            <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">document</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;structure&quot;</span><span class="p">)</span>
+            <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">STRUCTURE_TYPES</span><span class="p">[</span><span class="n">structure_family</span><span class="p">](</span>
+                <span class="n">document</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;structure&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
 
         <span class="c1"># Merge in &quot;id&quot; and &quot;links&quot; returned by the server.</span>
         <span class="n">item</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
@@ -794,7 +802,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">,</span>
-            <span class="p">{</span><span class="s2">&quot;contents&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
+            <span class="p">[],</span>
             <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
@@ -856,7 +864,9 @@
         <span class="p">)</span>
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">array</span><span class="p">,</span>
-            <span class="n">structure</span><span class="p">,</span>
+            <span class="p">[</span>
+                <span class="n">DataSource</span><span class="p">(</span><span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span> <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">array</span><span class="p">),</span>
+            <span class="p">],</span>
             <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
@@ -922,7 +932,11 @@
         <span class="p">)</span>
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">awkward</span><span class="p">,</span>
-            <span class="n">structure</span><span class="p">,</span>
+            <span class="p">[</span>
+                <span class="n">DataSource</span><span class="p">(</span>
+                    <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span> <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">awkward</span>
+                <span class="p">),</span>
+            <span class="p">],</span>
             <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
@@ -973,7 +987,9 @@
 
 <span class="sd">        # Define the overall shape and the dimensions of each chunk.</span>
 <span class="sd">        &gt;&gt;&gt; from tiled.structures.sparse import COOStructure</span>
-<span class="sd">        &gt;&gt;&gt; x = c.new(&quot;sparse&quot;, COOStructure(shape=(10,), chunks=((5, 5),)))</span>
+<span class="sd">        &gt;&gt;&gt; structure = COOStructure(shape=(10,), chunks=((5, 5),))</span>
+<span class="sd">        &gt;&gt;&gt; data_source = DataSource(structure=structure, structure_family=StructureFamily.sparse)</span>
+<span class="sd">        &gt;&gt;&gt; x = c.new(&quot;sparse&quot;, [data_source])</span>
 <span class="sd">        # Upload the data in each chunk.</span>
 <span class="sd">        # Coords are given with in the reference frame of each chunk.</span>
 <span class="sd">        &gt;&gt;&gt; x.write_block(coords=[[2, 4]], data=[3.1, 2.8], block=(0,))</span>
@@ -989,7 +1005,11 @@
         <span class="p">)</span>
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">sparse</span><span class="p">,</span>
-            <span class="n">structure</span><span class="p">,</span>
+            <span class="p">[</span>
+                <span class="n">DataSource</span><span class="p">(</span>
+                    <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span> <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">sparse</span>
+                <span class="p">),</span>
+            <span class="p">],</span>
             <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
@@ -1035,7 +1055,9 @@
             <span class="n">structure</span> <span class="o">=</span> <span class="n">TableStructure</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">dataframe</span><span class="p">)</span>
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">table</span><span class="p">,</span>
-            <span class="n">structure</span><span class="p">,</span>
+            <span class="p">[</span>
+                <span class="n">DataSource</span><span class="p">(</span><span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span> <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">table</span><span class="p">),</span>
+            <span class="p">],</span>
             <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
             <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
             <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
