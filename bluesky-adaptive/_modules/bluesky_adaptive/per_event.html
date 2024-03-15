@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_adaptive.per_event &mdash; bluesky-adaptive 0.post1+gc5a89ce documentation</title>
+  <title>bluesky_adaptive.per_event &mdash; bluesky-adaptive 0.post1+gb521544 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
     <script src="../../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
-        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=6fd6660a"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=593848d5"></script>
         <script src="../../_static/doctools.js?v=888ff710"></script>
         <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -36,7 +36,7 @@
             bluesky-adaptive
           </a>
               <div class="version">
-                0.post1+gc5a89ce
+                0.post1+gb521544
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -107,28 +107,29 @@
 
 <span class="kn">import</span> <span class="nn">bluesky.plan_stubs</span> <span class="k">as</span> <span class="nn">bps</span>
 <span class="kn">import</span> <span class="nn">bluesky.preprocessors</span> <span class="k">as</span> <span class="nn">bpp</span>
+<span class="kn">from</span> <span class="nn">bluesky.utils</span> <span class="kn">import</span> <span class="n">RunEngineControlException</span>
 <span class="kn">from</span> <span class="nn">event_model</span> <span class="kn">import</span> <span class="n">RunRouter</span>
 
-<span class="kn">from</span> <span class="nn">.recommendations</span> <span class="kn">import</span> <span class="n">NoRecommendation</span>
+<span class="kn">from</span> <span class="nn">.recommendations</span> <span class="kn">import</span> <span class="n">NoRecommendation</span><span class="p">,</span> <span class="n">RequestPause</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">extract_event_page</span>
 
 
 <div class="viewcode-block" id="recommender_factory"><a class="viewcode-back" href="../../api_gen/bluesky_adaptive.per_event.recommender_factory.html#bluesky_adaptive.per_event.recommender_factory">[docs]</a><span class="k">def</span> <span class="nf">recommender_factory</span><span class="p">(</span><span class="n">recommender</span><span class="p">,</span> <span class="n">independent_keys</span><span class="p">,</span> <span class="n">dependent_keys</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_count</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Generate the callback and queue for gpCAM integration.</span>
+<span class="sd">    Generate the callback and queue for recommender agent integration.</span>
 
 <span class="sd">    For each Event that the callback sees it will place either a</span>
-<span class="sd">    recommendation or `None` into the queue.  Recommendations will be</span>
-<span class="sd">    of a dict mapping the independent_keys to the recommended values and</span>
+<span class="sd">    recommendation, `None`, or Exception for the Run Engine into the queue.</span>
+<span class="sd">    Recommendations will be of a dict mapping the independent_keys to the recommended values and</span>
 <span class="sd">    should be interpreted by the plan as a request for more data.  A `None`</span>
-<span class="sd">    placed in the queue should be interpreted by the plan as in instruction to</span>
-<span class="sd">    terminate the run.</span>
+<span class="sd">    placed in the queue should be interpreted by the plan as in instruction to terminate the run.</span>
+<span class="sd">    An `Exception` placed in the queue will be raised by the plan.</span>
 
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    pgcam_object : gpCAM</span>
-<span class="sd">        The gpcam recommendation engine</span>
+<span class="sd">    recommender : object</span>
+<span class="sd">        The recommendation agent object with ask/tell interface</span>
 
 <span class="sd">    independent_keys : List[str]</span>
 <span class="sd">        The names of the independent keys in the events</span>
@@ -172,6 +173,12 @@
             <span class="k">except</span> <span class="n">NoRecommendation</span><span class="p">:</span>
                 <span class="c1"># no recommendation</span>
                 <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">RunEngineControlException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="c1"># Recommendation to stop/abort/pause</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="c1"># Some other exception will be raised by the plan</span>
+                <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">independent_keys</span><span class="p">,</span> <span class="n">next_point</span><span class="p">)})</span>
 
@@ -243,7 +250,7 @@
 
     <span class="nd">@bpp</span><span class="o">.</span><span class="n">subs_decorator</span><span class="p">(</span><span class="n">to_recommender</span><span class="p">)</span>
     <span class="nd">@bpp</span><span class="o">.</span><span class="n">run_decorator</span><span class="p">(</span><span class="n">md</span><span class="o">=</span><span class="n">_md</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">gp_inner_plan</span><span class="p">():</span>
+    <span class="k">def</span> <span class="nf">adaptive_inner_plan</span><span class="p">():</span>
         <span class="n">next_point</span> <span class="o">=</span> <span class="n">first_point</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="c1"># this assumes that m.name == the key in Event</span>
@@ -254,8 +261,12 @@
             <span class="n">next_point</span> <span class="o">=</span> <span class="n">from_recommender</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">next_point</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">return</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_point</span><span class="p">,</span> <span class="n">RequestPause</span><span class="p">):</span>
+                <span class="k">yield from</span> <span class="n">bps</span><span class="o">.</span><span class="n">pause</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_point</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">next_point</span>
 
-    <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">gp_inner_plan</span><span class="p">())</span></div>
+    <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">adaptive_inner_plan</span><span class="p">())</span></div>
 </pre></div>
 
            </div>
