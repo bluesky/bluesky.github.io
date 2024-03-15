@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.csv &mdash; tiled 0.1.0a117.dev15+g13e8f64 documentation</title>
+  <title>tiled.adapters.csv &mdash; tiled 0.1.0a117.dev16+g428834d documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=7d68669a"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=bdc46cc4"></script>
         <script src="../../../_static/doctools.js?v=888ff710"></script>
         <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -40,7 +40,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a117.dev15+g13e8f64
+                0.1.0a117.dev16+g428834d
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -132,10 +132,16 @@
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.adapters.csv</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">dask.dataframe</span>
+<span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">dask.dataframe</span>
 
 <span class="kn">from</span> <span class="nn">..server.object_cache</span> <span class="kn">import</span> <span class="n">NO_CACHE</span><span class="p">,</span> <span class="n">get_object_cache</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">path_from_uri</span>
+<span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">StructureFamily</span>
+<span class="kn">from</span> <span class="nn">..structures.data_source</span> <span class="kn">import</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">DataSource</span><span class="p">,</span> <span class="n">Management</span>
+<span class="kn">from</span> <span class="nn">..structures.table</span> <span class="kn">import</span> <span class="n">TableStructure</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">ensure_uri</span><span class="p">,</span> <span class="n">path_from_uri</span>
+<span class="kn">from</span> <span class="nn">.array</span> <span class="kn">import</span> <span class="n">ArrayAdapter</span>
 <span class="kn">from</span> <span class="nn">.dataframe</span> <span class="kn">import</span> <span class="n">DataFrameAdapter</span>
 
 
@@ -181,6 +187,128 @@
 <span class="s2">&quot;&quot;&quot;</span> <span class="o">+</span> <span class="p">(</span>
     <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
 <span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">CSVAdapter</span><span class="p">:</span>
+    <span class="n">structure_family</span> <span class="o">=</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">table</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data_uris</span><span class="p">,</span>
+        <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># TODO Store data_uris instead and generalize to non-file schemes.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_partition_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span> <span class="k">for</span> <span class="n">uri</span> <span class="ow">in</span> <span class="n">data_uris</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">structure</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_partition_paths</span><span class="p">)</span>
+            <span class="n">structure</span> <span class="o">=</span> <span class="n">TableStructure</span><span class="o">.</span><span class="n">from_dask_dataframe</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span> <span class="o">=</span> <span class="n">structure</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">specs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">specs</span> <span class="ow">or</span> <span class="p">[])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">access_policy</span> <span class="o">=</span> <span class="n">access_policy</span>
+
+    <span class="k">def</span> <span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">dataframe_adapter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">partitions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partition_paths</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="n">partition</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">partition</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">partitions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">partition</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DataFrameAdapter</span><span class="p">(</span><span class="n">partitions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">init_storage</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_uri</span><span class="p">,</span> <span class="n">structure</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">..server.schemas</span> <span class="kn">import</span> <span class="n">Asset</span>
+
+        <span class="n">directory</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_uri</span><span class="p">)</span>
+        <span class="n">directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">assets</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">Asset</span><span class="p">(</span>
+                <span class="n">data_uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">data_uri</span><span class="si">}</span><span class="s2">/partition-</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">.csv&quot;</span><span class="p">,</span>
+                <span class="n">is_directory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">parameter</span><span class="o">=</span><span class="s2">&quot;data_uris&quot;</span><span class="p">,</span>
+                <span class="n">num</span><span class="o">=</span><span class="n">i</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">structure</span><span class="o">.</span><span class="n">npartitions</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="k">return</span> <span class="n">assets</span>
+
+    <span class="k">def</span> <span class="nf">append_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">partition</span><span class="p">):</span>
+        <span class="n">uri</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partition_paths</span><span class="p">[</span><span class="n">partition</span><span class="p">]</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">write_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">partition</span><span class="p">):</span>
+        <span class="n">uri</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partition_paths</span><span class="p">[</span><span class="n">partition</span><span class="p">]</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">npartitions</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+        <span class="n">uri</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partition_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataframe_adapter</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">read_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataframe_adapter</span><span class="o">.</span><span class="n">read_partition</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">structure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span>
+
+    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">([</span><span class="n">key</span><span class="p">])[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">generate_data_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mimetype</span><span class="p">,</span> <span class="n">dict_or_none</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">is_directory</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">DataSource</span><span class="p">(</span>
+                <span class="n">structure_family</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dataframe_adapter</span><span class="o">.</span><span class="n">structure_family</span><span class="p">,</span>
+                <span class="n">mimetype</span><span class="o">=</span><span class="n">mimetype</span><span class="p">,</span>
+                <span class="n">structure</span><span class="o">=</span><span class="n">dict_or_none</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dataframe_adapter</span><span class="o">.</span><span class="n">structure</span><span class="p">()),</span>
+                <span class="n">parameters</span><span class="o">=</span><span class="p">{},</span>
+                <span class="n">management</span><span class="o">=</span><span class="n">Management</span><span class="o">.</span><span class="n">external</span><span class="p">,</span>
+                <span class="n">assets</span><span class="o">=</span><span class="p">[</span>
+                    <span class="n">Asset</span><span class="p">(</span>
+                        <span class="n">data_uri</span><span class="o">=</span><span class="n">ensure_uri</span><span class="p">(</span><span class="n">item</span><span class="p">),</span>
+                        <span class="n">is_directory</span><span class="o">=</span><span class="n">is_directory</span><span class="p">,</span>
+                        <span class="n">parameter</span><span class="o">=</span><span class="s2">&quot;data_uris&quot;</span><span class="p">,</span>  <span class="c1"># &lt;-- PLURAL!</span>
+                        <span class="n">num</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>  <span class="c1"># &lt;-- denoting that the Adapter expects a list, and this is the first element</span>
+                    <span class="p">)</span>
+                <span class="p">],</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_single_file</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">data_uri</span><span class="p">,</span> <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">data_uri</span><span class="p">],</span>
+            <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
+            <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="c1"># Must compute to determine shape.</span>
+        <span class="k">return</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">([</span><span class="n">key</span><span class="p">])[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">items</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">yield from</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">([</span><span class="n">key</span><span class="p">])[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span><span class="o">.</span><span class="n">columns</span>
+        <span class="p">)</span>
 </pre></div>
 
            </div>
