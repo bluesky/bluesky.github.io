@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.object_cache &mdash; tiled 0.1.0a117.dev13+g2b7fd88 documentation</title>
+  <title>tiled.server.object_cache &mdash; tiled 0.1.0a117.dev14+g5aae35a documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=9fac2ac1"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=a3a2c447"></script>
         <script src="../../../_static/doctools.js?v=888ff710"></script>
         <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -40,7 +40,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a117.dev13+g2b7fd88
+                0.1.0a117.dev14+g5aae35a
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -147,6 +147,8 @@
 <span class="kn">import</span> <span class="nn">cachey</span>
 <span class="kn">from</span> <span class="nn">dask.callbacks</span> <span class="kn">import</span> <span class="n">Callback</span>
 
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">catch_warning_msg</span>
+
 <span class="k">if</span> <span class="n">__debug__</span><span class="p">:</span>
     <span class="kn">import</span> <span class="nn">logging</span>
 
@@ -155,6 +157,19 @@
     <span class="n">handler</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
     <span class="n">handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span><span class="s2">&quot;OBJECT CACHE: </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">))</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">handler</span><span class="p">)</span>
+
+
+<span class="c1"># See https://github.com/bluesky/tiled/issues/675#issuecomment-1983581882</span>
+<span class="n">WARNING_PANDAS_BLOCKS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;DataFrame._data is deprecated and will be removed in a future version. &quot;</span>
+    <span class="s2">&quot;Use public APIs instead.&quot;</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">catch_pandas_blocks_warning</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">catch_warning_msg</span><span class="p">(</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">WARNING_PANDAS_BLOCKS</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">DeprecationWarning</span>
+    <span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_NO_CACHE_SENTINEL</span><span class="p">:</span>
@@ -263,7 +278,8 @@
 <span class="sd">            Computed (with best effort) if not provided.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">nbytes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">nbytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_nbytes</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">catch_pandas_blocks_warning</span><span class="p">():</span>
+                <span class="n">nbytes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get_nbytes</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Store </span><span class="si">%r</span><span class="s2"> (cost=</span><span class="si">%.3f</span><span class="s2">, nbytes=</span><span class="si">%d</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">nbytes</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">nbytes</span><span class="o">=</span><span class="n">nbytes</span><span class="p">)</span></div>
 
@@ -330,7 +346,8 @@
         <span class="k">if</span> <span class="n">deps</span><span class="p">:</span>
             <span class="n">duration</span> <span class="o">+=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">durations</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">deps</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">durations</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">duration</span>
-        <span class="n">nb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nbytes</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">catch_pandas_blocks_warning</span><span class="p">():</span>
+            <span class="n">nb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nbytes</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="s2">&quot;dask&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">key</span><span class="p">),</span> <span class="n">value</span><span class="p">,</span> <span class="n">cost</span><span class="o">=</span><span class="n">duration</span><span class="p">,</span> <span class="n">nbytes</span><span class="o">=</span><span class="n">nb</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_finish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dsk</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">errored</span><span class="p">):</span>
