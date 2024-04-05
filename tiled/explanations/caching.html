@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Caches &mdash; tiled 0.1.0a118.dev14+g225fa33 documentation</title>
+  <title>Caches &mdash; tiled 0.1.0a118.dev15+g58bc300 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
@@ -17,7 +17,7 @@
   
         <script src="../_static/jquery.js?v=5d32c60e"></script>
         <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js?v=b40eb2c2"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js?v=6344a4c8"></script>
         <script src="../_static/doctools.js?v=888ff710"></script>
         <script src="../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -41,7 +41,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a118.dev14+g225fa33
+                0.1.0a118.dev15+g58bc300
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -75,7 +75,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/custom-clients.html">Custom Python Client Objects</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/metrics.html">Prometheus Metrics</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../how-to/tune-caches.html">Tune Caches to Balance Speed and Memory Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/register.html">Register Content in Tiled</a></li>
 </ul>
@@ -91,10 +90,7 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Caches</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#client-side-http-response-cache">Client-side HTTP Response Cache</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#server-side-object-cache">Server-side Object Cache</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#connection-to-dask">Connection to Dask</a></li>
-</ul>
-</li>
+<li class="toctree-l2"><a class="reference internal" href="#server-side-resource-cache">Server-side Resource Cache</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="access-control.html">Access Control</a></li>
@@ -152,22 +148,14 @@ opt-out path.</p>
 <ol class="arabic simple">
 <li><p><strong>Client-side response cache.</strong> The Tiled Python client implements a standard
 web cache, similar in both concept and implementation to a web browser’s cache.</p></li>
-<li><p><strong>Service-side object cache.</strong> The <em>response</em> caches operate near the outer
-edges of the application, stashing and retrieve HTTP response bytes. The
-<em>object</em> cache is more deeply integrated into the application: it is
-available for authors of Adapters to use for stashing any objects that may be
-useful in expediting future work. These objects may serializable, such as chunks
-of array data, or unserializable, such as file handles. Requests that ask for
-overlapping but distinct slices of data or requests that ask for the same
-data but in varied formats will not benefit from the <em>response</em> cache; they
-will “miss”. The <em>object</em> cache, however, can slice and encode its cached
-resources differently for different requests. The object cache will not provide
-quite the same speed boost as a response cache, but it has a broader impact.</p></li>
+<li><p><strong>Server-side resource cache.</strong> The resource cache is used to cache file
+handles and related system resources, to avoid rapidly opening, closing,
+and reopening the same files while handling a burst of requests.</p></li>
 </ol>
 </section>
 <section id="client-side-http-response-cache">
 <span id="client-http-response-cache"></span><h2>Client-side HTTP Response Cache<a class="headerlink" href="#client-side-http-response-cache" title="Permalink to this heading">¶</a></h2>
-<p>The client response cache is an LRU response cache backed by a SQLite file.</p>
+<p>The client response cache is an LRU (Least Recently Used) response cache backed by a SQLite file.</p>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tiled.client</span> <span class="kn">import</span> <span class="n">from_uri</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
@@ -187,39 +175,39 @@ quite the same speed boost as a response cache, but it has a broader impact.</p>
 </pre></div>
 </div>
 </section>
-<section id="server-side-object-cache">
-<h2>Server-side Object Cache<a class="headerlink" href="#server-side-object-cache" title="Permalink to this heading">¶</a></h2>
-<p>TO DO</p>
-<section id="connection-to-dask">
-<h3>Connection to Dask<a class="headerlink" href="#connection-to-dask" title="Permalink to this heading">¶</a></h3>
-<p>Dask provides an opt-in, experimental
-<a class="reference external" href="https://docs.dask.org/en/latest/caching.html">opportunistic caching</a> mechanism.
-It caches at the granularity of “tasks”, such as chunks of array or partitions
-of dataframes.</p>
-<p>Tiled’s object cache is generic—not exclusive to dask code paths—but it plugs
-into dask in a similar way to make it easy for any Adapters that happen to use
-dask to leverage Tiled’s object cache very simply, like this:</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tiled.server.object_cache</span> <span class="kn">import</span> <span class="n">get_object_cache</span>
-
-
-<span class="k">with</span> <span class="n">get_object_cache</span><span class="p">()</span><span class="o">.</span><span class="n">dask_context</span><span class="p">:</span>
-    <span class="c1"># Any tasks that happen to already be cached will be looked up</span>
-    <span class="c1"># instead of computed here. Anything that _is_ computed here may</span>
-    <span class="c1"># be cached, depending on its bytesize and its cost (how long it took to</span>
-    <span class="c1"># compute).</span>
-    <span class="n">dask_object</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+<section id="server-side-resource-cache">
+<h2>Server-side Resource Cache<a class="headerlink" href="#server-side-resource-cache" title="Permalink to this heading">¶</a></h2>
+<p>The “resource cache” is a TLRU (Time-aware Least Recently Used) cache. When
+items are evicted from the cache, a hard reference is dropped, freeing the
+resource to be closed by the garbage collector if there are no other extant
+hard references. Items are evicted if:</p>
+<ul class="simple">
+<li><p>They have been in the cache for a <em>total</em> of more than a given time.
+(Accessing an item does not reset this time.)</p></li>
+<li><p>The cache is at capacity and this item is the least recently used item.</p></li>
+</ul>
+<p>It is not expected that users should need to tune this cache, except in
+debugging scenarios. These environment variables may be set to tune
+the cache parameters:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>TILED_RESOURCE_CACHE_MAX_SIZE<span class="w">  </span><span class="c1"># default 1024 items</span>
+TILED_RESOURCE_CACHE_TTU<span class="w">  </span><span class="c1"># default 60. seconds</span>
 </pre></div>
 </div>
-<p>Items can be proactively cleared from the cache like so:</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tiled.server.object_cache</span> <span class="kn">import</span> <span class="n">get_object_cache</span><span class="p">,</span> <span class="n">NO_CACHE</span>
-
-
-<span class="n">cache</span> <span class="o">=</span> <span class="n">get_object_cache</span><span class="p">()</span>
-<span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">NO_CACHE</span><span class="p">:</span>
-    <span class="n">cache</span><span class="o">.</span><span class="n">discard_dask</span><span class="p">(</span><span class="n">dask_object</span><span class="o">.</span><span class="n">__dask_keys__</span><span class="p">())</span>
+<p>The “size” is measured in cached items; that is, each item in the cache has
+size 1.</p>
+<p>To disable the resource cache, set:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nv">TILED_RESOURCE_CACHE_MAX_SIZE</span><span class="o">=</span><span class="m">0</span>
 </pre></div>
 </div>
-</section>
+<p>It is also possible to register a custom cache:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">cachetools</span> <span class="kn">import</span> <span class="n">Cache</span>
+<span class="kn">from</span> <span class="nn">tiled.adapters.resource_cache</span> <span class="kn">import</span> <span class="n">set_resource_cache</span>
+
+<span class="n">cache</span> <span class="o">=</span> <span class="n">Cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">set_resouurce_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Any object satisfying the <code class="docutils literal notranslate"><span class="pre">cachetools.Cache</span></code> interface is acceptable.</p>
 </section>
 </section>
 
