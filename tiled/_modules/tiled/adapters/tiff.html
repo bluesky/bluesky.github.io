@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.tiff &mdash; tiled 0.1.0a118.dev24+g84c185d documentation</title>
+  <title>tiled.adapters.tiff &mdash; tiled 0.1.0a118.dev25+g0753fe5 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=c0350ee7"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=e427565f"></script>
         <script src="../../../_static/doctools.js?v=888ff710"></script>
         <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -40,7 +40,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a118.dev24+g84c185d
+                0.1.0a118.dev25+g0753fe5
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -134,6 +134,7 @@
   <h1>Source code for tiled.adapters.tiff</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">builtins</span>
 
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">tifffile</span>
 
 <span class="kn">from</span> <span class="nn">..structures.array</span> <span class="kn">import</span> <span class="n">ArrayStructure</span><span class="p">,</span> <span class="n">BuiltinDtype</span>
@@ -257,7 +258,7 @@
             <span class="n">structure</span> <span class="o">=</span> <span class="n">ArrayStructure</span><span class="p">(</span>
                 <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
                 <span class="c1"># one chunks per underlying TIFF file</span>
-                <span class="n">chunks</span><span class="o">=</span><span class="p">((</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],),</span> <span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],)),</span>
+                <span class="n">chunks</span><span class="o">=</span><span class="p">((</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">*</span><span class="p">[(</span><span class="n">i</span><span class="p">,)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]),</span>
                 <span class="c1"># Assume all files have the same data type</span>
                 <span class="n">data_type</span><span class="o">=</span><span class="n">BuiltinDtype</span><span class="o">.</span><span class="n">from_numpy_dtype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">slice</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span>
             <span class="p">)</span>
@@ -267,66 +268,45 @@
         <span class="c1"># TODO How to deal with the many headers?</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provided_metadata</span>
 
-    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="bp">Ellipsis</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a numpy array</span>
 
 <span class="sd">        Receives a sequence of values to select from a collection of tiff files that were saved in a folder</span>
-<span class="sd">        The input order is defined as files --&gt; X slice --&gt; Y slice</span>
+<span class="sd">        The input order is defined as: files --&gt; vertical slice --&gt; horizontal slice --&gt; color slice --&gt; ...</span>
 <span class="sd">        read() can receive one value or one slice to select all the data from one file or a sequence of files;</span>
-<span class="sd">        or it can receive a tuple of up to three values (int or slice) to select a more specific sequence of pixels</span>
-<span class="sd">        of a group of images</span>
+<span class="sd">        or it can receive a tuple (int or slice) to select a more specific sequence of pixels of a group of images.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="k">if</span> <span class="nb">slice</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">slice</span> <span class="ow">is</span> <span class="bp">Ellipsis</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">slice</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
-            <span class="c1"># e.g. read(slice=0)</span>
+            <span class="c1"># e.g. read(slice=0) -- return an entire image</span>
             <span class="k">return</span> <span class="n">tifffile</span><span class="o">.</span><span class="n">TiffFile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">files</span><span class="p">[</span><span class="nb">slice</span><span class="p">])</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
-        <span class="c1"># e.g. read(slice=(...))</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">slice</span><span class="p">,</span> <span class="n">builtins</span><span class="o">.</span><span class="n">slice</span><span class="p">):</span>
+            <span class="c1"># e.g. read(slice=(...)) -- return a slice along the image axis</span>
+            <span class="k">return</span> <span class="n">tifffile</span><span class="o">.</span><span class="n">TiffSequence</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">files</span><span class="p">[</span><span class="nb">slice</span><span class="p">])</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">slice</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">slice</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">slice</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">slice</span><span class="o">=</span><span class="nb">slice</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
             <span class="n">image_axis</span><span class="p">,</span> <span class="o">*</span><span class="n">the_rest</span> <span class="o">=</span> <span class="nb">slice</span>
-            <span class="c1"># Could be int or slice</span>
-            <span class="c1"># (0, slice(...)) or (0,....) are converted to a list</span>
+            <span class="c1"># Could be int or slice (0, slice(...)) or (0,....); the_rest is converted to a list</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image_axis</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
                 <span class="c1"># e.g. read(slice=(0, ....))</span>
-                <span class="k">return</span> <span class="n">tifffile</span><span class="o">.</span><span class="n">TiffFile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">files</span><span class="p">[</span><span class="n">image_axis</span><span class="p">])</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image_axis</span><span class="p">,</span> <span class="n">builtins</span><span class="o">.</span><span class="n">slice</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">image_axis</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">slice_start</span> <span class="o">=</span> <span class="mi">0</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">slice_start</span> <span class="o">=</span> <span class="n">image_axis</span><span class="o">.</span><span class="n">start</span>
-                <span class="k">if</span> <span class="n">image_axis</span><span class="o">.</span><span class="n">step</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">slice_step</span> <span class="o">=</span> <span class="mi">1</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">slice_step</span> <span class="o">=</span> <span class="n">image_axis</span><span class="o">.</span><span class="n">step</span>
-
-                <span class="n">arr</span> <span class="o">=</span> <span class="n">tifffile</span><span class="o">.</span><span class="n">TiffSequence</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">files</span><span class="p">[</span>
-                        <span class="n">slice_start</span> <span class="p">:</span> <span class="n">image_axis</span><span class="o">.</span><span class="n">stop</span> <span class="p">:</span> <span class="n">slice_step</span>  <span class="c1"># noqa: E203</span>
-                    <span class="p">]</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
-            <span class="n">arr</span> <span class="o">=</span> <span class="n">arr</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">the_rest</span><span class="p">)]</span>
-            <span class="k">return</span> <span class="n">arr</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">slice</span><span class="p">,</span> <span class="n">builtins</span><span class="o">.</span><span class="n">slice</span><span class="p">):</span>
-            <span class="c1"># Check for start and step which can be optional</span>
-            <span class="k">if</span> <span class="nb">slice</span><span class="o">.</span><span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">slice_start</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">slice_start</span> <span class="o">=</span> <span class="nb">slice</span><span class="o">.</span><span class="n">start</span>
-            <span class="k">if</span> <span class="nb">slice</span><span class="o">.</span><span class="n">step</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">slice_step</span> <span class="o">=</span> <span class="mi">1</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">slice_step</span> <span class="o">=</span> <span class="nb">slice</span><span class="o">.</span><span class="n">step</span>
-
-            <span class="n">arr</span> <span class="o">=</span> <span class="n">tifffile</span><span class="o">.</span><span class="n">TiffSequence</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">files</span><span class="p">[</span><span class="n">slice_start</span> <span class="p">:</span> <span class="nb">slice</span><span class="o">.</span><span class="n">stop</span> <span class="p">:</span> <span class="n">slice_step</span><span class="p">]</span>  <span class="c1"># noqa: E203</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
+                <span class="n">arr</span> <span class="o">=</span> <span class="n">tifffile</span><span class="o">.</span><span class="n">TiffFile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">files</span><span class="p">[</span><span class="n">image_axis</span><span class="p">])</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="n">image_axis</span> <span class="ow">is</span> <span class="bp">Ellipsis</span><span class="p">:</span>
+                <span class="c1"># Return all images</span>
+                <span class="n">arr</span> <span class="o">=</span> <span class="n">tifffile</span><span class="o">.</span><span class="n">TiffSequence</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_seq</span><span class="o">.</span><span class="n">files</span><span class="p">)</span><span class="o">.</span><span class="n">asarray</span><span class="p">()</span>
+                <span class="n">the_rest</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">Ellipsis</span><span class="p">)</span>  <span class="c1"># Include any leading dimensions</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image_axis</span><span class="p">,</span> <span class="n">builtins</span><span class="o">.</span><span class="n">slice</span><span class="p">):</span>
+                <span class="n">arr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">slice</span><span class="o">=</span><span class="n">image_axis</span><span class="p">)</span>
+            <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">arr</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">the_rest</span><span class="p">)])</span>
             <span class="k">return</span> <span class="n">arr</span>
 
     <span class="k">def</span> <span class="nf">read_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">block</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">block</span><span class="p">[</span><span class="mi">1</span><span class="p">:]):</span>
+            <span class="c1"># e.g. block[1:] != [0,0, ..., 0]</span>
             <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
         <span class="n">arr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">builtins</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="n">block</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">block</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
         <span class="k">if</span> <span class="nb">slice</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
