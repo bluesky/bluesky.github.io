@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0a119 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0a120.dev1+gebebe51 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=48ddcf18"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=d5430457"></script>
         <script src="../../../_static/doctools.js?v=888ff710"></script>
         <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -40,7 +40,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a119
+                0.1.0a120.dev1+gebebe51
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -139,6 +139,7 @@
 <span class="kn">import</span> <span class="nn">secrets</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">asynccontextmanager</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
@@ -849,18 +850,18 @@
             <span class="n">agent</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">raw_version</span> <span class="o">=</span> <span class="n">user_agent</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">parsed_version</span> <span class="o">=</span> <span class="n">packaging</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">raw_version</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">JSONResponse</span><span class="p">(</span>
-                    <span class="n">status_code</span><span class="o">=</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
-                    <span class="n">content</span><span class="o">=</span><span class="p">{</span>
-                        <span class="s2">&quot;detail&quot;</span><span class="p">:</span> <span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Python Tiled client is version is reported as </span><span class="si">{</span><span class="n">raw_version</span><span class="si">}</span><span class="s2">. &quot;</span>
-                            <span class="s2">&quot;This cannot be parsed as a valid version.&quot;</span>
-                        <span class="p">),</span>
-                    <span class="p">},</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">caught_exception</span><span class="p">:</span>
+                <span class="n">invalid_version_message</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Python Tiled client version is reported as </span><span class="si">{</span><span class="n">raw_version</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="s2">&quot;This cannot be parsed as a valid version.&quot;</span>
                 <span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">invalid_version_message</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">caught_exception</span><span class="p">,</span> <span class="n">packaging</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">InvalidVersion</span><span class="p">):</span>
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">invalid_version_message</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">parsed_version</span> <span class="o">&lt;</span> <span class="n">MINIMUM_SUPPORTED_PYTHON_CLIENT_VERSION</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">parsed_version</span><span class="o">.</span><span class="n">is_devrelease</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+                    <span class="n">parsed_version</span> <span class="o">&lt;</span> <span class="n">MINIMUM_SUPPORTED_PYTHON_CLIENT_VERSION</span>
+                <span class="p">):</span>
                     <span class="k">return</span> <span class="n">JSONResponse</span><span class="p">(</span>
                         <span class="n">status_code</span><span class="o">=</span><span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
                         <span class="n">content</span><span class="o">=</span><span class="p">{</span>
