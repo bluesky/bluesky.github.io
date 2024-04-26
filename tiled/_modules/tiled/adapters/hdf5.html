@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.hdf5 &mdash; tiled 0.1.0a121.dev6+g3d83726 documentation</title>
+  <title>tiled.adapters.hdf5 &mdash; tiled 0.1.0a121.dev7+g143dd22 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,9 +16,9 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js?v=b2819c22"></script>
-        <script src="../../../_static/doctools.js?v=888ff710"></script>
-        <script src="../../../_static/sphinx_highlight.js?v=4825356b"></script>
+        <script src="../../../_static/documentation_options.js?v=c59721b5"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
         <script src="../../../_static/copybutton.js?v=f281be69"></script>
         <script src="https://unpkg.com/mermaid@10.2.0/dist/mermaid.min.js"></script>
@@ -40,7 +40,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a121.dev6+g3d83726
+                0.1.0a121.dev7+g143dd22
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -134,56 +134,57 @@
   <h1>Source code for tiled.adapters.hdf5</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">collections.abc</span>
 <span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">h5py</span>
 <span class="kn">import</span> <span class="nn">numpy</span>
+<span class="kn">from</span> <span class="nn">numpy._typing</span> <span class="kn">import</span> <span class="n">NDArray</span>
 
 <span class="kn">from</span> <span class="nn">..adapters.utils</span> <span class="kn">import</span> <span class="n">IndexersMixin</span>
 <span class="kn">from</span> <span class="nn">..iterviews</span> <span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
-<span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">StructureFamily</span>
+<span class="kn">from</span> <span class="nn">..structures.array</span> <span class="kn">import</span> <span class="n">ArrayStructure</span>
+<span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
+<span class="kn">from</span> <span class="nn">..structures.table</span> <span class="kn">import</span> <span class="n">TableStructure</span>
 <span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">node_repr</span><span class="p">,</span> <span class="n">path_from_uri</span>
 <span class="kn">from</span> <span class="nn">.array</span> <span class="kn">import</span> <span class="n">ArrayAdapter</span>
+<span class="kn">from</span> <span class="nn">.protocols</span> <span class="kn">import</span> <span class="n">AccessPolicy</span>
 <span class="kn">from</span> <span class="nn">.resource_cache</span> <span class="kn">import</span> <span class="n">with_resource_cache</span>
+<span class="kn">from</span> <span class="nn">.type_alliases</span> <span class="kn">import</span> <span class="n">JSON</span>
 
 <span class="n">SWMR_DEFAULT</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_HDF5_SWMR_DEFAULT&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)))</span>
 <span class="n">INLINED_DEPTH</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_HDF5_INLINED_CONTENTS_MAX_DEPTH&quot;</span><span class="p">,</span> <span class="s2">&quot;7&quot;</span><span class="p">))</span>
 
 
-<span class="k">def</span> <span class="nf">hdf5_lookup</span><span class="p">(</span>
-    <span class="n">data_uri</span><span class="p">,</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">swmr</span><span class="o">=</span><span class="n">SWMR_DEFAULT</span><span class="p">,</span>
-    <span class="n">libver</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">,</span>
-    <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-<span class="p">):</span>
-    <span class="n">path</span> <span class="o">=</span> <span class="n">path</span> <span class="ow">or</span> <span class="p">[]</span>
-    <span class="n">adapter</span> <span class="o">=</span> <span class="n">HDF5Adapter</span><span class="o">.</span><span class="n">from_uri</span><span class="p">(</span>
-        <span class="n">data_uri</span><span class="p">,</span>
-        <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span>
-        <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
-        <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
-        <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
-        <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
-        <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">path</span><span class="p">:</span>
-        <span class="n">adapter</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">adapter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span>
-    <span class="c1"># TODO What to do with metadata, specs?</span>
-    <span class="k">return</span> <span class="n">adapter</span>
+<span class="k">def</span> <span class="nf">from_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ArrayAdapter</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dataset :</span>
 
-<span class="k">def</span> <span class="nf">from_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">):</span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="s2">&quot;attrs&quot;</span><span class="p">,</span> <span class="p">{}))</span>
 
 
-<div class="viewcode-block" id="HDF5Adapter"><a class="viewcode-back" href="../../../reference/generated/tiled.adapters.hdf5.HDF5Adapter.html#tiled.adapters.hdf5.HDF5Adapter">[docs]</a><span class="k">class</span> <span class="nc">HDF5Adapter</span><span class="p">(</span><span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Mapping</span><span class="p">,</span> <span class="n">IndexersMixin</span><span class="p">):</span>
+<span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">9</span><span class="p">):</span>
+    <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Mapping</span>
+
+    <span class="n">MappingType</span> <span class="o">=</span> <span class="n">Mapping</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">collections</span>
+
+    <span class="n">MappingType</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">abc</span><span class="o">.</span><span class="n">Mapping</span>
+
+
+<div class="viewcode-block" id="HDF5Adapter">
+<a class="viewcode-back" href="../../../reference/generated/tiled.adapters.hdf5.HDF5Adapter.html#tiled.adapters.hdf5.HDF5Adapter">[docs]</a>
+<span class="k">class</span> <span class="nc">HDF5Adapter</span><span class="p">(</span><span class="n">MappingType</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="s2">&quot;HDF5Adapter&quot;</span><span class="p">,</span> <span class="n">ArrayAdapter</span><span class="p">]],</span> <span class="n">IndexersMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Read an HDF5 file or a group within one.</span>
 
@@ -213,41 +214,92 @@
 
     <span class="n">structure_family</span> <span class="o">=</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span>
 
-<div class="viewcode-block" id="HDF5Adapter.__init__"><a class="viewcode-back" href="../../../reference/generated/tiled.adapters.hdf5.HDF5Adapter.html#tiled.adapters.hdf5.HDF5Adapter.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span>
-    <span class="p">):</span>
+<div class="viewcode-block" id="HDF5Adapter.__init__">
+<a class="viewcode-back" href="../../../reference/generated/tiled.adapters.hdf5.HDF5Adapter.html#tiled.adapters.hdf5.HDF5Adapter.__init__">[docs]</a>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">node</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ArrayStructure</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">JSON</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">specs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Spec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">access_policy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AccessPolicy</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        node :</span>
+<span class="sd">        structure :</span>
+<span class="sd">        metadata :</span>
+<span class="sd">        specs :</span>
+<span class="sd">        access_policy :</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_node</span> <span class="o">=</span> <span class="n">node</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_access_policy</span> <span class="o">=</span> <span class="n">access_policy</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">specs</span> <span class="o">=</span> <span class="n">specs</span> <span class="ow">or</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_provided_metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span></div>
 
+
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_file</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
-        <span class="n">file</span><span class="p">,</span>
+        <span class="n">file</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">swmr</span><span class="o">=</span><span class="n">SWMR_DEFAULT</span><span class="p">,</span>
-        <span class="n">libver</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">,</span>
-        <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">TableStructure</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">JSON</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
+        <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;latest&quot;</span><span class="p">,</span>
+        <span class="n">specs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Spec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">access_policy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AccessPolicy</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;HDF5Adapter&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        file :</span>
+<span class="sd">        structure :</span>
+<span class="sd">        metadata :</span>
+<span class="sd">        swmr :</span>
+<span class="sd">        libver :</span>
+<span class="sd">        specs :</span>
+<span class="sd">        access_policy :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span> <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_uri</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
-        <span class="n">data_uri</span><span class="p">,</span>
+        <span class="n">data_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">structure</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">swmr</span><span class="o">=</span><span class="n">SWMR_DEFAULT</span><span class="p">,</span>
-        <span class="n">libver</span><span class="o">=</span><span class="s2">&quot;latest&quot;</span><span class="p">,</span>
-        <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">access_policy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ArrayStructure</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">JSON</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
+        <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;latest&quot;</span><span class="p">,</span>
+        <span class="n">specs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Spec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">access_policy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AccessPolicy</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;HDF5Adapter&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data_uri :</span>
+<span class="sd">        structure :</span>
+<span class="sd">        metadata :</span>
+<span class="sd">        swmr :</span>
+<span class="sd">        libver :</span>
+<span class="sd">        specs :</span>
+<span class="sd">        access_policy :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">filepath</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_uri</span><span class="p">)</span>
         <span class="n">cache_key</span> <span class="o">=</span> <span class="p">(</span><span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">,</span> <span class="n">filepath</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="p">)</span>
         <span class="n">file</span> <span class="o">=</span> <span class="n">with_resource_cache</span><span class="p">(</span>
@@ -255,17 +307,41 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">node_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">access_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">access_policy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AccessPolicy</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_access_policy</span>
 
-    <span class="k">def</span> <span class="nf">structure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">structure</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="o">.</span><span class="n">attrs</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
             <span class="c1"># Convert any bytes to str.</span>
@@ -274,10 +350,26 @@
         <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_provided_metadata</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">d</span>
 
-    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node</span>
 
-    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="s2">&quot;HDF5Adapter&quot;</span><span class="p">,</span> <span class="n">ArrayAdapter</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        key :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Group</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">HDF5Adapter</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
@@ -303,45 +395,170 @@
                 <span class="k">return</span> <span class="n">from_dataset</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([]))</span>
             <span class="k">return</span> <span class="n">from_dataset</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">KeysView</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">KeysView</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys_slice</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">values</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ValuesView</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">ValuesView</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_items_slice</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">items</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">items</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ItemsView</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">ItemsView</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_items_slice</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return a Tree with a subset of the mapping.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        query :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">                Return a Tree with a subset of the mapping.</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
-    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;HDF5Adapter&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fields :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span>
         <span class="k">return</span> <span class="bp">self</span>
 
     <span class="c1"># The following two methods are used by keys(), values(), items().</span>
 
-    <span class="k">def</span> <span class="nf">_keys_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">direction</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_keys_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stop</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">direction</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        start :</span>
+<span class="sd">        stop :</span>
+<span class="sd">        direction :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_node</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">direction</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">keys</span> <span class="o">=</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">keys</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">keys</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="nf">_items_slice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">direction</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_items_slice</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stop</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">direction</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        start :</span>
+<span class="sd">        stop :</span>
+<span class="sd">        direction :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">items</span> <span class="o">=</span> <span class="p">[(</span><span class="n">key</span><span class="p">,</span> <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="p">)]</span>
         <span class="k">if</span> <span class="n">direction</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">items</span> <span class="o">=</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">items</span><span class="p">)</span>
+            <span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">items</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">items</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="nf">inlined_contents_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">depth</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">inlined_contents_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        depth :</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">depth</span> <span class="o">&lt;=</span> <span class="n">INLINED_DEPTH</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">hdf5_lookup</span><span class="p">(</span>
+    <span class="n">data_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">structure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ArrayStructure</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">JSON</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
+    <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;latest&quot;</span><span class="p">,</span>
+    <span class="n">specs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Spec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">access_policy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AccessPolicy</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Path</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">HDF5Adapter</span><span class="p">,</span> <span class="n">ArrayAdapter</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data_uri :</span>
+<span class="sd">    structure :</span>
+<span class="sd">    metadata :</span>
+<span class="sd">    swmr :</span>
+<span class="sd">    libver :</span>
+<span class="sd">    specs :</span>
+<span class="sd">    access_policy :</span>
+<span class="sd">    path :</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">path</span> <span class="ow">or</span> <span class="p">[]</span>
+    <span class="n">adapter</span> <span class="o">=</span> <span class="n">HDF5Adapter</span><span class="o">.</span><span class="n">from_uri</span><span class="p">(</span>
+        <span class="n">data_uri</span><span class="p">,</span>
+        <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+        <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+        <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+        <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
+        <span class="n">access_policy</span><span class="o">=</span><span class="n">access_policy</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">path</span><span class="p">:</span>
+        <span class="n">adapter</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">if</span> <span class="n">adapter</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span>
+    <span class="c1"># TODO What to do with metadata, specs?</span>
+    <span class="k">return</span> <span class="n">adapter</span>
 </pre></div>
 
            </div>
