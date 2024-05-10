@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.sync &mdash; tiled 0.1.0a121.dev30+gaddcda6 documentation</title>
+  <title>tiled.client.sync &mdash; tiled 0.1.0a121.dev31+g307524d documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="../../../_static/documentation_options.js?v=2edc4ab4"></script>
+        <script src="../../../_static/documentation_options.js?v=0c49ad38"></script>
         <script src="../../../_static/doctools.js?v=9a2dae69"></script>
         <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -40,7 +40,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0a121.dev30+gaddcda6
+                0.1.0a121.dev31+g307524d
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -133,10 +133,14 @@
              
   <h1>Source code for tiled.client.sync</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+
+<span class="kn">import</span> <span class="nn">httpx</span>
 
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span> <span class="nn">..structures.data_source</span> <span class="kn">import</span> <span class="n">DataSource</span><span class="p">,</span> <span class="n">Management</span>
 <span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">BaseClient</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">ClientError</span>
 
 
 <div class="viewcode-block" id="copy">
@@ -144,6 +148,7 @@
 <span class="k">def</span> <span class="nf">copy</span><span class="p">(</span>
     <span class="n">source</span><span class="p">:</span> <span class="n">BaseClient</span><span class="p">,</span>
     <span class="n">dest</span><span class="p">:</span> <span class="n">BaseClient</span><span class="p">,</span>
+    <span class="n">on_conflict</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Copy data from one Tiled instance to another.</span>
@@ -152,6 +157,7 @@
 <span class="sd">    ----------</span>
 <span class="sd">    source : tiled node</span>
 <span class="sd">    dest : tiled node</span>
+<span class="sd">    on_conflict : str, default &#39;error&#39;, other options &#39;warn&#39;, &#39;skip&#39;</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -170,16 +176,21 @@
 <span class="sd">    &gt;&gt;&gt; copy(a.items().head(), b)</span>
 <span class="sd">    &gt;&gt;&gt; copy(a.search(...), b)</span>
 
+<span class="sd">    Copy and ignore duplicates.</span>
+
+<span class="sd">    &gt;&gt;&gt; copy(a, b, on_conflict = &#39;skip&#39;)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s2">&quot;structure_family&quot;</span><span class="p">):</span>
         <span class="c1"># looks like a client object</span>
-        <span class="n">_DISPATCH</span><span class="p">[</span><span class="n">source</span><span class="o">.</span><span class="n">structure_family</span><span class="p">](</span><span class="n">source</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">(),</span> <span class="n">dest</span><span class="p">)</span>
+        <span class="n">_DISPATCH</span><span class="p">[</span><span class="n">source</span><span class="o">.</span><span class="n">structure_family</span><span class="p">](</span>
+            <span class="n">source</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">(),</span> <span class="n">dest</span><span class="p">,</span> <span class="n">on_conflict</span>
+        <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">_DISPATCH</span><span class="p">[</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">](</span><span class="nb">dict</span><span class="p">(</span><span class="n">source</span><span class="p">),</span> <span class="n">dest</span><span class="p">)</span></div>
+        <span class="n">_DISPATCH</span><span class="p">[</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">](</span><span class="nb">dict</span><span class="p">(</span><span class="n">source</span><span class="p">),</span> <span class="n">dest</span><span class="p">,</span> <span class="n">on_conflict</span><span class="p">)</span></div>
 
 
 
-<span class="k">def</span> <span class="nf">_copy_array</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_copy_array</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">on_conflict</span><span class="p">):</span>
     <span class="n">num_blocks</span> <span class="o">=</span> <span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">n</span><span class="p">))</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
     <span class="c1"># Loop over each block index --- e.g. (0, 0), (0, 1), (0, 2) ....</span>
     <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="o">*</span><span class="n">num_blocks</span><span class="p">):</span>
@@ -187,7 +198,7 @@
         <span class="n">dest</span><span class="o">.</span><span class="n">write_block</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_copy_awkward</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_copy_awkward</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">on_conflict</span><span class="p">):</span>
     <span class="kn">import</span> <span class="nn">awkward</span>
 
     <span class="n">array</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
@@ -195,7 +206,7 @@
     <span class="n">dest</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_copy_sparse</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_copy_sparse</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">on_conflict</span><span class="p">):</span>
     <span class="n">num_blocks</span> <span class="o">=</span> <span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">n</span><span class="p">))</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
     <span class="c1"># Loop over each block index --- e.g. (0, 0), (0, 1), (0, 2) ....</span>
     <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="o">*</span><span class="n">num_blocks</span><span class="p">):</span>
@@ -203,13 +214,13 @@
         <span class="n">dest</span><span class="o">.</span><span class="n">write_block</span><span class="p">(</span><span class="n">array</span><span class="o">.</span><span class="n">coords</span><span class="p">,</span> <span class="n">array</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_copy_table</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_copy_table</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">on_conflict</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">partition</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">npartitions</span><span class="p">):</span>
         <span class="n">df</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">read_partition</span><span class="p">(</span><span class="n">partition</span><span class="p">)</span>
         <span class="n">dest</span><span class="o">.</span><span class="n">write_partition</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">partition</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_copy_container</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">_copy_container</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">dest</span><span class="p">,</span> <span class="n">on_conflict</span><span class="p">):</span>
     <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">child_node</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="n">original_data_sources</span> <span class="o">=</span> <span class="n">child_node</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">()</span><span class="o">.</span><span class="n">data_sources</span><span class="p">()</span>
         <span class="n">num_data_sources</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">original_data_sources</span><span class="p">)</span>
@@ -245,13 +256,23 @@
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">&quot;Multiple Data Sources in one Node is not supported.&quot;</span>
             <span class="p">)</span>
-        <span class="n">node</span> <span class="o">=</span> <span class="n">dest</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
-            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
-            <span class="n">structure_family</span><span class="o">=</span><span class="n">child_node</span><span class="o">.</span><span class="n">structure_family</span><span class="p">,</span>
-            <span class="n">data_sources</span><span class="o">=</span><span class="n">data_sources</span><span class="p">,</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">child_node</span><span class="o">.</span><span class="n">metadata</span><span class="p">),</span>
-            <span class="n">specs</span><span class="o">=</span><span class="n">child_node</span><span class="o">.</span><span class="n">specs</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">node</span> <span class="o">=</span> <span class="n">dest</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
+                <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+                <span class="n">structure_family</span><span class="o">=</span><span class="n">child_node</span><span class="o">.</span><span class="n">structure_family</span><span class="p">,</span>
+                <span class="n">data_sources</span><span class="o">=</span><span class="n">data_sources</span><span class="p">,</span>
+                <span class="n">metadata</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">child_node</span><span class="o">.</span><span class="n">metadata</span><span class="p">),</span>
+                <span class="n">specs</span><span class="o">=</span><span class="n">child_node</span><span class="o">.</span><span class="n">specs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">ClientError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">on_conflict</span> <span class="o">==</span> <span class="s2">&quot;skip&quot;</span> <span class="ow">or</span> <span class="n">on_conflict</span> <span class="o">==</span> <span class="s2">&quot;warn&quot;</span>
+            <span class="p">)</span> <span class="ow">and</span> <span class="n">err</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">CONFLICT</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">on_conflict</span> <span class="o">==</span> <span class="s2">&quot;warn&quot;</span><span class="p">:</span>
+                    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Skipped existing entry&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">err</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">original_data_sources</span>
             <span class="ow">and</span> <span class="p">(</span><span class="n">original_data_sources</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">management</span> <span class="o">!=</span> <span class="n">Management</span><span class="o">.</span><span class="n">external</span><span class="p">)</span>
@@ -259,7 +280,9 @@
             <span class="n">child_node</span><span class="o">.</span><span class="n">structure_family</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span>
             <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">original_data_sources</span><span class="p">)</span>
         <span class="p">):</span>
-            <span class="n">_DISPATCH</span><span class="p">[</span><span class="n">child_node</span><span class="o">.</span><span class="n">structure_family</span><span class="p">](</span><span class="n">child_node</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span>
+            <span class="n">_DISPATCH</span><span class="p">[</span><span class="n">child_node</span><span class="o">.</span><span class="n">structure_family</span><span class="p">](</span>
+                <span class="n">child_node</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">on_conflict</span><span class="o">=</span><span class="n">on_conflict</span>
+            <span class="p">)</span>
 
 
 <span class="n">_DISPATCH</span> <span class="o">=</span> <span class="p">{</span>
