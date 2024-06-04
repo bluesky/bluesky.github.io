@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.base &mdash; tiled 0.1.0b3.dev1+g3c19b6d documentation</title>
+  <title>tiled.client.base &mdash; tiled 0.1.0b3.dev2+g10677a4 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -16,7 +16,7 @@
   
         <script src="../../../_static/jquery.js?v=5d32c60e"></script>
         <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="../../../_static/documentation_options.js?v=a3a59296"></script>
+        <script src="../../../_static/documentation_options.js?v=8f2e2076"></script>
         <script src="../../../_static/doctools.js?v=9a2dae69"></script>
         <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
         <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -40,7 +40,7 @@
             tiled
           </a>
               <div class="version">
-                0.1.0b3.dev1+g3c19b6d
+                0.1.0b3.dev2+g10677a4
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -134,14 +134,19 @@
   <h1>Source code for tiled.client.base</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 
+<span class="kn">import</span> <span class="nn">json_merge_patch</span>
+<span class="kn">import</span> <span class="nn">jsonpatch</span>
+<span class="kn">import</span> <span class="nn">orjson</span>
 <span class="kn">from</span> <span class="nn">httpx</span> <span class="kn">import</span> <span class="n">URL</span>
 
 <span class="kn">from</span> <span class="nn">..structures.core</span> <span class="kn">import</span> <span class="n">STRUCTURE_TYPES</span><span class="p">,</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span> <span class="nn">..structures.data_source</span> <span class="kn">import</span> <span class="n">DataSource</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">safe_json_dump</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">patch_mimetypes</span><span class="p">,</span> <span class="n">safe_json_dump</span>
+<span class="kn">from</span> <span class="nn">.metadata_update</span> <span class="kn">import</span> <span class="n">apply_update_patch</span>
 <span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">handle_error</span>
 
 
@@ -342,6 +347,18 @@
         <span class="c1"># persistent.</span>
         <span class="k">return</span> <span class="n">DictView</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">])</span>
 
+<div class="viewcode-block" id="BaseClient.metadata_copy">
+<a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.metadata_copy.html#tiled.client.base.BaseClient.metadata_copy">[docs]</a>
+    <span class="k">def</span> <span class="nf">metadata_copy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate a mutable copy of metadata and specs for validating metadata</span>
+<span class="sd">        (useful with update_metadata())</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">])</span>
+        <span class="n">specs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Spec</span><span class="p">(</span><span class="o">**</span><span class="n">spec</span><span class="p">)</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;specs&quot;</span><span class="p">]]</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">metadata</span><span class="p">,</span> <span class="n">specs</span><span class="p">]</span>  <span class="c1"># returning as list of mutable items</span></div>
+
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">specs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;List of specifications describing the structure of the metadata and/or data.&quot;</span>
@@ -523,11 +540,14 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">formats</span><span class="p">)</span>
 
+<div class="viewcode-block" id="BaseClient.update_metadata">
+<a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.update_metadata.html#tiled.client.base.BaseClient.update_metadata">[docs]</a>
     <span class="k">def</span> <span class="nf">update_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        EXPERIMENTAL: Update metadata.</span>
+<span class="sd">        EXPERIMENTAL: Update metadata via a `dict.update`- like interface.</span>
 
-<span class="sd">        This is subject to change or removal without notice</span>
+<span class="sd">        `update_metadata` is a user-friendly wrapper for `patch_metadata`.</span>
+<span class="sd">        This is subject to change or removal without notice.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -537,6 +557,287 @@
 <span class="sd">        specs : List[str], optional</span>
 <span class="sd">            List of names that are used to label that the data and/or metadata</span>
 <span class="sd">            conform to some named standard specification.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        patch_metadata</span>
+<span class="sd">        replace_metadata</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        `update_metadata` constructs a JSON Patch (RFC6902) by comparing user updates</span>
+<span class="sd">        to existing metadata. It uses a slight variation of JSON Merge Patch (RFC7386)</span>
+<span class="sd">        as an intermediary to implement a python `dict.update`-like user-friendly</span>
+<span class="sd">        interface, but with additional features like key deletion (see examples) and</span>
+<span class="sd">        support for `None (null)` values.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        Add or update a key-value pair at the top or a nested level</span>
+
+<span class="sd">        &gt;&gt;&gt; node.update_metadata({&#39;key&#39;: new_value})</span>
+<span class="sd">        &gt;&gt;&gt; node.update_metadata({&#39;top_key&#39;: {&#39;nested_key&#39;: new_value}})</span>
+
+<span class="sd">        Remove an existing key</span>
+
+<span class="sd">        &gt;&gt;&gt; from tiled.client.metadata_update import DELETE_KEY</span>
+<span class="sd">        &gt;&gt;&gt; node.update_metadata({&#39;key_to_be_deleted&#39;: DELETE_KEY})</span>
+
+<span class="sd">        Interactively update complex metadata using a copy of original structure</span>
+<span class="sd">        (e.g., in iPython you may use tab completion to navigate nested metadata)</span>
+
+<span class="sd">        &gt;&gt;&gt; md = node.metadata_copy()[0]</span>
+<span class="sd">        &gt;&gt;&gt; md[&#39;L1_key&#39;][&#39;L2_key&#39;][&#39;L3_key&#39;] = new_value  # use tab completion</span>
+<span class="sd">        &gt;&gt;&gt; md[&#39;unwanted_key&#39;] = DELETE_KEY</span>
+<span class="sd">        &gt;&gt;&gt; node.update_metadata(metadata=md)  # Update the copy on the server</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">specs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Likely [metadata, specs] form from node.metadata_copy()</span>
+                <span class="n">metadata</span><span class="p">,</span> <span class="n">specs</span> <span class="o">=</span> <span class="n">metadata</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Duplicate specs provided after [metadata, specs]&quot;</span><span class="p">)</span>
+
+        <span class="n">metadata_patch</span><span class="p">,</span> <span class="n">specs_patch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_metadata_patches</span><span class="p">(</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="n">specs</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">patch_metadata</span><span class="p">(</span><span class="n">metadata_patch</span><span class="o">=</span><span class="n">metadata_patch</span><span class="p">,</span> <span class="n">specs_patch</span><span class="o">=</span><span class="n">specs_patch</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseClient.build_metadata_patches">
+<a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.build_metadata_patches.html#tiled.client.base.BaseClient.build_metadata_patches">[docs]</a>
+    <span class="k">def</span> <span class="nf">build_metadata_patches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Build valid JSON Patches (RFC6902) for metadata and metadata validation</span>
+<span class="sd">        specs accepted by `patch_metadata`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        metadata : dict, optional</span>
+<span class="sd">            User metadata. May be nested. Must contain only basic types</span>
+<span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
+
+<span class="sd">        specs : list[Spec], optional</span>
+<span class="sd">            Metadata validation specifications.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        metadata_patch : list[dict]</span>
+<span class="sd">            A JSON serializable object representing a valid JSON patch (RFC6902)</span>
+<span class="sd">            for metadata.</span>
+<span class="sd">        specs_patch : list[dict]</span>
+<span class="sd">            A JSON serializable object representing a valid JSON patch (RFC6902)</span>
+<span class="sd">            for metadata validation specifications.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        patch_metadata</span>
+<span class="sd">        update_metadata</span>
+
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        `build_metadata_patch` constructs a JSON Patch (RFC6902) by comparing user updates</span>
+<span class="sd">        to existing metadata/specs. It uses a slight variation of JSON Merge Patch (RFC7386)</span>
+<span class="sd">        as an intermediary to implement a python `dict.update`-like user-friendly</span>
+<span class="sd">        interface, but with additional features like key deletion (see examples) and</span>
+<span class="sd">        support for `None (null)` values.</span>
+
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+
+<span class="sd">        Build a patch for adding/updating a key-value pair at the top or a nested level</span>
+
+<span class="sd">        &gt;&gt;&gt; patches = node.build_metadata_patches({&#39;key&#39;: new_value})</span>
+<span class="sd">        &gt;&gt;&gt; patches = node.build_metadata_patches({&#39;top_key&#39;: {&#39;nested_key&#39;: new_value}})</span>
+
+<span class="sd">        Build patches for metadata and specs (&quot;mp&quot;, &quot;sp&quot;)</span>
+
+<span class="sd">        &gt;&gt;&gt; mp, sp = node.build_metadata_patches(metadata=metadata, specs=specs)</span>
+
+<span class="sd">        Build a patch for removing an existing key</span>
+
+<span class="sd">        &gt;&gt;&gt; from tiled.client.metadata_update import DELETE_KEY</span>
+<span class="sd">        &gt;&gt;&gt; node.build_metadata_patches({&#39;key_to_be_deleted&#39;: DELETE_KEY})</span>
+
+<span class="sd">        Interactively build a patch for complex metadata (e.g., in iPython you may use</span>
+<span class="sd">        tab completion to navigate nested metadata)</span>
+
+<span class="sd">        &gt;&gt;&gt; md = node.metadata_copy()[0]</span>
+<span class="sd">        &gt;&gt;&gt; md[&#39;L1_key&#39;][&#39;L2_key&#39;][&#39;L3_key&#39;] = new_value  # use tab completion</span>
+<span class="sd">        &gt;&gt;&gt; md[&#39;unwanted_key&#39;] = DELETE_KEY</span>
+<span class="sd">        &gt;&gt;&gt; node.build_metadata_patches(metadata=md)  # Generate the patch</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">metadata_patch</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">md_copy</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">])</span>
+            <span class="n">metadata_patch</span> <span class="o">=</span> <span class="n">jsonpatch</span><span class="o">.</span><span class="n">JsonPatch</span><span class="o">.</span><span class="n">from_diff</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">],</span>
+                <span class="n">apply_update_patch</span><span class="p">(</span><span class="n">md_copy</span><span class="p">,</span> <span class="n">metadata</span><span class="p">),</span>
+                <span class="n">dumps</span><span class="o">=</span><span class="n">orjson</span><span class="o">.</span><span class="n">dumps</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">patch</span>
+
+        <span class="k">if</span> <span class="n">specs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">specs_patch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">sp_copy</span> <span class="o">=</span> <span class="p">[</span><span class="n">spec</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;specs&quot;</span><span class="p">]]</span>
+            <span class="n">specs_patch</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">[]</span>
+                <span class="k">if</span> <span class="n">specs</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">jsonpatch</span><span class="o">.</span><span class="n">JsonPatch</span><span class="o">.</span><span class="n">from_diff</span><span class="p">(</span>
+                    <span class="n">sp_copy</span><span class="p">,</span> <span class="n">specs</span><span class="p">,</span> <span class="n">dumps</span><span class="o">=</span><span class="n">orjson</span><span class="o">.</span><span class="n">dumps</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">patch</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">metadata_patch</span><span class="p">,</span> <span class="n">specs_patch</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_build_json_patch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">update_patch</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Lower level method to construct a JSON patch from an origin and update_patch.</span>
+<span class="sd">        An &quot;update_patch&quot; is a `dict.update`-like specification that may include</span>
+<span class="sd">        `DELETE_KEY` for marking a dictionary key for deletion.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">update_patch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="n">patch</span> <span class="o">=</span> <span class="n">jsonpatch</span><span class="o">.</span><span class="n">JsonPatch</span><span class="o">.</span><span class="n">from_diff</span><span class="p">(</span>
+            <span class="n">origin</span><span class="p">,</span> <span class="n">apply_update_patch</span><span class="p">(</span><span class="n">origin</span><span class="p">,</span> <span class="n">update_patch</span><span class="p">),</span> <span class="n">dumps</span><span class="o">=</span><span class="n">orjson</span><span class="o">.</span><span class="n">dumps</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">patch</span><span class="o">.</span><span class="n">patch</span>
+
+    <span class="k">def</span> <span class="nf">_build_metadata_revisions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata_revisions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">link</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/metadata&quot;</span><span class="p">,</span> <span class="s2">&quot;/revisions&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_metadata_revisions</span> <span class="o">=</span> <span class="n">MetadataRevisions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="n">link</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata_revisions</span>
+
+<div class="viewcode-block" id="BaseClient.patch_metadata">
+<a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.patch_metadata.html#tiled.client.base.BaseClient.patch_metadata">[docs]</a>
+    <span class="k">def</span> <span class="nf">patch_metadata</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">metadata_patch</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">specs_patch</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">content_type</span><span class="o">=</span><span class="n">patch_mimetypes</span><span class="o">.</span><span class="n">JSON_PATCH</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        EXPERIMENTAL: Patch metadata using a JSON Patch (RFC6902).</span>
+
+<span class="sd">        This is subject to change or removal without notice.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        metadata_patch : List[dict], optional</span>
+<span class="sd">            JSON-serializable patch to be applied to metadata</span>
+<span class="sd">        specs_patch : List[dict], optional</span>
+<span class="sd">            JSON-serializable patch to be applied to metadata validation</span>
+<span class="sd">            specifications list</span>
+<span class="sd">        content_type : str</span>
+<span class="sd">            Mimetype of the patches. Acceptable values are:</span>
+
+<span class="sd">            * &quot;application/json-patch+json&quot;</span>
+<span class="sd">              (See https://datatracker.ietf.org/doc/html/rfc6902)</span>
+<span class="sd">            * &quot;application/merge-patch+json&quot;</span>
+<span class="sd">              (See https://datatracker.ietf.org/doc/html/rfc7386)</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        update_metadata</span>
+<span class="sd">        replace_metadata</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">def</span> <span class="nf">patcher</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">patch</span><span class="p">,</span> <span class="n">patch_type</span><span class="p">):</span>
+            <span class="c1"># this helper function applies a given type of patch to the document</span>
+            <span class="c1"># and returns the modified document</span>
+            <span class="k">if</span> <span class="n">patch_type</span> <span class="o">==</span> <span class="n">patch_mimetypes</span><span class="o">.</span><span class="n">JSON_PATCH</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">jsonpatch</span><span class="o">.</span><span class="n">apply_patch</span><span class="p">(</span>
+                    <span class="n">doc</span><span class="o">=</span><span class="n">doc</span><span class="p">,</span>
+                    <span class="n">patch</span><span class="o">=</span><span class="n">patch</span><span class="p">,</span>
+                    <span class="n">in_place</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">patch_type</span> <span class="o">==</span> <span class="n">patch_mimetypes</span><span class="o">.</span><span class="n">MERGE_PATCH</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">json_merge_patch</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">patch</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported patch type </span><span class="si">{</span><span class="n">content_type</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Acceptable values are: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">patch_mimetypes</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">assert</span> <span class="n">content_type</span> <span class="ow">in</span> <span class="n">patch_mimetypes</span>
+        <span class="k">if</span> <span class="n">specs_patch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">normalized_specs_patch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">normalized_specs_patch</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">if</span> <span class="n">content_type</span> <span class="o">==</span> <span class="n">patch_mimetypes</span><span class="o">.</span><span class="n">JSON_PATCH</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">specs_patch</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">spec_patch</span> <span class="ow">in</span> <span class="n">copy</span><span class="p">(</span><span class="n">specs_patch</span><span class="p">):</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">spec_patch</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                        <span class="n">spec_patch</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">asdict</span><span class="p">(</span><span class="n">Spec</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+                    <span class="n">normalized_specs_patch</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spec_patch</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">content_type</span> <span class="o">==</span> <span class="n">patch_mimetypes</span><span class="o">.</span><span class="n">MERGE_PATCH</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">specs_patch</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs_patch</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                        <span class="n">spec</span> <span class="o">=</span> <span class="n">Spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+                    <span class="n">normalized_specs_patch</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">spec</span><span class="p">))</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;content-type&quot;</span><span class="p">:</span> <span class="n">content_type</span><span class="p">,</span>
+            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata_patch</span><span class="p">,</span>
+            <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalized_specs_patch</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">],</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">metadata_patch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
+                <span class="c1"># Metadata was accepted and modified by the specs validator on the server side.</span>
+                <span class="c1"># It is updated locally using the new version.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Metadata was accepted as it is by the server.</span>
+                <span class="c1"># It is updated locally with the version submitted by the client.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">patcher</span><span class="p">(</span>
+                    <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">),</span> <span class="n">metadata_patch</span><span class="p">,</span> <span class="n">content_type</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">specs_patch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">current_specs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;specs&quot;</span><span class="p">]</span>
+            <span class="n">patched_specs</span> <span class="o">=</span> <span class="n">patcher</span><span class="p">(</span><span class="n">current_specs</span><span class="p">,</span> <span class="n">normalized_specs_patch</span><span class="p">,</span> <span class="n">content_type</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;specs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">patched_specs</span></div>
+
+
+<div class="viewcode-block" id="BaseClient.replace_metadata">
+<a class="viewcode-back" href="../../../reference/generated/tiled.client.base.BaseClient.replace_metadata.html#tiled.client.base.BaseClient.replace_metadata">[docs]</a>
+    <span class="k">def</span> <span class="nf">replace_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        EXPERIMENTAL: Replace metadata entirely (see update_metadata).</span>
+
+<span class="sd">        This is subject to change or removal without notice.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        metadata : dict, optional</span>
+<span class="sd">            User metadata. May be nested. Must contain only basic types</span>
+<span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
+<span class="sd">        specs : List[str], optional</span>
+<span class="sd">            List of names that are used to label that the data and/or metadata</span>
+<span class="sd">            conform to some named standard specification.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        --------</span>
+<span class="sd">        update_metadata</span>
+<span class="sd">        patch_metadata</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
@@ -571,7 +872,8 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata</span>
 
         <span class="k">if</span> <span class="n">specs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;specs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">normalized_specs</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;specs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">normalized_specs</span></div>
+
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">metadata_revisions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
