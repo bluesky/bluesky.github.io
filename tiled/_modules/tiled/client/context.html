@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0b12.dev4+g79bb4dd9 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0b12.dev5+gd0e8ac16 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=334cf514"></script>
+      <script src="../../../_static/documentation_options.js?v=98a61c48"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -142,6 +142,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">httpx</span>
 <span class="kn">import</span> <span class="nn">platformdirs</span>
@@ -158,17 +159,22 @@ window.addEventListener("load", () => mermaid.run());
 <span class="n">PROMPT_FOR_REAUTHENTICATION</span> <span class="o">=</span> <span class="kc">None</span>
 
 
-<span class="k">def</span> <span class="nf">prompt_for_username</span><span class="p">(</span><span class="n">username</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">prompt_for_credentials</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Utility function that displays a username prompt.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">username</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">password</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># If both are provided, return them as-is, without prompting.</span>
+        <span class="c1"># This is particularly useful for GUI clients without a TTY Console.</span>
+        <span class="k">return</span> <span class="n">username</span><span class="p">,</span> <span class="n">password</span>
+    <span class="k">elif</span> <span class="n">username</span><span class="p">:</span>
         <span class="n">username_reprompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Username [</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">]: &quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">username_reprompt</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">username</span> <span class="o">=</span> <span class="n">username_reprompt</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">username</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s2">&quot;Username: &quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">username</span>
+    <span class="n">password</span> <span class="o">=</span> <span class="n">getpass</span><span class="o">.</span><span class="n">getpass</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">username</span><span class="p">,</span> <span class="n">password</span>
 
 
 <div class="viewcode-block" id="Context">
@@ -629,8 +635,10 @@ window.addEventListener("load", () => mermaid.run());
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">username</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
         <span class="n">provider</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
-        <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
+        <span class="n">prompt_for_reauthentication</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]]</span> <span class="o">=</span> <span class="n">UNSET</span><span class="p">,</span>
         <span class="n">set_default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">password</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        See login. This is for programmatic use.</span>
@@ -681,14 +689,12 @@ window.addEventListener("load", () => mermaid.run());
             <span class="k">except</span> <span class="n">CannotRefreshAuthentication</span><span class="p">:</span>
                 <span class="c1"># Continue below, where we will prompt for log in.</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">prompt_for_reauthentication</span><span class="p">:</span>
-                    <span class="k">raise</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># We have a live session for the specified provider and username already.</span>
                 <span class="c1"># No need to log in again.</span>
                 <span class="k">return</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">prompt_for_reauthentication</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">prompt_for_reauthentication</span> <span class="ow">and</span> <span class="n">password</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">CannotPrompt</span><span class="p">(</span>
 <span class="w">                </span><span class="sd">&quot;&quot;&quot;Authentication is needed but Tiled has detected that it is running</span>
 <span class="sd">in a &#39;headless&#39; context where it cannot prompt the user to provide</span>
@@ -697,14 +703,18 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">- If Tiled has detected this wrongly, pass prompt_for_reauthentication=True</span>
 <span class="sd">  to force it to prompt.</span>
 <span class="sd">- Provide an API key in the environment variable TILED_API_KEY for Tiled to use.</span>
+<span class="sd">- Pass prompt_for_reauthentication=Callable, to generate the reauthentication via your application hook.</span>
 <span class="sd">&quot;&quot;&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">mode</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;mode&quot;</span><span class="p">]</span>
         <span class="n">auth_endpoint</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;auth_endpoint&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;password&quot;</span><span class="p">:</span>
-            <span class="n">username</span> <span class="o">=</span> <span class="n">prompt_for_username</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
-            <span class="n">password</span> <span class="o">=</span> <span class="n">getpass</span><span class="o">.</span><span class="n">getpass</span><span class="p">()</span>
+            <span class="n">username</span><span class="p">,</span> <span class="n">password</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">prompt_for_reauthentication</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prompt_for_reauthentication</span><span class="p">,</span> <span class="n">Callable</span><span class="p">)</span>
+                <span class="k">else</span> <span class="n">prompt_for_credentials</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">)</span>
+            <span class="p">)</span>
             <span class="n">form_data</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;password&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span>
