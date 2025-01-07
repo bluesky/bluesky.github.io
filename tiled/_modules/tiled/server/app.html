@@ -5,8 +5,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0b13.dev9+ge19d276a documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=fa44fd50" />
+  <title>tiled.server.app &mdash; tiled 0.1.0b13.dev13+gde8a23e0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
       <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=e4d5182c"></script>
+      <script src="../../../_static/documentation_options.js?v=89411a03"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -133,33 +133,33 @@ window.addEventListener("load", () => mermaid.run());
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.server.app</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
-<span class="kn">import</span> <span class="nn">collections</span>
-<span class="kn">import</span> <span class="nn">contextvars</span>
-<span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">secrets</span>
-<span class="kn">import</span> <span class="nn">sys</span>
-<span class="kn">import</span> <span class="nn">urllib.parse</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">asynccontextmanager</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
-<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextvars</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.parse</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">asynccontextmanager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span>
 
-<span class="kn">import</span> <span class="nn">anyio</span>
-<span class="kn">import</span> <span class="nn">packaging.version</span>
-<span class="kn">import</span> <span class="nn">yaml</span>
-<span class="kn">from</span> <span class="nn">asgi_correlation_id</span> <span class="kn">import</span> <span class="n">CorrelationIdMiddleware</span><span class="p">,</span> <span class="n">correlation_id</span>
-<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span><span class="p">,</span> <span class="n">Security</span>
-<span class="kn">from</span> <span class="nn">fastapi.exception_handlers</span> <span class="kn">import</span> <span class="n">http_exception_handler</span>
-<span class="kn">from</span> <span class="nn">fastapi.middleware.cors</span> <span class="kn">import</span> <span class="n">CORSMiddleware</span>
-<span class="kn">from</span> <span class="nn">fastapi.openapi.utils</span> <span class="kn">import</span> <span class="n">get_openapi</span>
-<span class="kn">from</span> <span class="nn">fastapi.responses</span> <span class="kn">import</span> <span class="n">HTMLResponse</span><span class="p">,</span> <span class="n">JSONResponse</span>
-<span class="kn">from</span> <span class="nn">fastapi.staticfiles</span> <span class="kn">import</span> <span class="n">StaticFiles</span>
-<span class="kn">from</span> <span class="nn">fastapi.templating</span> <span class="kn">import</span> <span class="n">Jinja2Templates</span>
-<span class="kn">from</span> <span class="nn">starlette.responses</span> <span class="kn">import</span> <span class="n">FileResponse</span>
-<span class="kn">from</span> <span class="nn">starlette.status</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">anyio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">packaging.version</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">asgi_correlation_id</span><span class="w"> </span><span class="kn">import</span> <span class="n">CorrelationIdMiddleware</span><span class="p">,</span> <span class="n">correlation_id</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Request</span><span class="p">,</span> <span class="n">Response</span><span class="p">,</span> <span class="n">Security</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.exception_handlers</span><span class="w"> </span><span class="kn">import</span> <span class="n">http_exception_handler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.middleware.cors</span><span class="w"> </span><span class="kn">import</span> <span class="n">CORSMiddleware</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.openapi.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_openapi</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.responses</span><span class="w"> </span><span class="kn">import</span> <span class="n">HTMLResponse</span><span class="p">,</span> <span class="n">JSONResponse</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.staticfiles</span><span class="w"> </span><span class="kn">import</span> <span class="n">StaticFiles</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.templating</span><span class="w"> </span><span class="kn">import</span> <span class="n">Jinja2Templates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">starlette.responses</span><span class="w"> </span><span class="kn">import</span> <span class="n">FileResponse</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">starlette.status</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">HTTP_200_OK</span><span class="p">,</span>
     <span class="n">HTTP_400_BAD_REQUEST</span><span class="p">,</span>
     <span class="n">HTTP_401_UNAUTHORIZED</span><span class="p">,</span>
@@ -169,25 +169,25 @@ window.addEventListener("load", () => mermaid.run());
     <span class="n">HTTP_500_INTERNAL_SERVER_ERROR</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">..authenticators</span> <span class="kn">import</span> <span class="n">Mode</span>
-<span class="kn">from</span> <span class="nn">..config</span> <span class="kn">import</span> <span class="n">construct_build_app_kwargs</span>
-<span class="kn">from</span> <span class="nn">..media_type_registration</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..authenticators</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_build_app_kwargs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..media_type_registration</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="n">Conflicts</span><span class="p">,</span> <span class="n">SpecialUsers</span><span class="p">,</span> <span class="n">UnsupportedQueryType</span>
-<span class="kn">from</span> <span class="nn">..validation_registration</span> <span class="kn">import</span> <span class="n">validation_registry</span> <span class="k">as</span> <span class="n">default_validation_registry</span>
-<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">schemas</span>
-<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">get_current_principal</span>
-<span class="kn">from</span> <span class="nn">.compression</span> <span class="kn">import</span> <span class="n">CompressionMiddleware</span>
-<span class="kn">from</span> <span class="nn">.dependencies</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="n">Conflicts</span><span class="p">,</span> <span class="n">SpecialUsers</span><span class="p">,</span> <span class="n">UnsupportedQueryType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..validation_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">validation_registry</span> <span class="k">as</span> <span class="n">default_validation_registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">schemas</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.authentication</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_current_principal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.compression</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompressionMiddleware</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dependencies</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">get_query_registry</span><span class="p">,</span>
     <span class="n">get_root_tree</span><span class="p">,</span>
     <span class="n">get_serialization_registry</span><span class="p">,</span>
     <span class="n">get_validation_registry</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">.router</span> <span class="kn">import</span> <span class="n">distinct</span><span class="p">,</span> <span class="n">patch_route_signature</span><span class="p">,</span> <span class="n">router</span><span class="p">,</span> <span class="n">search</span>
-<span class="kn">from</span> <span class="nn">.settings</span> <span class="kn">import</span> <span class="n">get_settings</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="p">(</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.router</span><span class="w"> </span><span class="kn">import</span> <span class="n">distinct</span><span class="p">,</span> <span class="n">patch_route_signature</span><span class="p">,</span> <span class="n">router</span><span class="p">,</span> <span class="n">search</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
     <span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span>
     <span class="n">get_authenticators</span><span class="p">,</span>
@@ -216,7 +216,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="n">current_principal</span> <span class="o">=</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">(</span><span class="s2">&quot;current_principal&quot;</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">custom_openapi</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">custom_openapi</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    The app&#39;s openapi method will be monkey-patched with this.</span>
 
@@ -224,7 +224,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <span class="sd">    https://fastapi.tiangolo.com/advanced/extending-openapi/</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">__version__</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">__version__</span>
 
     <span class="k">if</span> <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span>
@@ -245,7 +245,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <div class="viewcode-block" id="build_app">
 <a class="viewcode-back" href="../../../reference/generated/tiled.server.app.build_app.html#tiled.server.app.build_app">[docs]</a>
-<span class="k">def</span> <span class="nf">build_app</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_app</span><span class="p">(</span>
     <span class="n">tree</span><span class="p">,</span>
     <span class="n">authentication</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">server_settings</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -345,7 +345,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="c1"># If we reach here, the no configuration problems were found.</span>
 
     <span class="nd">@asynccontextmanager</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">lifespan</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">lifespan</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">):</span>
         <span class="s2">&quot;Manage lifespan events for each event loop that the app runs in&quot;</span>
         <span class="k">await</span> <span class="n">startup_event</span><span class="p">()</span>
         <span class="k">yield</span>
@@ -356,18 +356,18 @@ window.addEventListener("load", () => mermaid.run());
     <span class="c1"># Healthcheck for deployment to containerized systems, needs to preempt other responses.</span>
     <span class="c1"># Standardized for Kubernetes, but also used by other systems.</span>
     <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/healthz&quot;</span><span class="p">,</span> <span class="n">status_code</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">healthz</span><span class="p">():</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">healthz</span><span class="p">():</span>
         <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;ready&quot;</span><span class="p">}</span>
 
     <span class="k">if</span> <span class="n">SHARE_TILED_PATH</span><span class="p">:</span>
         <span class="c1"># If the distribution includes static assets, serve UI routes.</span>
 
         <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/ui/{path:path}&quot;</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">def</span> <span class="nf">ui</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">ui</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
             <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lookup_file</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">response</span>
 
-        <span class="k">async</span> <span class="k">def</span> <span class="nf">lookup_file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">lookup_file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="p">:</span>
                 <span class="n">path</span> <span class="o">=</span> <span class="s2">&quot;index.html&quot;</span>
             <span class="n">full_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">&quot;ui&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
@@ -400,7 +400,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">templates</span> <span class="o">=</span> <span class="n">Jinja2Templates</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">))</span>
 
         <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">response_class</span><span class="o">=</span><span class="n">HTMLResponse</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">def</span> <span class="nf">index</span><span class="p">(</span>
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span>
             <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
             <span class="c1"># This dependency is here because it runs the code that moves</span>
             <span class="c1"># API key from the query parameter to a cookie (if it is valid).</span>
@@ -434,16 +434,16 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="n">ui_settings</span><span class="p">[</span><span class="s2">&quot;api_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">root_path</span><span class="si">}{</span><span class="n">ui_settings</span><span class="p">[</span><span class="s1">&#39;api_url&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
 
             <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/tiled-ui-settings&quot;</span><span class="p">)</span>
-            <span class="k">async</span> <span class="k">def</span> <span class="nf">tiled_ui_settings</span><span class="p">():</span>
+            <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">tiled_ui_settings</span><span class="p">():</span>
                 <span class="k">return</span> <span class="n">ui_settings</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">exception_handler</span><span class="p">(</span><span class="n">Conflicts</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">conflicts_exception_handler</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="n">Conflicts</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">conflicts_exception_handler</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="n">Conflicts</span><span class="p">):</span>
         <span class="n">message</span> <span class="o">=</span> <span class="n">exc</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">JSONResponse</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="n">HTTP_409_CONFLICT</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;detail&quot;</span><span class="p">:</span> <span class="n">message</span><span class="p">})</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">exception_handler</span><span class="p">(</span><span class="n">UnsupportedQueryType</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">unsupported_query_type_exception_handler</span><span class="p">(</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">unsupported_query_type_exception_handler</span><span class="p">(</span>
         <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="n">UnsupportedQueryType</span>
     <span class="p">):</span>
         <span class="n">query_type</span> <span class="o">=</span> <span class="n">exc</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -469,7 +469,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="p">)</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">exception_handler</span><span class="p">(</span><span class="ne">Exception</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">unhandled_exception_handler</span><span class="p">(</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">unhandled_exception_handler</span><span class="p">(</span>
         <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span> <span class="ne">Exception</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSONResponse</span><span class="p">:</span>
         <span class="c1"># The current_principal_logging_filter middleware will not have</span>
@@ -497,7 +497,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">if</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;providers&quot;</span><span class="p">,</span> <span class="p">[]):</span>
         <span class="c1"># Delay this imports to avoid delaying startup with the SQL and cryptography</span>
         <span class="c1"># imports if they are not needed.</span>
-        <span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.authentication</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
             <span class="n">base_authentication_router</span><span class="p">,</span>
             <span class="n">build_auth_code_route</span><span class="p">,</span>
             <span class="n">build_device_code_authorize_route</span><span class="p">,</span>
@@ -576,15 +576,15 @@ window.addEventListener("load", () => mermaid.run());
     <span class="p">)(</span><span class="n">patch_route_signature</span><span class="p">(</span><span class="n">distinct</span><span class="p">,</span> <span class="n">query_registry</span><span class="p">))</span>
 
     <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">override_get_authenticators</span><span class="p">():</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">override_get_authenticators</span><span class="p">():</span>
         <span class="k">return</span> <span class="n">authenticators</span>
 
     <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">override_get_root_tree</span><span class="p">():</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">override_get_root_tree</span><span class="p">():</span>
         <span class="k">return</span> <span class="n">tree</span>
 
     <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">override_get_settings</span><span class="p">():</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">override_get_settings</span><span class="p">():</span>
         <span class="n">settings</span> <span class="o">=</span> <span class="n">get_settings</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="p">[</span>
             <span class="s2">&quot;allow_anonymous_access&quot;</span><span class="p">,</span>
@@ -624,8 +624,8 @@ window.addEventListener("load", () => mermaid.run());
             <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">or</span> <span class="s2">&quot;sqlite+aiosqlite://&quot;</span>
         <span class="k">return</span> <span class="n">settings</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">startup_event</span><span class="p">():</span>
-        <span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">__version__</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">startup_event</span><span class="p">():</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">__version__</span>
 
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Tiled version </span><span class="si">{</span><span class="n">__version__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="c1"># Validate the single-user API key.</span>
@@ -682,16 +682,16 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">root_tree</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_root_tree</span><span class="p">]()</span>
 
         <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">AsyncSession</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">sqlalchemy.ext.asyncio</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncSession</span>
 
-            <span class="kn">from</span> <span class="nn">..alembic_utils</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">..alembic_utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
                 <span class="n">DatabaseUpgradeNeeded</span><span class="p">,</span>
                 <span class="n">UninitializedDatabase</span><span class="p">,</span>
                 <span class="n">check_database</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="kn">from</span> <span class="nn">..authn_database</span> <span class="kn">import</span> <span class="n">orm</span>
-            <span class="kn">from</span> <span class="nn">..authn_database.connection_pool</span> <span class="kn">import</span> <span class="n">open_database_connection_pool</span>
-            <span class="kn">from</span> <span class="nn">..authn_database.core</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">..authn_database</span><span class="w"> </span><span class="kn">import</span> <span class="n">orm</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">..authn_database.connection_pool</span><span class="w"> </span><span class="kn">import</span> <span class="n">open_database_connection_pool</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">..authn_database.core</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
                 <span class="n">ALL_REVISIONS</span><span class="p">,</span>
                 <span class="n">REQUIRED_REVISION</span><span class="p">,</span>
                 <span class="n">initialize_database</span><span class="p">,</span>
@@ -717,7 +717,7 @@ window.addEventListener("load", () => mermaid.run());
                         <span class="c1"># The alembic stamping can only be does synchronously.</span>
                         <span class="c1"># The cleanest option available is to start a subprocess</span>
                         <span class="c1"># because SQLite is allergic to threads.</span>
-                        <span class="kn">import</span> <span class="nn">subprocess</span>
+                        <span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
 
                         <span class="c1"># TODO Check if catalog exists.</span>
                         <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
@@ -759,7 +759,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
                         <span class="n">file</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
                     <span class="p">)</span>
-                    <span class="k">raise</span> <span class="n">err</span> <span class="kn">from</span> <span class="kc">None</span>
+                    <span class="k">raise</span> <span class="n">err</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Connected to existing database at </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">admin</span> <span class="ow">in</span> <span class="n">authentication</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tiled_admins&quot;</span><span class="p">,</span> <span class="p">[]):</span>
@@ -775,7 +775,7 @@ window.addEventListener("load", () => mermaid.run());
                         <span class="nb">id</span><span class="o">=</span><span class="n">admin</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
                     <span class="p">)</span>
 
-            <span class="k">async</span> <span class="k">def</span> <span class="nf">purge_expired_sessions_and_api_keys</span><span class="p">():</span>
+            <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">purge_expired_sessions_and_api_keys</span><span class="p">():</span>
                 <span class="n">PURGE_INTERVAL</span> <span class="o">=</span> <span class="mi">600</span>  <span class="c1"># seconds</span>
                 <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
                     <span class="k">async</span> <span class="k">with</span> <span class="n">AsyncSession</span><span class="p">(</span>
@@ -801,14 +801,14 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">purge_expired_sessions_and_api_keys</span><span class="p">())</span>
             <span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">shutdown_event</span><span class="p">():</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shutdown_event</span><span class="p">():</span>
         <span class="c1"># Run shutdown tasks collected from trees (adapters).</span>
         <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;shutdown&quot;</span><span class="p">,</span> <span class="p">[]):</span>
             <span class="k">await</span> <span class="n">task</span><span class="p">()</span>
 
         <span class="n">settings</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span>
         <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">..authn_database.connection_pool</span> <span class="kn">import</span> <span class="n">close_database_connection_pool</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">..authn_database.connection_pool</span><span class="w"> </span><span class="kn">import</span> <span class="n">close_database_connection_pool</span>
 
             <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tasks</span><span class="p">:</span>
                 <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
@@ -821,7 +821,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="p">)</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">double_submit_cookie_csrf_protection</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">double_submit_cookie_csrf_protection</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
         <span class="n">csrf_cookie</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">CSRF_COOKIE_NAME</span><span class="p">)</span>
         <span class="k">if</span> <span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">SAFE_METHODS</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="p">)</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span>
@@ -860,7 +860,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">return</span> <span class="n">response</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">client_compatibility_check</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">client_compatibility_check</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
         <span class="n">user_agent</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;user-agent&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">user_agent</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;python-tiled/&quot;</span><span class="p">):</span>
             <span class="n">agent</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">raw_version</span> <span class="o">=</span> <span class="n">user_agent</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
@@ -892,7 +892,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">return</span> <span class="n">response</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">set_cookies</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">set_cookies</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
         <span class="s2">&quot;This enables dependencies to inject cookies that they want to be set.&quot;</span>
         <span class="c1"># Create some Request state, to be (possibly) populated by dependencies.</span>
         <span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">cookies_to_set</span> <span class="o">=</span> <span class="p">[]</span>
@@ -910,14 +910,14 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">if</span> <span class="n">query_registry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">def</span> <span class="nf">override_get_query_registry</span><span class="p">():</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">override_get_query_registry</span><span class="p">():</span>
             <span class="k">return</span> <span class="n">query_registry</span>
 
         <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_query_registry</span><span class="p">]</span> <span class="o">=</span> <span class="n">override_get_query_registry</span>
     <span class="k">if</span> <span class="n">serialization_registry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">def</span> <span class="nf">override_get_serialization_registry</span><span class="p">():</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">override_get_serialization_registry</span><span class="p">():</span>
             <span class="k">return</span> <span class="n">serialization_registry</span>
 
         <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span>
@@ -927,7 +927,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">if</span> <span class="n">validation_registry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="nd">@lru_cache</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">def</span> <span class="nf">override_get_validation_registry</span><span class="p">():</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">override_get_validation_registry</span><span class="p">():</span>
             <span class="k">return</span> <span class="n">validation_registry</span>
 
         <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span>
@@ -935,7 +935,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="p">]</span> <span class="o">=</span> <span class="n">override_get_validation_registry</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">capture_metrics</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">capture_metrics</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Place metrics in Server-Timing header, in accordance with HTTP spec.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -988,12 +988,12 @@ window.addEventListener("load", () => mermaid.run());
                     <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">prometheus_multiproc_dir</span><span class="si">}</span><span class="s2">) is not writable&quot;</span>
                 <span class="p">)</span>
 
-        <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">metrics</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">metrics</span>
 
         <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">metrics</span><span class="o">.</span><span class="n">router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api/v1&quot;</span><span class="p">)</span>
 
         <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">def</span> <span class="nf">capture_metrics_prometheus</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">capture_metrics_prometheus</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
@@ -1012,7 +1012,7 @@ window.addEventListener("load", () => mermaid.run());
             <span class="k">return</span> <span class="n">response</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">middleware</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">current_principal_logging_filter</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">current_principal_logging_filter</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">):</span>
         <span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">principal</span> <span class="o">=</span> <span class="n">SpecialUsers</span><span class="o">.</span><span class="n">public</span>
         <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="n">current_principal</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">principal</span><span class="p">)</span>
@@ -1030,14 +1030,14 @@ window.addEventListener("load", () => mermaid.run());
 
 <div class="viewcode-block" id="build_app_from_config">
 <a class="viewcode-back" href="../../../reference/generated/tiled.server.app.build_app_from_config.html#tiled.server.app.build_app_from_config">[docs]</a>
-<span class="k">def</span> <span class="nf">build_app_from_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">source_filepath</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scalable</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_app_from_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">source_filepath</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scalable</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="s2">&quot;Convenience function that calls build_app(...) given config as dict.&quot;</span>
     <span class="n">kwargs</span> <span class="o">=</span> <span class="n">construct_build_app_kwargs</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">source_filepath</span><span class="o">=</span><span class="n">source_filepath</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">build_app</span><span class="p">(</span><span class="n">scalable</span><span class="o">=</span><span class="n">scalable</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
 
-<span class="k">def</span> <span class="nf">app_factory</span><span class="p">():</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">app_factory</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Return an ASGI app instance.</span>
 
@@ -1050,7 +1050,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="n">config_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_CONFIG&quot;</span><span class="p">,</span> <span class="s2">&quot;config.yml&quot;</span><span class="p">)</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using configuration from </span><span class="si">{</span><span class="n">Path</span><span class="p">(</span><span class="n">config_path</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="kn">from</span> <span class="nn">..config</span> <span class="kn">import</span> <span class="n">construct_build_app_kwargs</span><span class="p">,</span> <span class="n">parse_configs</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_build_app_kwargs</span><span class="p">,</span> <span class="n">parse_configs</span>
 
     <span class="n">parsed_config</span> <span class="o">=</span> <span class="n">parse_configs</span><span class="p">(</span><span class="n">config_path</span><span class="p">)</span>
 
@@ -1064,7 +1064,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">return</span> <span class="n">web_app</span>
 
 
-<span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    This supports tiled.server.app.app by creating app on demand.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -1072,11 +1072,11 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">app_factory</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Failed to create app.&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Failed to create app.&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
     <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">print_admin_api_key_if_generated</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">print_admin_api_key_if_generated</span><span class="p">(</span>
     <span class="n">web_app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="p">):</span>
     <span class="s2">&quot;Print message to stderr with API key if server-generated (or force=True).&quot;</span>
@@ -1115,7 +1115,7 @@ window.addEventListener("load", () => mermaid.run());
         <span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">UnscalableConfig</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">UnscalableConfig</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
     <span class="k">pass</span>
 </pre></div>
 
