@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.constructors &mdash; tiled 0.1.0b13.dev13+gde8a23e0 documentation</title>
+  <title>tiled.client.constructors &mdash; tiled 0.1.0b13.dev15+g8e9608ae documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=89411a03"></script>
+      <script src="../../../_static/documentation_options.js?v=718bb12c"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -65,6 +65,7 @@ window.addEventListener("load", () => mermaid.run());
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How To Guides</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/authentication.html">Python Client Authentication</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/client-logger.html">Use Performance and Debug Logging</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/docker.html">Run Tiled Server in a Container</a></li>
@@ -135,6 +136,7 @@ window.addEventListener("load", () => mermaid.run());
   <h1>Source code for tiled.client.constructors</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">collections.abc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_qs</span><span class="p">,</span> <span class="n">urlparse</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
@@ -142,7 +144,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_object</span><span class="p">,</span> <span class="n">prepend_to_sys_path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.container</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_STRUCTURE_CLIENT_DISPATCH</span><span class="p">,</span> <span class="n">Container</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.context</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span> <span class="n">UNSET</span><span class="p">,</span> <span class="n">Context</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">ClientError</span><span class="p">,</span> <span class="n">client_for_item</span><span class="p">,</span> <span class="n">handle_error</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">client_for_item</span><span class="p">,</span> <span class="n">handle_error</span>
 
 
 <div class="viewcode-block" id="from_uri">
@@ -152,11 +154,12 @@ window.addEventListener("load", () => mermaid.run());
     <span class="n">structure_clients</span><span class="o">=</span><span class="s2">&quot;numpy&quot;</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">cache</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
-    <span class="n">username</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
-    <span class="n">auth_provider</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
+    <span class="n">remember_me</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">username</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">auth_provider</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">api_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
+    <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">headers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">include_data_sources</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
@@ -174,23 +177,19 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        DataFrames). For advanced use, provide dict mapping a</span>
 <span class="sd">        structure_family or a spec to a client object.</span>
 <span class="sd">    cache : Cache, optional</span>
+<span class="sd">    remember_me : bool</span>
+<span class="sd">        Next time, try to automatically authenticate using this session.</span>
 <span class="sd">    username : str, optional</span>
-<span class="sd">        Username for authenticated access. If UNSET, use default if available</span>
-<span class="sd">        (typically, the most recently used).</span>
+<span class="sd">        DEPRECATED. Ignored, and issues a warning if passed.</span>
 <span class="sd">    auth_provider : str, optional</span>
-<span class="sd">        Name of an authentication provider. IF UNSET, use default if available</span>
-<span class="sd">        (typically, the most recently used). If None and the server supports</span>
-<span class="sd">        multiple provides, the user will be interactively prompted to</span>
-<span class="sd">        choose from a list.</span>
+<span class="sd">        DEPRECATED. Ignored, and issues a warning if passed.</span>
 <span class="sd">    api_key : str, optional</span>
-<span class="sd">        API key based authentication. Cannot mix with username/auth_provider.</span>
+<span class="sd">        API key based authentication.</span>
 <span class="sd">    verify : bool, optional</span>
 <span class="sd">        Verify SSL certifications. True by default. False is insecure,</span>
 <span class="sd">        intended for development and testing only.</span>
 <span class="sd">    prompt_for_reauthentication : bool, optional</span>
-<span class="sd">        If True, prompt interactively for credentials if needed. If False,</span>
-<span class="sd">        raise an error. By default, attempt to detect whether terminal is</span>
-<span class="sd">        interactive (is a TTY).</span>
+<span class="sd">        DEPRECATED. Ignored, and issue a warning if passed.</span>
 <span class="sd">    headers : dict, optional</span>
 <span class="sd">        Extra HTTP headers.</span>
 <span class="sd">    timeout : httpx.Timeout, optional</span>
@@ -199,6 +198,24 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">    include_data_sources : bool, optional</span>
 <span class="sd">        Default False. If True, fetch information about underlying data sources.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">EXPLAIN_LOGIN</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+
+<span class="s2">The user will be prompted for credentials if login is required.</span>
+<span class="s2">Or, call login() to manually login.</span>
+
+<span class="s2">For non-interactive authentication, use an API key.</span>
+<span class="s2">&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Tiled no longer accepts &#39;username&#39; parameter. &quot;</span> <span class="o">+</span> <span class="n">EXPLAIN_LOGIN</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">auth_provider</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;Tiled no longer accepts &#39;auth_provider&#39; parameter. &quot;</span> <span class="o">+</span> <span class="n">EXPLAIN_LOGIN</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">auth_provider</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;Tiled no longer accepts &#39;prompt_for_reauthentication&#39; parameter. &quot;</span>
+            <span class="o">+</span> <span class="n">EXPLAIN_LOGIN</span>
+        <span class="p">)</span>
     <span class="n">context</span><span class="p">,</span> <span class="n">node_path_parts</span> <span class="o">=</span> <span class="n">Context</span><span class="o">.</span><span class="n">from_any_uri</span><span class="p">(</span>
         <span class="n">uri</span><span class="p">,</span>
         <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
@@ -210,11 +227,9 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">return</span> <span class="n">from_context</span><span class="p">(</span>
         <span class="n">context</span><span class="p">,</span>
         <span class="n">structure_clients</span><span class="o">=</span><span class="n">structure_clients</span><span class="p">,</span>
-        <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">prompt_for_reauthentication</span><span class="p">,</span>
-        <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span>
-        <span class="n">auth_provider</span><span class="o">=</span><span class="n">auth_provider</span><span class="p">,</span>
         <span class="n">node_path_parts</span><span class="o">=</span><span class="n">node_path_parts</span><span class="p">,</span>
         <span class="n">include_data_sources</span><span class="o">=</span><span class="n">include_data_sources</span><span class="p">,</span>
+        <span class="n">remember_me</span><span class="o">=</span><span class="n">remember_me</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 
@@ -222,11 +237,9 @@ window.addEventListener("load", () => mermaid.run());
 <span class="k">def</span><span class="w"> </span><span class="nf">from_context</span><span class="p">(</span>
     <span class="n">context</span><span class="p">,</span>
     <span class="n">structure_clients</span><span class="o">=</span><span class="s2">&quot;numpy&quot;</span><span class="p">,</span>
-    <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
-    <span class="n">username</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
-    <span class="n">auth_provider</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
     <span class="n">node_path_parts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">include_data_sources</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">remember_me</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Advanced: Connect to a Node using a custom instance of httpx.Client or httpx.AsyncClient.</span>
@@ -239,14 +252,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        in-memory structures (e.g. normal numpy arrays, pandas</span>
 <span class="sd">        DataFrames). For advanced use, provide dict mapping a</span>
 <span class="sd">        structure_family or a spec to a client object.</span>
-<span class="sd">    prompt_for_reauthentication : bool, optional</span>
-<span class="sd">        If True, prompt interactively for credentials if needed. If False,</span>
-<span class="sd">        raise an error. By default, attempt to detect whether terminal is</span>
-<span class="sd">        interactive (is a TTY).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">UNSET</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">auth_provider</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">UNSET</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Use api_key or username/auth_provider, not both.&quot;</span><span class="p">)</span>
     <span class="n">node_path_parts</span> <span class="o">=</span> <span class="n">node_path_parts</span> <span class="ow">or</span> <span class="p">[]</span>
     <span class="c1"># Do entrypoint discovery if it hasn&#39;t yet been done.</span>
     <span class="k">if</span> <span class="n">Container</span><span class="o">.</span><span class="n">STRUCTURE_CLIENTS_FROM_ENTRYPOINTS</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -254,56 +260,36 @@ window.addEventListener("load", () => mermaid.run());
     <span class="c1"># Interpret structure_clients=&quot;numpy&quot; and structure_clients=&quot;dask&quot; shortcuts.</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structure_clients</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">structure_clients</span> <span class="o">=</span> <span class="n">DEFAULT_STRUCTURE_CLIENT_DISPATCH</span><span class="p">[</span><span class="n">structure_clients</span><span class="p">]</span>
-    <span class="k">if</span> <span class="p">(</span>
-        <span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;required&quot;</span><span class="p">]</span>
-        <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">])</span>
-    <span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-<span class="w">            </span><span class="sd">&quot;&quot;&quot;This server requires API key authentication.</span>
-<span class="sd">Set an api_key as in:</span>
+    <span class="c1"># To construct a user-facing client object, we may be required to authenticate.</span>
+    <span class="c1"># 1. If any API key set, we are already authenticated and there is nothing to do.</span>
+    <span class="c1"># 2. If there are cached valid credentials for this server, use them.</span>
+    <span class="c1"># 3. If not, and the server requires authentication, prompt for authentication.</span>
+    <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">auth_is_required</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;required&quot;</span><span class="p">]</span>
+        <span class="n">has_providers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">][</span><span class="s2">&quot;providers&quot;</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">auth_is_required</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_providers</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;This server requires API key authentication.</span>
+<span class="sd">    Set an api_key as in:</span>
 
-<span class="sd">&gt;&gt;&gt; c = from_uri(&quot;...&quot;, api_key=&quot;...&quot;)</span>
-<span class="sd">&quot;&quot;&quot;</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">UNSET</span><span class="p">:</span>
-        <span class="n">context</span><span class="o">.</span><span class="n">authenticate</span><span class="p">(</span>
-            <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span>
-            <span class="n">provider</span><span class="o">=</span><span class="n">auth_provider</span><span class="p">,</span>
-            <span class="n">prompt_for_reauthentication</span><span class="o">=</span><span class="n">prompt_for_reauthentication</span><span class="p">,</span>
-        <span class="p">)</span>
+<span class="sd">    &gt;&gt;&gt; c = from_uri(&quot;...&quot;, api_key=&quot;...&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+            <span class="p">)</span>
+        <span class="n">found_valid_tokens</span> <span class="o">=</span> <span class="n">remember_me</span> <span class="ow">and</span> <span class="n">context</span><span class="o">.</span><span class="n">use_cached_tokens</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">found_valid_tokens</span><span class="p">)</span> <span class="ow">and</span> <span class="n">auth_is_required</span><span class="p">:</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">authenticate</span><span class="p">(</span><span class="n">remember_me</span><span class="o">=</span><span class="n">remember_me</span><span class="p">)</span>
     <span class="c1"># Context ensures that context.api_uri has a trailing slash.</span>
     <span class="n">item_uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">metadata/</span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">node_path_parts</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="n">item_uri</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                    <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">item_uri</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
-                    <span class="s2">&quot;include_data_sources&quot;</span><span class="p">:</span> <span class="n">include_data_sources</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-    <span class="k">except</span> <span class="n">ClientError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="p">(</span><span class="n">err</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">UNAUTHORIZED</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="p">):</span>
-            <span class="n">context</span><span class="o">.</span><span class="n">authenticate</span><span class="p">()</span>
-            <span class="n">params</span> <span class="o">=</span> <span class="p">(</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">item_uri</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),)</span>
-            <span class="k">if</span> <span class="n">include_data_sources</span><span class="p">:</span>
-                <span class="n">params</span><span class="p">[</span><span class="s2">&quot;include_data_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-                <span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                    <span class="n">item_uri</span><span class="p">,</span>
-                    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                    <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="n">item_uri</span><span class="p">,</span>
+            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+            <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">item_uri</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
+                <span class="s2">&quot;include_data_sources&quot;</span><span class="p">:</span> <span class="n">include_data_sources</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
     <span class="n">item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">client_for_item</span><span class="p">(</span>
         <span class="n">context</span><span class="p">,</span> <span class="n">structure_clients</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">include_data_sources</span><span class="o">=</span><span class="n">include_data_sources</span>
