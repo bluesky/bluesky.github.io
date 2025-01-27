@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.server.app &mdash; tiled 0.1.0b17.dev5+g5a487304 documentation</title>
+  <title>tiled.server.app &mdash; tiled 0.1.0b17.dev6+g444515c7 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=3729078c"></script>
+      <script src="../../../_static/documentation_options.js?v=ed25cf0f"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -171,7 +171,8 @@ window.addEventListener("load", () => mermaid.run());
     <span class="n">HTTP_500_INTERNAL_SERVER_ERROR</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..authenticators</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.server.protocols</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExternalAuthenticator</span><span class="p">,</span> <span class="n">InternalAuthenticator</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_build_app_kwargs</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..media_type_registration</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">compression_registry</span> <span class="k">as</span> <span class="n">default_compression_registry</span><span class="p">,</span>
@@ -523,12 +524,11 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">authentication</span><span class="p">[</span><span class="s2">&quot;providers&quot;</span><span class="p">]:</span>
             <span class="n">provider</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span>
             <span class="n">authenticator</span> <span class="o">=</span> <span class="n">spec</span><span class="p">[</span><span class="s2">&quot;authenticator&quot;</span><span class="p">]</span>
-            <span class="n">mode</span> <span class="o">=</span> <span class="n">authenticator</span><span class="o">.</span><span class="n">mode</span>
-            <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">InternalAuthenticator</span><span class="p">):</span>
                 <span class="n">authentication_router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/token&quot;</span><span class="p">)(</span>
                     <span class="n">build_handle_credentials_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
                 <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">ExternalAuthenticator</span><span class="p">):</span>
                 <span class="c1"># Client starts here to create a PendingSession.</span>
                 <span class="n">authentication_router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">/authorize&quot;</span><span class="p">)(</span>
                     <span class="n">build_device_code_authorize_route</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="n">provider</span><span class="p">)</span>
@@ -553,7 +553,7 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="c1">#     build_auth_code_route(authenticator, provider)</span>
                 <span class="c1"># )</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown authentication mode </span><span class="si">{</span><span class="n">mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unknown authenticator type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">authenticator</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">custom_router</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">authenticator</span><span class="p">,</span> <span class="s2">&quot;include_routers&quot;</span><span class="p">,</span> <span class="p">[]):</span>
                 <span class="n">authentication_router</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span>
                     <span class="n">custom_router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;/provider/</span><span class="si">{</span><span class="n">provider</span><span class="si">}</span><span class="s2">&quot;</span>
