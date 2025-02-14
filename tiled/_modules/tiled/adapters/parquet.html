@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.parquet &mdash; tiled 0.1.0b18.dev10+ga2d5b9e2 documentation</title>
+  <title>tiled.adapters.parquet &mdash; tiled 0.1.0b18.dev11+g819d1942 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=c498d432"></script>
+      <script src="../../../_static/documentation_options.js?v=2ab7cea6"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -135,16 +135,17 @@ window.addEventListener("load", () => mermaid.run());
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.adapters.parquet</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">quote_plus</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask.dataframe</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..catalog.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..server.schemas</span><span class="w"> </span><span class="kn">import</span> <span class="n">Asset</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSource</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">DataSource</span><span class="p">,</span> <span class="n">Storage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">TableStructure</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..type_aliases</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSON</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">path_from_uri</span>
@@ -190,7 +191,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_catalog</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
-        <span class="n">data_source</span><span class="p">:</span> <span class="n">DataSource</span><span class="p">,</span>
+        <span class="n">data_source</span><span class="p">:</span> <span class="n">DataSource</span><span class="p">[</span><span class="n">TableStructure</span><span class="p">],</span>
         <span class="n">node</span><span class="p">:</span> <span class="n">Node</span><span class="p">,</span>
         <span class="o">/</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
@@ -212,7 +213,12 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">return</span> <span class="n">DataFrameAdapter</span><span class="p">(</span><span class="n">partitions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">init_storage</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">structure</span><span class="p">:</span> <span class="n">TableStructure</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Asset</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">init_storage</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span><span class="p">,</span>
+        <span class="n">data_source</span><span class="p">:</span> <span class="n">DataSource</span><span class="p">[</span><span class="n">TableStructure</span><span class="p">],</span>
+        <span class="n">path_parts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataSource</span><span class="p">[</span><span class="n">TableStructure</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 
 <span class="sd">        Parameters</span>
@@ -224,6 +230,10 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        -------</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data_source</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span>  <span class="c1"># Do not mutate caller input.</span>
+        <span class="n">data_uri</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;filesystem&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;/</span><span class="si">{</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">path_parts</span>
+        <span class="p">)</span>
         <span class="n">directory</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_uri</span><span class="p">)</span>
         <span class="n">directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">assets</span> <span class="o">=</span> <span class="p">[</span>
@@ -233,9 +243,10 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="n">parameter</span><span class="o">=</span><span class="s2">&quot;data_uris&quot;</span><span class="p">,</span>
                 <span class="n">num</span><span class="o">=</span><span class="n">i</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">structure</span><span class="o">.</span><span class="n">npartitions</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">data_source</span><span class="o">.</span><span class="n">structure</span><span class="o">.</span><span class="n">npartitions</span><span class="p">)</span>
         <span class="p">]</span>
-        <span class="k">return</span> <span class="n">assets</span>
+        <span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">assets</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data_source</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">write_partition</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">],</span> <span class="n">partition</span><span class="p">:</span> <span class="nb">int</span>
