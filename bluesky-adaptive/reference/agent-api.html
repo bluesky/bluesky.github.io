@@ -459,9 +459,9 @@ A well designed agent would be reusable across different experiments, and some e
 These can be effectively combined with beamline/experiment specific base classes through multiple inheritence to satisfy all the abstract methods of an <code class="docutils literal notranslate"><span class="pre">Agent</span></code>.</p>
 <p>An agent can be broken down into these three methods:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">tell</span></code>: in which we tell the agent about some new data</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">ask</span></code>: in which we ask the agent what data to acquire next</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">report</span></code>: in which we have the agent report about its current thinking</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ingest</span></code>: in which the agent ingests some new data</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">suggest</span></code>: in which the agent suggests what data to acquire next</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">report</span></code>: in which the agent reports about its current thinking</p></li>
 </ul>
 <p>These three methods are the core of the agent API, that works for both the lock-step reccomendation engines, and the asynchronous agents that can be run as services.
 Critically, each of the three methods will return documents that are stored as unique streams in the event model. This enables us to look back at what an agent saw and was thinking as an experimental campaign progressed. As such, it is important that the shape of each field in these docs remain consistent throughout the experiment.
@@ -481,12 +481,12 @@ If the agent has registered methdos that will change the shape fo the document s
 This can be accomplished automatically using <code class="docutils literal notranslate"><span class="pre">self.close_and_restart()</span></code> after the modification.
 Detailed use of this can be found in the <a class="reference internal" href="example-agents.html"><span class="std std-doc">sklearn example agents</span></a>, as a common need for decomposition and clustering agents is to change the number of components or clusters as more data is gathered.</p>
 </section>
-<section id="tell">
-<h2>Tell<a class="headerlink" href="#tell" title="Link to this heading">#</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">tell</span></code> method converts the (x,y) pair into pytorch tensors and manages any GPU/CPU needs. It returns a document that holds the independent and dependent pair, as well as the current cache length.
-This operation occurs every time the triggering document is received, therefore it should be fast.
-This enables an agent to be loaded in Tiled, and the data it’s been made aware of to be sliced, e.g., <code class="docutils literal notranslate"><span class="pre">node[agent_uid].tell.data['observable'][-10:]</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">tell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<section id="ingest">
+<h2>Ingest<a class="headerlink" href="#ingest" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">ingest</span></code> method converts the (x,y) pair into pytorch tensors and manages any GPU/CPU needs. It returns a document that holds the independent and dependent pair, as well as the current cache length.
+This operation occurs every time the triggering document is received, therefore it should be implemented for speed.
+This enables an agent to be loaded in Tiled, and the data it’s been made aware of to be sliced, e.g., <code class="docutils literal notranslate"><span class="pre">node[agent_uid].ingest.data['observable'][-10:]</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">ingest</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inputs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">inputs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">atleast_2d</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">targets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
@@ -500,14 +500,14 @@ This enables an agent to be loaded in Tiled, and the data it’s been made aware
 </pre></div>
 </div>
 </section>
-<section id="ask">
-<h2>Ask<a class="headerlink" href="#ask" title="Link to this heading">#</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">ask</span></code> method returns a list of documents and corresponding list of points to query/acquire.
+<section id="suggest">
+<h2>Suggest<a class="headerlink" href="#suggest" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">suggest</span></code> method returns a list of documents and corresponding list of points to query/acquire.
 In the BoTorch case, the agent fits a GP and optimizes and acquisition function get suggested points.
 The returned documents retain one suggestion per document, along with its acquisition value, and the full state dictionary of the model for retrospective inspection.
-It also highlights the most recent uid the agent was told about, and amount of data the agent knows about. In this way, it is possible to reconstruct the full dataset that informed this decision WITHOUT placing the full dataset in the document (through the use of the tell stream and queries).
+It also highlights the most recent uid the agent ingested, and amount of data the agent knows about. In this way, it is possible to reconstruct the full dataset that informed this decision WITHOUT placing the full dataset in the document (through the use of the tell stream and queries).
 Because the event model is more compatible with numpy arrays, we also take the step of converting the data here from (possibly GPU based) tensors into numpy arrays.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">ask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">suggest</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Fit GP, optimize acquisition function, and return next points.</span>
 <span class="sd">    Document retains candidate, acquisition values, and state dictionary.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -544,7 +544,7 @@ Because the event model is more compatible with numpy arrays, we also take the s
 </section>
 <section id="report">
 <h2>Report<a class="headerlink" href="#report" title="Link to this heading">#</a></h2>
-<p>The <code class="docutils literal notranslate"><span class="pre">report</span></code> for this agent is nearly identical to the <code class="docutils literal notranslate"><span class="pre">ask</span></code> method, except it does not suggest points, and only returns one document.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">report</span></code> for <em>this</em> agent is nearly identical to the <code class="docutils literal notranslate"><span class="pre">suggest</span></code> method, except it does not suggest points, and only returns one document. Other agents may have more complex reports, such as a decomposition of a dataset, or a summary of the agent’s internal confidence.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit GP, and construct acquisition function.</span>
 <span class="sd">        Document retains state dictionary.</span>
@@ -648,8 +648,8 @@ Ideally this should use a plan already in the scope of regular beamline operatio
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-note-on-documents">A Note on Documents</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tell">Tell</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ask">Ask</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ingest">Ingest</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#suggest">Suggest</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#report">Report</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#beamline-and-experiment-specific-methods">Beamline and experiment specific methods</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#lock-step-agents">Lock-step Agents</a></li>
@@ -719,7 +719,7 @@ Ideally this should use a plan already in the scope of regular beamline operatio
         <div class="footer-item">
 
   <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
     <br/>
   </p>
 </div>

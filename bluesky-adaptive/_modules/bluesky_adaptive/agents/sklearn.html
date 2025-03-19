@@ -428,9 +428,9 @@
 <span class="sd">Module of mixins for agents that range from the sensible to the useless.</span>
 <span class="sd">These mixins act to fufill the abstract methods of blusky_adaptive.agents.Agent that are relevant to</span>
 <span class="sd">the decision making, and not the experimental specifics.</span>
-<span class="sd">Some of these are passive, and will not implement an ask.</span>
-<span class="sd">    - tell</span>
-<span class="sd">    - ask</span>
+<span class="sd">Some of these are passive, and will not implement a suggest.</span>
+<span class="sd">    - ingest</span>
+<span class="sd">    - suggest</span>
 <span class="sd">    - report (optional)</span>
 <span class="sd">    - name (optional)</span>
 
@@ -462,7 +462,7 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">SklearnEstimatorAgentBase</span><span class="p">(</span><span class="n">Agent</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">estimator</span><span class="p">:</span> <span class="n">sklearn</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Basic functionality for sklearn estimators. Maintains independent and dependent caches.</span>
-<span class="sd">        Strictly passive agent with do ask mechanism: will raise NotImplementedError</span>
+<span class="sd">        Strictly passive agent with do suggest mechanism: will raise NotImplementedError</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -476,13 +476,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">observable_cache</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">estimator</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">tell</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ingest</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">independent_cache</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">observable_cache</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">independent_variable</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">observable</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">cache_len</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">independent_cache</span><span class="p">))</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">ask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">update_model_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">set_params</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span>
@@ -523,7 +520,7 @@
         <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
             <span class="n">components</span><span class="o">=</span><span class="n">components</span><span class="p">,</span>
             <span class="n">cache_len</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">independent_cache</span><span class="p">),</span>
-            <span class="n">latest_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tell_cache</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">latest_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">known_uid_cache</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
         <span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
@@ -553,7 +550,9 @@
         <span class="n">latest_uid</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">report</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;latest_data&quot;</span><span class="p">][</span><span class="n">idx</span><span class="p">]</span>
         <span class="n">independents</span><span class="p">,</span> <span class="n">observables</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">ind</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">uid</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
-            <span class="n">run</span><span class="o">.</span><span class="n">tell</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;independent_variable&quot;</span><span class="p">],</span> <span class="n">run</span><span class="o">.</span><span class="n">tell</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;observable&quot;</span><span class="p">],</span> <span class="n">run</span><span class="o">.</span><span class="n">tell</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;exp_uid&quot;</span><span class="p">]</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">ingest</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;independent_variable&quot;</span><span class="p">],</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">ingest</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;observable&quot;</span><span class="p">],</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">ingest</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;exp_uid&quot;</span><span class="p">],</span>
         <span class="p">):</span>
             <span class="n">independents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ind</span><span class="p">)</span>
             <span class="n">observables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
@@ -600,7 +599,7 @@
         <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
             <span class="n">cluster_centers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">cluster_centers_</span><span class="p">,</span>
             <span class="n">cache_len</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">independent_cache</span><span class="p">),</span>
-            <span class="n">latest_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tell_cache</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">latest_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">known_uid_cache</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
         <span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
@@ -630,7 +629,9 @@
         <span class="n">latest_uid</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">report</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;latest_data&quot;</span><span class="p">][</span><span class="n">idx</span><span class="p">]</span>
         <span class="n">independents</span><span class="p">,</span> <span class="n">observables</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">ind</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">uid</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
-            <span class="n">run</span><span class="o">.</span><span class="n">tell</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;independent_variable&quot;</span><span class="p">],</span> <span class="n">run</span><span class="o">.</span><span class="n">tell</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;observable&quot;</span><span class="p">],</span> <span class="n">run</span><span class="o">.</span><span class="n">tell</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;exp_uid&quot;</span><span class="p">]</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">ingest</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;independent_variable&quot;</span><span class="p">],</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">ingest</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;observable&quot;</span><span class="p">],</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">ingest</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;exp_uid&quot;</span><span class="p">],</span>
         <span class="p">):</span>
             <span class="n">independents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ind</span><span class="p">)</span>
             <span class="n">observables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
@@ -704,7 +705,7 @@
         <div class="footer-item">
 
   <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
     <br/>
   </p>
 </div>
