@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.array &mdash; tiled 0.1.0b21 documentation</title>
+  <title>tiled.client.array &mdash; tiled 0.1.0b22.dev12+gc51d1164 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=259aec3a"></script>
+      <script src="../../../_static/documentation_options.js?v=68d592f1"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -80,6 +80,7 @@ window.addEventListener("load", () => mermaid.run());
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/register.html">Register Content in Tiled</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/retries.html">Control Retries</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanations</span></p>
 <ul>
@@ -148,7 +149,7 @@ window.addEventListener("load", () => mermaid.run());
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRUCTURE_TYPES</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseClient</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_util</span><span class="p">,</span> <span class="n">handle_error</span><span class="p">,</span> <span class="n">params_from_slice</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_util</span><span class="p">,</span> <span class="n">handle_error</span><span class="p">,</span> <span class="n">params_from_slice</span><span class="p">,</span> <span class="n">retry_context</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_DaskArrayClient</span><span class="p">(</span><span class="n">BaseClient</span><span class="p">):</span>
@@ -232,17 +233,19 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">else</span><span class="p">:</span>
             <span class="n">expected_shape</span> <span class="o">=</span> <span class="s2">&quot;scalar&quot;</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;block&quot;</span><span class="p">]</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="n">url_path</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">media_type</span><span class="p">},</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                    <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
-                    <span class="s2">&quot;block&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">block</span><span class="p">)),</span>
-                    <span class="s2">&quot;expected_shape&quot;</span><span class="p">:</span> <span class="n">expected_shape</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="n">url_path</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">media_type</span><span class="p">},</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                            <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
+                            <span class="s2">&quot;block&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">block</span><span class="p">)),</span>
+                            <span class="s2">&quot;expected_shape&quot;</span><span class="p">:</span> <span class="n">expected_shape</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">numpy</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">read_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -304,13 +307,15 @@ window.addEventListener("load", () => mermaid.run());
         <span class="k">return</span> <span class="n">dask_array</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">array</span><span class="p">):</span>
-        <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">],</span>
-                <span class="n">content</span><span class="o">=</span><span class="n">array</span><span class="o">.</span><span class="n">tobytes</span><span class="p">(),</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">],</span>
+                        <span class="n">content</span><span class="o">=</span><span class="n">array</span><span class="o">.</span><span class="n">tobytes</span><span class="p">(),</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">write_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=...</span><span class="p">):</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;block&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">block</span><span class="p">)</span>
@@ -318,14 +323,16 @@ window.addEventListener("load", () => mermaid.run());
             <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
             <span class="o">**</span><span class="n">params_from_slice</span><span class="p">(</span><span class="nb">slice</span><span class="p">),</span>
         <span class="p">}</span>
-        <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
-                <span class="n">url_path</span><span class="p">,</span>
-                <span class="n">content</span><span class="o">=</span><span class="n">array</span><span class="o">.</span><span class="n">tobytes</span><span class="p">(),</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">},</span>
-                <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+                        <span class="n">url_path</span><span class="p">,</span>
+                        <span class="n">content</span><span class="o">=</span><span class="n">array</span><span class="o">.</span><span class="n">tobytes</span><span class="p">(),</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">},</span>
+                        <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">patch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">array</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">,</span> <span class="n">offset</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]],</span> <span class="n">extend</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -394,19 +401,21 @@ window.addEventListener("load", () => mermaid.run());
             <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">array_</span><span class="o">.</span><span class="n">shape</span><span class="p">)),</span>
             <span class="s2">&quot;extend&quot;</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">extend</span><span class="p">),</span>
         <span class="p">}</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
-            <span class="n">url_path</span><span class="p">,</span>
-            <span class="n">content</span><span class="o">=</span><span class="n">array_</span><span class="o">.</span><span class="n">tobytes</span><span class="p">(),</span>
-            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">},</span>
-            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">CONFLICT</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Slice </span><span class="si">{</span><span class="nb">slice</span><span class="si">}</span><span class="s2"> does not fit within current array shape. &quot;</span>
-                <span class="s2">&quot;Pass keyword argument extend=True to extend the array &quot;</span>
-                <span class="s2">&quot;dimensions to fit.&quot;</span>
-            <span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
+                    <span class="n">url_path</span><span class="p">,</span>
+                    <span class="n">content</span><span class="o">=</span><span class="n">array_</span><span class="o">.</span><span class="n">tobytes</span><span class="p">(),</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/octet-stream&quot;</span><span class="p">},</span>
+                    <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">CONFLICT</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Slice </span><span class="si">{</span><span class="nb">slice</span><span class="si">}</span><span class="s2"> does not fit within current array shape. &quot;</span>
+                        <span class="s2">&quot;Pass keyword argument extend=True to extend the array &quot;</span>
+                        <span class="s2">&quot;dimensions to fit.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">handle_error</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
         <span class="c1"># Update cached structure.</span>
         <span class="n">new_structure</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="n">structure_type</span> <span class="o">=</span> <span class="n">STRUCTURE_TYPES</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">structure_family</span><span class="p">]</span>

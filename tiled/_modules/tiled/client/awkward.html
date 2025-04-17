@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.awkward &mdash; tiled 0.1.0b21 documentation</title>
+  <title>tiled.client.awkward &mdash; tiled 0.1.0b22.dev12+gc51d1164 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=259aec3a"></script>
+      <script src="../../../_static/documentation_options.js?v=68d592f1"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -80,6 +80,7 @@ window.addEventListener("load", () => mermaid.run());
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/register.html">Register Content in Tiled</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/retries.html">Control Retries</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanations</span></p>
 <ul>
@@ -141,7 +142,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">from</span><span class="w"> </span><span class="nn">..serialization.awkward</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_zipped_buffers</span><span class="p">,</span> <span class="n">to_zipped_buffers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.awkward</span><span class="w"> </span><span class="kn">import</span> <span class="n">project_form</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseClient</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_util</span><span class="p">,</span> <span class="n">handle_error</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">export_util</span><span class="p">,</span> <span class="n">handle_error</span><span class="p">,</span> <span class="n">retry_context</span>
 
 
 <div class="viewcode-block" id="AwkwardClient">
@@ -180,13 +181,15 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">container</span><span class="p">):</span>
         <span class="n">structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span>
         <span class="n">components</span> <span class="o">=</span> <span class="p">(</span><span class="n">structure</span><span class="o">.</span><span class="n">form</span><span class="p">,</span> <span class="n">structure</span><span class="o">.</span><span class="n">length</span><span class="p">,</span> <span class="n">container</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">],</span>
-                <span class="n">content</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">to_zipped_buffers</span><span class="p">(</span><span class="n">components</span><span class="p">,</span> <span class="p">{})),</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/zip&quot;</span><span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span></div>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;full&quot;</span><span class="p">],</span>
+                        <span class="n">content</span><span class="o">=</span><span class="nb">bytes</span><span class="p">(</span><span class="n">to_zipped_buffers</span><span class="p">(</span><span class="n">components</span><span class="p">,</span> <span class="p">{})),</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/zip&quot;</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="AwkwardClient.read">
@@ -201,13 +204,15 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">projected_form</span> <span class="o">=</span> <span class="n">project_form</span><span class="p">(</span><span class="n">form</span><span class="p">,</span> <span class="n">form_keys_touched</span><span class="p">)</span>
         <span class="c1"># The order is not important, but sort so that the request is deterministic.</span>
         <span class="n">form_keys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">form_keys_touched</span><span class="p">)</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;buffers&quot;</span><span class="p">],</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/zip&quot;</span><span class="p">},</span>
-                <span class="n">json</span><span class="o">=</span><span class="n">form_keys</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;buffers&quot;</span><span class="p">],</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/zip&quot;</span><span class="p">},</span>
+                        <span class="n">json</span><span class="o">=</span><span class="n">form_keys</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
         <span class="n">container</span> <span class="o">=</span> <span class="n">from_zipped_buffers</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">projected_form</span><span class="p">,</span> <span class="n">structure</span><span class="o">.</span><span class="n">length</span><span class="p">)</span>
         <span class="n">projected_array</span> <span class="o">=</span> <span class="n">awkward</span><span class="o">.</span><span class="n">from_buffers</span><span class="p">(</span>
             <span class="n">projected_form</span><span class="p">,</span> <span class="n">structure</span><span class="o">.</span><span class="n">length</span><span class="p">,</span> <span class="n">container</span><span class="p">,</span> <span class="n">allow_noncanonical_form</span><span class="o">=</span><span class="kc">True</span>

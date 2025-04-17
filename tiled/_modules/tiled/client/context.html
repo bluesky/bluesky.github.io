@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.1.0b21 documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.1.0b22.dev12+gc51d1164 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=259aec3a"></script>
+      <script src="../../../_static/documentation_options.js?v=68d592f1"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -80,6 +80,7 @@ window.addEventListener("load", () => mermaid.run());
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/register.html">Register Content in Tiled</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/retries.html">Control Retries</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanations</span></p>
 <ul>
@@ -158,7 +159,12 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">from</span><span class="w"> </span><span class="nn">.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">CannotRefreshAuthentication</span><span class="p">,</span> <span class="n">TiledAuth</span><span class="p">,</span> <span class="n">build_refresh_request</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.decoders</span><span class="w"> </span><span class="kn">import</span> <span class="n">SUPPORTED_DECODERS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.transport</span><span class="w"> </span><span class="kn">import</span> <span class="n">Transport</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">handle_error</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span>
+    <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
+    <span class="n">handle_error</span><span class="p">,</span>
+    <span class="n">retry_context</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="n">USER_AGENT</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;python-tiled/</span><span class="si">{</span><span class="n">tiled_version</span><span class="si">}</span><span class="s2">&quot;</span>
 <span class="n">API_KEY_AUTH_HEADER_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^Apikey (\w+)$&quot;</span><span class="p">)</span>
@@ -398,15 +404,17 @@ window.addEventListener("load", () => mermaid.run());
         <span class="c1"># (2) Let the server set the CSRF cookie.</span>
         <span class="c1"># No authentication has been set up yet, so these requests will be unauthenticated.</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-        <span class="n">server_info</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
-                    <span class="s2">&quot;Cache-Control&quot;</span><span class="p">:</span> <span class="s2">&quot;no-cache, no-store&quot;</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">server_info</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
+                            <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
+                            <span class="s2">&quot;Cache-Control&quot;</span><span class="p">:</span> <span class="s2">&quot;no-cache, no-store&quot;</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">:</span> <span class="n">About</span> <span class="o">=</span> <span class="n">TypeAdapter</span><span class="p">(</span><span class="n">About</span><span class="p">)</span><span class="o">.</span><span class="n">validate_python</span><span class="p">(</span><span class="n">server_info</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>  <span class="c1"># property setter sets Authorization header</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">admin</span> <span class="o">=</span> <span class="n">Admin</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>  <span class="c1"># accessor for admin-related requests</span></div>
@@ -530,7 +538,9 @@ window.addEventListener("load", () => mermaid.run());
         <span class="c1"># Logic will follow only one redirect, it is intended ONLY to toggle HTTPS.</span>
         <span class="c1"># The redirect will be followed only if the netloc host is identical to the original.</span>
         <span class="k">if</span> <span class="n">uri</span><span class="o">.</span><span class="n">scheme</span> <span class="o">==</span> <span class="s2">&quot;http&quot;</span><span class="p">:</span>
-            <span class="n">response_from_http</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                    <span class="n">response_from_http</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">response_from_http</span><span class="o">.</span><span class="n">is_redirect</span><span class="p">:</span>
                 <span class="n">redirect_uri</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">response_from_http</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;location&quot;</span><span class="p">])</span>
                 <span class="k">if</span> <span class="n">redirect_uri</span><span class="o">.</span><span class="n">scheme</span> <span class="o">==</span> <span class="s2">&quot;https&quot;</span> <span class="ow">and</span> <span class="n">redirect_uri</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="n">uri</span><span class="o">.</span><span class="n">host</span><span class="p">:</span>
@@ -648,12 +658,14 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Not API key is configured for the client.&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">apikey</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">apikey</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">create_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scopes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">expires_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">note</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -677,13 +689,15 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">expires_in</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="n">expires_in</span> <span class="o">=</span> <span class="n">parse_time_string</span><span class="p">(</span><span class="n">expires_in</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">apikey</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="n">expires_in</span><span class="p">,</span> <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="n">note</span><span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">apikey</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                        <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="n">expires_in</span><span class="p">,</span> <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="n">note</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">revoke_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">first_eight</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -700,16 +714,18 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">            (Any additional characters passed will be truncated.)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">apikey</span>
-        <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
-                <span class="n">url_path</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                    <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
-                    <span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">first_eight</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
+                        <span class="n">url_path</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                            <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
+                            <span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">first_eight</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">app</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -909,12 +925,14 @@ window.addEventListener("load", () => mermaid.run());
             <span class="n">refresh_token</span><span class="p">,</span>
             <span class="n">csrf_token</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">refresh_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">token_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">UNAUTHORIZED</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
-                <span class="s2">&quot;Session cannot be refreshed. Log in again.&quot;</span>
-            <span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">refresh_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">token_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">UNAUTHORIZED</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">CannotRefreshAuthentication</span><span class="p">(</span>
+                        <span class="s2">&quot;Session cannot be refreshed. Log in again.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
         <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">])</span>
@@ -923,12 +941,14 @@ window.addEventListener("load", () => mermaid.run());
 
     <span class="k">def</span><span class="w"> </span><span class="nf">whoami</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Return information about the currently-authenticated user or service.&quot;</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">whoami</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">whoami</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
 <div class="viewcode-block" id="Context.logout">
 <a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.logout.html#tiled.client.context.Context.logout">[docs]</a>
@@ -943,16 +963,18 @@ window.addEventListener("load", () => mermaid.run());
 
         <span class="c1"># Revoke the current session.</span>
         <span class="n">refresh_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_get_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">auth/session/revoke&quot;</span><span class="p">,</span>
-                <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">:</span> <span class="n">refresh_token</span><span class="p">},</span>
-                <span class="c1"># Circumvent auth because this request is not authenticated.</span>
-                <span class="c1"># The refresh_token in the body is the relevant proof, not the</span>
-                <span class="c1"># &#39;Authentication&#39; header.</span>
-                <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">auth/session/revoke&quot;</span><span class="p">,</span>
+                        <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">:</span> <span class="n">refresh_token</span><span class="p">},</span>
+                        <span class="c1"># Circumvent auth because this request is not authenticated.</span>
+                        <span class="c1"># The refresh_token in the body is the relevant proof, not the</span>
+                        <span class="c1"># &#39;Authentication&#39; header.</span>
+                        <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
 
         <span class="c1"># Clear on-disk state.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span>
@@ -969,14 +991,16 @@ window.addEventListener("load", () => mermaid.run());
 
 <span class="sd">        This may be done to ensure that a possibly-leaked refresh token cannot be used.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">revoke_session</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                    <span class="n">session_id</span><span class="o">=</span><span class="n">session_id</span>
-                <span class="p">),</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
-            <span class="p">)</span>
-        <span class="p">)</span></div>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">revoke_session</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="n">session_id</span><span class="o">=</span><span class="n">session_id</span>
+                        <span class="p">),</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-csrf&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span></div>
 
 
 
@@ -995,15 +1019,21 @@ window.addEventListener("load", () => mermaid.run());
             <span class="s2">&quot;offset&quot;</span><span class="p">:</span> <span class="n">offset</span><span class="p">,</span>
             <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">limit</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url_path</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url_path</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">show_principal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">):</span>
         <span class="s2">&quot;Show one Principal (user or service) in the authenticaiton database.&quot;</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">create_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">,</span> <span class="n">scopes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">expires_in</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">note</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1023,13 +1053,15 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        note : Optional[str]</span>
 <span class="sd">            Description (for humans).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">/apikey&quot;</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="n">expires_in</span><span class="p">,</span> <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="n">note</span><span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">/apikey&quot;</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                        <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;scopes&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">,</span> <span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="n">expires_in</span><span class="p">,</span> <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="n">note</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">create_service_principal</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1044,13 +1076,15 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">            Specify the role (e.g. user or admin)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal&quot;</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="n">url_path</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span> <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="n">url_path</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span> <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">revoke_api_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">,</span> <span class="n">first_eight</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1067,16 +1101,18 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">            (Any additional characters passed will be truncated.)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">/apikey&quot;</span>
-        <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
-                <span class="n">url_path</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                    <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
-                    <span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">first_eight</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
+                        <span class="n">url_path</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                            <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">url_path</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
+                            <span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">first_eight</span><span class="p">[:</span><span class="mi">8</span><span class="p">],</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">CannotPrompt</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
@@ -1106,14 +1142,18 @@ window.addEventListener("load", () => mermaid.run());
         <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span>
         <span class="s2">&quot;password&quot;</span><span class="p">:</span> <span class="n">password</span><span class="p">,</span>
     <span class="p">}</span>
-    <span class="n">token_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">form_data</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-    <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+            <span class="n">token_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">form_data</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">device_code_grant</span><span class="p">(</span><span class="n">http_client</span><span class="p">,</span> <span class="n">auth_endpoint</span><span class="p">):</span>
-    <span class="n">verification_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{},</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-    <span class="n">handle_error</span><span class="p">(</span><span class="n">verification_response</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+            <span class="n">verification_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{},</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="n">handle_error</span><span class="p">(</span><span class="n">verification_response</span><span class="p">)</span>
     <span class="n">verification</span> <span class="o">=</span> <span class="n">verification_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
     <span class="n">authorization_uri</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;authorization_uri&quot;</span><span class="p">]</span>
     <span class="nb">print</span><span class="p">(</span>
@@ -1137,22 +1177,24 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">deadline</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Deadline expired.&quot;</span><span class="p">)</span>
-        <span class="c1"># Intentionally do not wrap this in handle_error(...).</span>
-        <span class="c1"># Check status codes manually below.</span>
-        <span class="n">access_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-            <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">],</span>
-            <span class="n">json</span><span class="o">=</span><span class="p">{</span>
-                <span class="s2">&quot;device_code&quot;</span><span class="p">:</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;device_code&quot;</span><span class="p">],</span>
-                <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:ietf:params:oauth:grant-type:device_code&quot;</span><span class="p">,</span>
-            <span class="p">},</span>
-            <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">access_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">BAD_REQUEST</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
-            <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;detail&quot;</span><span class="p">][</span><span class="s2">&quot;error&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;authorization_pending&quot;</span>
-        <span class="p">):</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="k">continue</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="n">access_response</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="c1"># Intentionally do not wrap this in handle_error(...).</span>
+                <span class="c1"># Check status codes manually below.</span>
+                <span class="n">access_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">],</span>
+                    <span class="n">json</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s2">&quot;device_code&quot;</span><span class="p">:</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;device_code&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:ietf:params:oauth:grant-type:device_code&quot;</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">access_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">BAD_REQUEST</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+                    <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;detail&quot;</span><span class="p">][</span><span class="s2">&quot;error&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;authorization_pending&quot;</span>
+                <span class="p">):</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="n">handle_error</span><span class="p">(</span><span class="n">access_response</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
         <span class="k">break</span>
     <span class="n">tokens</span> <span class="o">=</span> <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>

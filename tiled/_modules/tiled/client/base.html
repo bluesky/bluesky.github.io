@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.base &mdash; tiled 0.1.0b21 documentation</title>
+  <title>tiled.client.base &mdash; tiled 0.1.0b22.dev12+gc51d1164 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=259aec3a"></script>
+      <script src="../../../_static/documentation_options.js?v=68d592f1"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -80,6 +80,7 @@ window.addEventListener("load", () => mermaid.run());
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/direct-client.html">Use Tiled in Python without an HTTP server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/tiled-authn-database.html">Set up a database for a scaled authenticated deloyment</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../how-to/register.html">Register Content in Tiled</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../how-to/retries.html">Control Retries</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Explanations</span></p>
 <ul>
@@ -153,7 +154,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSource</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">patch_mimetypes</span><span class="p">,</span> <span class="n">safe_json_dump</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.metadata_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">apply_update_patch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">handle_error</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">handle_error</span><span class="p">,</span> <span class="n">retry_context</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">MetadataRevisions</span><span class="p">:</span>
@@ -172,17 +173,19 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="c1"># Used the cached value and do not make any request.</span>
                 <span class="k">return</span> <span class="n">length</span>
 
-        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                    <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
-                    <span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-                    <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                            <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
+                            <span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                            <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="n">length</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;count&quot;</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">LENGTH_CACHE_TTL</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">length</span>
@@ -194,17 +197,19 @@ window.addEventListener("load", () => mermaid.run());
             <span class="n">offset</span> <span class="o">=</span> <span class="n">item_</span>
             <span class="n">limit</span> <span class="o">=</span> <span class="mi">1</span>
 
-            <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span>
-                    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                    <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                        <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
-                        <span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="n">offset</span><span class="p">,</span>
-                        <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="n">limit</span><span class="p">,</span>
-                    <span class="p">},</span>
-                <span class="p">)</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                    <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span>
+                            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                            <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                                <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
+                                <span class="s2">&quot;page[offset]&quot;</span><span class="p">:</span> <span class="n">offset</span><span class="p">,</span>
+                                <span class="s2">&quot;page[limit]&quot;</span><span class="p">:</span> <span class="n">limit</span><span class="p">,</span>
+                            <span class="p">},</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
             <span class="p">(</span><span class="n">result</span><span class="p">,)</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
             <span class="k">return</span> <span class="n">result</span>
 
@@ -221,11 +226,13 @@ window.addEventListener("load", () => mermaid.run());
             <span class="n">next_page_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_link</span> <span class="o">+</span> <span class="n">params</span>
             <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">while</span> <span class="n">next_page_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                        <span class="n">next_page_url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">}</span>
-                    <span class="p">)</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                    <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                                <span class="n">next_page_url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">}</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
                 <span class="k">else</span><span class="p">:</span>
@@ -235,11 +242,14 @@ window.addEventListener("load", () => mermaid.run());
             <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">delete_revision</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
-        <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span> <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="n">n</span><span class="p">}</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">,</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span> <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="n">n</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
 
 
 <div class="viewcode-block" id="BaseClient">
@@ -346,13 +356,15 @@ window.addEventListener("load", () => mermaid.run());
         <span class="p">}</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">:</span>
             <span class="n">params</span><span class="p">[</span><span class="s2">&quot;include_data_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">,</span>
-                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
-                <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">,</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">},</span>
+                        <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure_family</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span>
             <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">,</span>
@@ -484,15 +496,17 @@ window.addEventListener("load", () => mermaid.run());
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">asset</span> <span class="ow">in</span> <span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">asset</span><span class="o">.</span><span class="n">is_directory</span><span class="p">:</span>
-                    <span class="n">manifest</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                            <span class="n">manifest_link</span><span class="p">,</span>
-                            <span class="n">params</span><span class="o">=</span><span class="p">{</span>
-                                <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">manifest_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
-                                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
-                            <span class="p">},</span>
-                        <span class="p">)</span>
-                    <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;manifest&quot;</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                        <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                            <span class="n">manifest</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                                    <span class="n">manifest_link</span><span class="p">,</span>
+                                    <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                                        <span class="o">**</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">urlparse</span><span class="p">(</span><span class="n">manifest_link</span><span class="p">)</span><span class="o">.</span><span class="n">query</span><span class="p">),</span>
+                                        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                                    <span class="p">},</span>
+                                <span class="p">)</span>
+                            <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;manifest&quot;</span><span class="p">]</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">manifest</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="n">manifests</span><span class="p">[</span><span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">manifest</span>
@@ -843,12 +857,14 @@ window.addEventListener("load", () => mermaid.run());
             <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalized_specs_patch</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">],</span>
-                <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">],</span>
+                        <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">metadata_patch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
@@ -906,11 +922,13 @@ window.addEventListener("load", () => mermaid.run());
             <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalized_specs</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">],</span> <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="s2">&quot;self&quot;</span><span class="p">],</span> <span class="n">content</span><span class="o">=</span><span class="n">safe_json_dump</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
@@ -936,7 +954,9 @@ window.addEventListener("load", () => mermaid.run());
 
     <span class="k">def</span><span class="w"> </span><span class="nf">delete_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">endpoint</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/metadata/&quot;</span><span class="p">,</span> <span class="s2">&quot;/nodes/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">handle_error</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">endpoint</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+            <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                <span class="n">handle_error</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">endpoint</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__dask_tokenize__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">)</span></div>
