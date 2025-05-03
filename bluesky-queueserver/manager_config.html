@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RE Manager Configuration &mdash; bluesky-queueserver 0.0.21.post55+g44ba626 documentation</title>
+  <title>RE Manager Configuration &mdash; bluesky-queueserver 0.0.21.post76+g7dd94cb documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="_static/plot_directive.css" />
@@ -15,7 +15,7 @@
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=66f05e8d"></script>
+      <script src="_static/documentation_options.js?v=ec2844f6"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -62,6 +62,7 @@
 <li class="toctree-l1"><a class="reference internal" href="cli_tools.html">Command-Line Tools</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">RE Manager Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#introduction">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuring-0mq-communication">Configuring 0MQ Communication</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#cli-parameters">CLI Parameters</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#environment-variables">Environment Variables</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#configuration-files">Configuration Files</a><ul>
@@ -129,6 +130,29 @@ and CLI parameters. Parameters passed using config file(s) override the paramete
 passed using environment variables. Parameters passed using CLI override all other
 parameters.</p>
 </section>
+<section id="configuring-0mq-communication">
+<h2>Configuring 0MQ Communication<a class="headerlink" href="#configuring-0mq-communication" title="Link to this heading"></a></h2>
+<p>RE Manager opens two 0MQ sockets for communication with clients: REP socket for
+receiving and replying to control commands from clients and PUB socket for streaming
+information (console output) to clients. The socket addresses, if different from
+default, may be set using <code class="docutils literal notranslate"><span class="pre">--zmq-control-addr</span></code> and <code class="docutils literal notranslate"><span class="pre">--zmq-info-addr</span></code> CLI parameters
+of <code class="docutils literal notranslate"><span class="pre">start-re-manager</span></code>. The addresses may also be set using environment variables
+or config file parameters.</p>
+<p>If RE Manager and the client (e.g. HTTP Server) are running on the same host,
+0MQ may be configured to use IPC communication. RE Manager and the clients accept
+IPC addresses, such as <code class="docutils literal notranslate"><span class="pre">ipc:///tmp/my_channel</span></code> or <code class="docutils literal notranslate"><span class="pre">ipc://&#64;my_channel</span></code>.
+IPC may be used both for control communication and info streaming.</p>
+<p>Incoming communication in the control channel may be encrypted using configurable
+public/private key pair. The private key for RE Manager is set using
+<code class="docutils literal notranslate"><span class="pre">QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER</span></code> environment variable. The key pair may be generated
+using using <a class="reference internal" href="cli_tools.html#qserver-zmq-keys-cli"><span class="std std-ref">qserver-zmq-keys</span></a> CLI tool. If encryption
+is enabled, the outgoing message are also encrypted, but the key pair is fixed and
+can not be changed. Customization of the key pair for outgoing messages may be changed
+if necessary.</p>
+<p>The 0MQ messages are encoded as JSON by default. RE Manager also supports MSGPACK encoding.
+The encoding is set for both sockets using <code class="docutils literal notranslate"><span class="pre">--zmq-encoding</span></code> CLI parameter or respective
+environment variable or config file parameter.</p>
+</section>
 <section id="cli-parameters">
 <h2>CLI Parameters<a class="headerlink" href="#cli-parameters" title="Link to this heading"></a></h2>
 <p>Comprehensive list of CLI parameters of RE Manager may be found in the documentation
@@ -149,6 +173,10 @@ passed using <code class="docutils literal notranslate"><span class="pre">--zmq-
 <li><p><code class="docutils literal notranslate"><span class="pre">QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER</span></code> - address of the 0MQ PUB-SUB socked used to
 publish console output. The address may also be set in the config file or passed using
 <code class="docutils literal notranslate"><span class="pre">--zmq-info-addr</span></code> CLI parameter.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QSERVER_ZMQ_ENCODING_FOR_SERVER</span></code> - encoding for messages passed over 0MQ sockets
+(both CONTROL and INFO). The encoding may also be set in the config file or passed
+using <code class="docutils literal notranslate"><span class="pre">--zmq-encoding</span></code> CLI parameter. The supported values are <em>‘json’</em> (default)
+and <em>‘msgpack’</em>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">QSERVER_EMERGENCY_LOCK_KEY_FOR_SERVER</span></code> - emergency lock key used to unlock RE Manager
 if the lock key set by a user is lost. The key may also be set in the config file.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">QSERVER_ZMQ_PRIVATE_KEY_FOR_SERVER</span></code> - private key used to decrypt control messages sent
@@ -189,6 +217,7 @@ most of the supported parameters:</p>
   zmq_control_addr: tcp://*:60615
   zmq_private_key: ${CUSTOM_EV_FOR_PRIVATE_KEY}
   zmq_info_addr: tcp://*:60625
+  zmq_encoding: json
   zmq_publish_console: true
   redis_addr: localhost:6379
   redis_name_prefix: qs_default
@@ -249,6 +278,9 @@ using environment variable <code class="docutils literal notranslate"><span clas
 <li><p><code class="docutils literal notranslate"><span class="pre">zmq_info_addr</span></code> - address of the 0MQ PUB-SUB socked used to publish console output. The address
 may also be passed using environment variable QSERVER_ZMQ_INFO_ADDRESS_FOR_SERVER or
 <code class="docutils literal notranslate"><span class="pre">--zmq-info-addr</span></code> CLI parameter. Address format: <code class="docutils literal notranslate"><span class="pre">tcp://*:60625</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zmq_encoding</span></code> - encoding used for sending and receiving 0MQ messages in all the sockets.
+The encoding may also be set using <code class="docutils literal notranslate"><span class="pre">--zmq-encoding</span></code> CLI parameter or <code class="docutils literal notranslate"><span class="pre">QSERVER_ZMQ_ENCODING_FOR_SERVER</span></code>
+environment variables. The supported values are <em>‘json’</em> (default) and <em>‘msgpack’</em>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">zmq_publish_console</span></code> - enable or disable publishing console output to the socket set using
 <code class="docutils literal notranslate"><span class="pre">zmq_info_addr</span></code>. Accepted values are <code class="docutils literal notranslate"><span class="pre">true</span></code> and <code class="docutils literal notranslate"><span class="pre">false</span></code>. The value can also passed using
 <code class="docutils literal notranslate"><span class="pre">--zmq-publish-console</span></code> CLI parameter.</p></li>

@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.comms &mdash; bluesky-queueserver 0.0.21.post55+g44ba626 documentation</title>
+  <title>bluesky_queueserver.manager.comms &mdash; bluesky-queueserver 0.0.21.post76+g7dd94cb documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=66f05e8d"></script>
+      <script src="../../../_static/documentation_options.js?v=ec2844f6"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/js/theme.js"></script>
@@ -106,7 +106,9 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">queue</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">msgpack</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zmq</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zmq.asyncio</span>
 
@@ -120,6 +122,35 @@
 
 <span class="n">default_zmq_control_address_for_server</span> <span class="o">=</span> <span class="s2">&quot;tcp://*:60615&quot;</span>
 <span class="n">default_zmq_control_address</span> <span class="o">=</span> <span class="s2">&quot;tcp://localhost:60615&quot;</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ZMQEncoding</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">JSON</span> <span class="o">=</span> <span class="s2">&quot;json&quot;</span>
+    <span class="n">MSGPACK</span> <span class="o">=</span> <span class="s2">&quot;msgpack&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">supported_zmq_encodings</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns a tuple of supported ZMQ encodings.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">([</span><span class="n">_</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">ZMQEncoding</span><span class="p">])</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">process_zmq_encoding_name</span><span class="p">(</span><span class="n">encoding</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="n">ZMQEncoding</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">encoding</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">encoding</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">supported_zmq_encodings</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">ZMQEncoding</span><span class="p">(</span><span class="n">encoding</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported ZMQ encoding: </span><span class="si">{</span><span class="n">encoding</span><span class="si">}</span><span class="s2">. Supported encodings: </span><span class="si">{</span><span class="n">supported_zmq_encodings</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unsupported type of the &#39;encoding&#39; parameter </span><span class="si">{</span><span class="n">encoding</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span><span class="si">}</span><span class="s2">). &quot;</span>
+            <span class="s2">&quot;Supported types: &#39;str&#39; or &#39;ZMQEncoding&#39;.&quot;</span>
+        <span class="p">)</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">CommTimeoutError</span><span class="p">(</span><span class="ne">TimeoutError</span><span class="p">):</span>
@@ -714,6 +745,8 @@
 <span class="sd">        public/private key pair must be passed if encryption is enabled at the 0MQ server side.</span>
 <span class="sd">        Communication requests will time out if the key is invalid. Exception will be raised if</span>
 <span class="sd">        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.</span>
+<span class="sd">    encoding : str or ZMQEncoding</span>
+<span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -762,6 +795,7 @@
         <span class="n">timeout_send</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
         <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">server_public_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">zmq_server_address</span> <span class="o">=</span> <span class="n">zmq_server_address</span> <span class="ow">or</span> <span class="n">default_zmq_control_address</span>
 
@@ -769,6 +803,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span> <span class="o">=</span> <span class="n">zmq_server_address</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">=</span> <span class="n">process_zmq_encoding_name</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">server_public_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">validate_zmq_key</span><span class="p">(</span><span class="n">server_public_key</span><span class="p">)</span>
@@ -811,7 +847,11 @@
                 <span class="n">msg</span><span class="p">,</span> <span class="n">msg_err</span> <span class="o">=</span> <span class="p">{},</span> <span class="s2">&quot;&quot;</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span><span class="p">):</span>
-                        <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv_json</span><span class="p">()</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
+                            <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv_json</span><span class="p">()</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                            <span class="n">msg</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span><span class="n">_</span><span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="c1"># This is very likely a timeout (RE Manager is not responding)</span>
                         <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;timeout occurred&quot;</span><span class="p">)</span>
@@ -921,7 +961,12 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_timeout_receive_last</span> <span class="o">=</span> <span class="n">timeout</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">RCVTIMEO</span> <span class="o">=</span> <span class="n">timeout</span> <span class="o">+</span> <span class="mi">1</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">msg_out</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">msg_out</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">packb</span><span class="p">(</span><span class="n">msg_out</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">_</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_event_wait_for_msg</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blocking_call</span><span class="p">:</span>
@@ -1100,6 +1145,8 @@
 <span class="sd">        public/private key pair must be passed if encryption is enabled at the 0MQ server side.</span>
 <span class="sd">        Communication requests will time out if the key is invalid. Exception will be raised if</span>
 <span class="sd">        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.</span>
+<span class="sd">    encoding : str or ZMQEncoding</span>
+<span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -1128,6 +1175,7 @@
         <span class="n">timeout_send</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
         <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">server_public_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span> <span class="o">=</span> <span class="n">loop</span> <span class="k">if</span> <span class="n">loop</span> <span class="k">else</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
 
@@ -1143,6 +1191,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_ctx</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_server_address</span> <span class="o">=</span> <span class="n">zmq_server_address</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">=</span> <span class="n">process_zmq_encoding_name</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_public_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">validate_zmq_key</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_public_key</span><span class="p">)</span>
@@ -1161,12 +1211,20 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span>
 
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_zmq_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">packb</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">_</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_zmq_receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">if</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">):</span>
-                <span class="n">msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv_json</span><span class="p">()</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv_json</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">_</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_socket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span><span class="n">_</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># This is very likely a timeout (RE Manager is not responding)</span>
                 <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;timeout occurred&quot;</span><span class="p">)</span>
@@ -1288,7 +1346,9 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">zmq_single_request</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">zmq_server_address</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">server_public_key</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">zmq_single_request</span><span class="p">(</span>
+    <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">zmq_server_address</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">server_public_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span>
+<span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Send a single request to ZMQ server. The function opens the socket, sends</span>
 <span class="sd">    a single ZMQ request and closes the socket. The function is not expected</span>
@@ -1313,7 +1373,8 @@
 <span class="sd">        public/private key pair must be passed if encryption is enabled at the 0MQ server side.</span>
 <span class="sd">        Communication requests will time out if the key is invalid. Exception will be raised if</span>
 <span class="sd">        the key is improperly formatted. Encryption will be disabled if ``None`` is passed.</span>
-
+<span class="sd">    encoding : str or ZMQEncoding</span>
+<span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -1329,7 +1390,7 @@
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">send_request</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
         <span class="k">nonlocal</span> <span class="n">msg_received</span>
         <span class="n">zmq_to_manager</span> <span class="o">=</span> <span class="n">ZMQCommSendAsync</span><span class="p">(</span>
-            <span class="n">zmq_server_address</span><span class="o">=</span><span class="n">zmq_server_address</span><span class="p">,</span> <span class="n">server_public_key</span><span class="o">=</span><span class="n">server_public_key</span>
+            <span class="n">zmq_server_address</span><span class="o">=</span><span class="n">zmq_server_address</span><span class="p">,</span> <span class="n">server_public_key</span><span class="o">=</span><span class="n">server_public_key</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span>
         <span class="p">)</span>
         <span class="n">msg_received</span> <span class="o">=</span> <span class="k">await</span> <span class="n">zmq_to_manager</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span>
             <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="n">raise_exceptions</span><span class="o">=</span><span class="kc">True</span>

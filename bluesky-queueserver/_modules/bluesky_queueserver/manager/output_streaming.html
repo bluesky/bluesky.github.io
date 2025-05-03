@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.0.21.post55+g44ba626 documentation</title>
+  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.0.21.post76+g7dd94cb documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=66f05e8d"></script>
+      <script src="../../../_static/documentation_options.js?v=ec2844f6"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/js/theme.js"></script>
@@ -111,13 +111,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ttime</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">msgpack</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zmq</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">bluesky_queueserver</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.comms</span><span class="w"> </span><span class="kn">import</span> <span class="n">ZMQEncoding</span><span class="p">,</span> <span class="n">process_zmq_encoding_name</span>
+
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 <span class="n">qserver_version</span> <span class="o">=</span> <span class="n">bluesky_queueserver</span><span class="o">.</span><span class="n">__version__</span>
-
 
 <span class="n">default_zmq_info_address_for_server</span> <span class="o">=</span> <span class="s2">&quot;tcp://*:60625&quot;</span>
 <span class="n">default_zmq_info_address</span> <span class="o">=</span> <span class="s2">&quot;tcp://localhost:60625&quot;</span>
@@ -215,6 +217,8 @@
 <span class="sd">    zmq_publish_addr : str, None</span>
 <span class="sd">        Address of 0MQ PUB socket for the publishing server. If ``None``, then</span>
 <span class="sd">        the default address ``tcp://*:60625`` is used.</span>
+<span class="sd">    encoding : str or ZMQEncoding</span>
+<span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
 <span class="sd">    zmq_topic : str</span>
 <span class="sd">        Name of the 0MQ topic where the messages are published.</span>
 <span class="sd">    name : str</span>
@@ -228,6 +232,7 @@
         <span class="n">console_output_on</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">zmq_publish_on</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">zmq_publish_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span>
         <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span>
         <span class="n">name</span><span class="o">=</span><span class="s2">&quot;RE Console Output Publisher&quot;</span><span class="p">,</span>
     <span class="p">):</span>
@@ -238,6 +243,8 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_console_output_on</span> <span class="o">=</span> <span class="n">console_output_on</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_publish_on</span> <span class="o">=</span> <span class="n">zmq_publish_on</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">=</span> <span class="n">process_zmq_encoding_name</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
 
         <span class="n">zmq_publish_addr</span> <span class="o">=</span> <span class="n">zmq_publish_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address_for_server</span>
 
@@ -304,8 +311,12 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_publish_on</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="p">:</span>
             <span class="n">topic</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span>
-            <span class="n">payload_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">([</span><span class="n">topic</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">),</span> <span class="n">payload_json</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf8&quot;</span><span class="p">)])</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
+                <span class="n">payload_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">([</span><span class="n">topic</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">),</span> <span class="n">payload_json</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf8&quot;</span><span class="p">)])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">payload_pickle</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">packb</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">([</span><span class="n">topic</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">),</span> <span class="n">payload_pickle</span><span class="p">])</span>
 
 
 <div class="viewcode-block" id="ReceiveConsoleOutput">
@@ -352,6 +363,8 @@
 <span class="sd">    zmq_subscribe_addr : str or None</span>
 <span class="sd">        Address of ZMQ server (PUB socket). If None, then the default address is</span>
 <span class="sd">        ``tcp://localhost:60625`` is used.</span>
+<span class="sd">    encoding : str or ZMQEncoding</span>
+<span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
 <span class="sd">    zmq_topic : str</span>
 <span class="sd">        0MQ topic for console output. Only messages from this topic are going to be received.</span>
 <span class="sd">    timeout : int, float or None</span>
@@ -361,7 +374,9 @@
 
 <div class="viewcode-block" id="ReceiveConsoleOutput.__init__">
 <a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.html#bluesky_queueserver.ReceiveConsoleOutput.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
+    <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
 
         <span class="n">zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address</span>
@@ -370,6 +385,8 @@
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Subscribing to 0MQ topic: &#39;</span><span class="si">%s</span><span class="s2">&#39; ...&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span> <span class="o">=</span> <span class="n">zmq_topic</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">=</span> <span class="n">process_zmq_encoding_name</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span>
@@ -441,9 +458,13 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;No message received during timeout period </span><span class="si">{timeout}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
 
-        <span class="n">topic</span><span class="p">,</span> <span class="n">payload_json</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv_multipart</span><span class="p">()</span>
-        <span class="n">payload_json</span> <span class="o">=</span> <span class="n">payload_json</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf8&quot;</span><span class="p">,</span> <span class="s2">&quot;strict&quot;</span><span class="p">)</span>
-        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">payload_json</span><span class="p">)</span>
+        <span class="n">topic</span><span class="p">,</span> <span class="n">payload_received</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv_multipart</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
+            <span class="n">payload_json</span> <span class="o">=</span> <span class="n">payload_received</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf8&quot;</span><span class="p">,</span> <span class="s2">&quot;strict&quot;</span><span class="p">)</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">payload_json</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span><span class="n">payload_received</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="n">payload</span></div>
 
 
@@ -541,6 +562,8 @@
 <span class="sd">    zmq_subscribe_addr : str or None</span>
 <span class="sd">        Address of ZMQ server (PUB socket). If None, then the default address is</span>
 <span class="sd">        ``tcp://localhost:60625`` is used.</span>
+<span class="sd">    encoding : str or ZMQEncoding</span>
+<span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
 <span class="sd">    zmq_topic : str</span>
 <span class="sd">        0MQ topic for console output. Only messages from this topic are going to be received.</span>
 <span class="sd">    timeout : int, float or None</span>
@@ -550,7 +573,9 @@
 
 <div class="viewcode-block" id="ReceiveConsoleOutputAsync.__init__">
 <a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.html#bluesky_queueserver.ReceiveConsoleOutputAsync.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
+    <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
 
         <span class="n">zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span> <span class="ow">or</span> <span class="s2">&quot;tcp://localhost:60625&quot;</span>
@@ -563,6 +588,8 @@
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Subscribing to 0MQ topic: &#39;</span><span class="si">%s</span><span class="s2">&#39; ...&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span> <span class="o">=</span> <span class="n">zmq_topic</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">=</span> <span class="n">process_zmq_encoding_name</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span>
@@ -655,10 +682,13 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;No message received during timeout period </span><span class="si">{timeout}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
 
-        <span class="n">topic</span><span class="p">,</span> <span class="n">payload_json</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv_multipart</span><span class="p">()</span>
+        <span class="n">topic</span><span class="p">,</span> <span class="n">payload_received</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv_multipart</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
+            <span class="n">payload_json</span> <span class="o">=</span> <span class="n">payload_received</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf8&quot;</span><span class="p">,</span> <span class="s2">&quot;strict&quot;</span><span class="p">)</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">payload_json</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span><span class="n">payload_received</span><span class="p">)</span>
 
-        <span class="n">payload_json</span> <span class="o">=</span> <span class="n">payload_json</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf8&quot;</span><span class="p">,</span> <span class="s2">&quot;strict&quot;</span><span class="p">)</span>
-        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">payload_json</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">payload</span></div>
 
 
@@ -759,6 +789,16 @@
         <span class="n">help</span><span class="o">=</span><span class="s2">&quot;The parameter is deprecated and will be removed. Use --zmq-info-addr instead.&quot;</span><span class="p">,</span>
     <span class="p">)</span>
 
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">&quot;--zmq-encoding&quot;</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="s2">&quot;zmq_encoding&quot;</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">&quot;The encoding used for 0MQ communication. The encoding must match the encoding used by RE Manager. &quot;</span>
+        <span class="s2">&quot;The parameter value overrides the value set by QSERVER_ZMQ_ENCODING environment variable. &quot;</span>
+        <span class="s2">&quot;The supported values: &#39;json&#39; (default) or &#39;msgpack&#39;.&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
     <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
 
     <span class="n">zmq_info_addr</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">zmq_info_addr</span>
@@ -770,8 +810,12 @@
     <span class="n">zmq_info_addr</span> <span class="o">=</span> <span class="n">zmq_info_addr</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;QSERVER_ZMQ_INFO_ADDRESS&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="n">zmq_info_addr</span> <span class="o">=</span> <span class="n">zmq_info_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address</span>
 
+    <span class="n">zmq_encoding</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">zmq_encoding</span>
+    <span class="n">zmq_encoding</span> <span class="o">=</span> <span class="n">zmq_encoding</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;QSERVER_ZMQ_ENCODING&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">zmq_encoding</span> <span class="o">=</span> <span class="n">zmq_encoding</span> <span class="ow">or</span> <span class="s2">&quot;json&quot;</span>
+
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">rco</span> <span class="o">=</span> <span class="n">ReceiveConsoleOutput</span><span class="p">(</span><span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_info_addr</span><span class="p">)</span>
+        <span class="n">rco</span> <span class="o">=</span> <span class="n">ReceiveConsoleOutput</span><span class="p">(</span><span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_info_addr</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="n">zmq_encoding</span><span class="p">)</span>
         <span class="n">rco</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
