@@ -1,21 +1,20 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en">
+<html class="writer-html5" lang="en" data-content_root="../../">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_httpserver.authenticators &mdash; Bluesky HTTP Server 0.0.12 documentation</title>
-      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=fa44fd50" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=19f00094" />
-      <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+  <title>bluesky_httpserver.authenticators &mdash; Bluesky HTTP Server 0.0.12.post12+gcf689ca documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
 
   
-  <!--[if lt IE 9]>
-    <script src="../../_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=43995f2d"></script>
-        <script src="../../_static/doctools.js?v=888ff710"></script>
-        <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=fa840dbe"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" /> 
@@ -32,9 +31,6 @@
           <a href="../../index.html" class="icon icon-home">
             Bluesky HTTP Server
           </a>
-              <div class="version">
-                0.0.12
-              </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
@@ -90,24 +86,24 @@
            <div itemprop="articleBody">
              
   <h1>Source code for bluesky_httpserver.authenticators</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">asyncio</span>
-<span class="kn">import</span> <span class="nn">functools</span>
-<span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">import</span> <span class="nn">secrets</span>
-<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterable</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
 
-<span class="kn">from</span> <span class="nn">fastapi</span> <span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">Request</span>
-<span class="kn">from</span> <span class="nn">jose</span> <span class="kn">import</span> <span class="n">JWTError</span><span class="p">,</span> <span class="n">jwk</span><span class="p">,</span> <span class="n">jwt</span>
-<span class="kn">from</span> <span class="nn">starlette.responses</span> <span class="kn">import</span> <span class="n">RedirectResponse</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">Request</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jose</span><span class="w"> </span><span class="kn">import</span> <span class="n">JWTError</span><span class="p">,</span> <span class="n">jwk</span><span class="p">,</span> <span class="n">jwt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">starlette.responses</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedirectResponse</span>
 
-<span class="kn">from</span> <span class="nn">.authentication</span> <span class="kn">import</span> <span class="n">Mode</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">modules_available</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.authentication</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">modules_available</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<span class="k">class</span> <span class="nc">DummyAuthenticator</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DummyAuthenticator</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    For test and demo purposes only!</span>
 
@@ -117,11 +113,13 @@
 
     <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">username</span>
 
 
-<div class="viewcode-block" id="DictionaryAuthenticator"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator">[docs]</a><span class="k">class</span> <span class="nc">DictionaryAuthenticator</span><span class="p">:</span>
+<div class="viewcode-block" id="DictionaryAuthenticator">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DictionaryAuthenticator</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    For test and demo purposes only!</span>
 
@@ -147,10 +145,13 @@
 <span class="s2">    used to avoid placing passwords directly in configuration.</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="DictionaryAuthenticator.__init__"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">users_to_passwords</span><span class="p">):</span>
+<div class="viewcode-block" id="DictionaryAuthenticator.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">users_to_passwords</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_users_to_passwords</span> <span class="o">=</span> <span class="n">users_to_passwords</span></div>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">true_password</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_users_to_passwords</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">true_password</span><span class="p">:</span>
             <span class="c1"># Username is not valid.</span>
@@ -159,7 +160,8 @@
             <span class="k">return</span> <span class="n">username</span></div>
 
 
-<span class="k">class</span> <span class="nc">PAMAuthenticator</span><span class="p">:</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">PAMAuthenticator</span><span class="p">:</span>
     <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
     <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
@@ -171,14 +173,14 @@
 <span class="s2">    description: PAM service. Default is &#39;login&#39;.</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">service</span><span class="o">=</span><span class="s2">&quot;login&quot;</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">service</span><span class="o">=</span><span class="s2">&quot;login&quot;</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;pamela&quot;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This PAMAuthenticator requires the module &#39;pamela&#39; to be installed.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">service</span> <span class="o">=</span> <span class="n">service</span>
         <span class="c1"># TODO Try to open a PAM session.</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">pamela</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">pamela</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="n">pamela</span><span class="o">.</span><span class="n">authenticate</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">,</span> <span class="n">service</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">service</span><span class="p">)</span>
@@ -189,7 +191,7 @@
             <span class="k">return</span> <span class="n">username</span>
 
 
-<span class="k">class</span> <span class="nc">OIDCAuthenticator</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OIDCAuthenticator</span><span class="p">:</span>
     <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span>
     <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
@@ -232,7 +234,7 @@
 <span class="s2">        - use</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">client_id</span><span class="p">,</span>
         <span class="n">client_secret</span><span class="p">,</span>
@@ -250,7 +252,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">token_uri</span> <span class="o">=</span> <span class="n">token_uri</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">authorization_endpoint</span> <span class="o">=</span> <span class="n">authorization_endpoint</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">client_id</span><span class="o">=</span><span class="n">client_id</span><span class="p">,</span> <span class="n">redirect_uri</span><span class="o">=</span><span class="n">redirect_uri</span><span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
         <span class="n">code</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">exchange_code</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_uri</span><span class="p">,</span> <span class="n">code</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_secret</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span><span class="p">)</span>
         <span class="n">response_body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
@@ -273,11 +275,11 @@
         <span class="k">return</span> <span class="n">verified_body</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]</span>
 
 
-<span class="k">class</span> <span class="nc">KeyNotFoundError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">KeyNotFoundError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
     <span class="k">pass</span>
 
 
-<span class="k">def</span> <span class="nf">find_key</span><span class="p">(</span><span class="n">token</span><span class="p">,</span> <span class="n">keys</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">find_key</span><span class="p">(</span><span class="n">token</span><span class="p">,</span> <span class="n">keys</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Find a key from the configured keys based on the kid claim of the token</span>
 
@@ -307,7 +309,7 @@
     <span class="k">return</span> <span class="n">KeyNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Token specifies </span><span class="si">{</span><span class="n">kid</span><span class="si">}</span><span class="s2"> but we have </span><span class="si">{</span><span class="p">[</span><span class="n">k</span><span class="p">[</span><span class="s1">&#39;kid&#39;</span><span class="p">]</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">keys</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
 
-<span class="k">async</span> <span class="k">def</span> <span class="nf">exchange_code</span><span class="p">(</span><span class="n">token_uri</span><span class="p">,</span> <span class="n">auth_code</span><span class="p">,</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">client_secret</span><span class="p">,</span> <span class="n">redirect_uri</span><span class="p">):</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">exchange_code</span><span class="p">(</span><span class="n">token_uri</span><span class="p">,</span> <span class="n">auth_code</span><span class="p">,</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">client_secret</span><span class="p">,</span> <span class="n">redirect_uri</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Method that talks to an IdP to exchange a code for an access_token and/or id_token</span>
 <span class="sd">    Args:</span>
 <span class="sd">        token_url ([type]): [description]</span>
@@ -315,7 +317,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;httpx&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This authenticator requires &#39;httpx&#39;. (pip install httpx)&quot;</span><span class="p">)</span>
-    <span class="kn">import</span> <span class="nn">httpx</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
 
     <span class="n">response</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
         <span class="n">url</span><span class="o">=</span><span class="n">token_uri</span><span class="p">,</span>
@@ -330,10 +332,10 @@
     <span class="k">return</span> <span class="n">response</span>
 
 
-<span class="k">class</span> <span class="nc">SAMLAuthenticator</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SAMLAuthenticator</span><span class="p">:</span>
     <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">saml_settings</span><span class="p">,</span>  <span class="c1"># See EXAMPLE_SAML_SETTINGS below.</span>
         <span class="n">attribute_name</span><span class="p">,</span>  <span class="c1"># which SAML attribute to use as &#39;id&#39; for Idenity</span>
@@ -352,10 +354,10 @@
             <span class="c1"># https://github.com/onelogin/python3-saml</span>
             <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This SAMLAuthenticator requires &#39;python3-saml&#39; to be installed.&quot;</span><span class="p">)</span>
 
-        <span class="kn">from</span> <span class="nn">onelogin.saml2.auth</span> <span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">onelogin.saml2.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
 
         <span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/login&quot;</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">def</span> <span class="nf">saml_login</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">saml_login</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
             <span class="n">req</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
             <span class="n">auth</span> <span class="o">=</span> <span class="n">OneLogin_Saml2_Auth</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">saml_settings</span><span class="p">)</span>
             <span class="c1"># saml_settings = auth.get_settings()</span>
@@ -371,10 +373,10 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">include_routers</span> <span class="o">=</span> <span class="p">[</span><span class="n">router</span><span class="p">]</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;onelogin&quot;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This SAMLAuthenticator requires the module &#39;oneline&#39; to be installed.&quot;</span><span class="p">)</span>
-        <span class="kn">from</span> <span class="nn">onelogin.saml2.auth</span> <span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">onelogin.saml2.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
 
         <span class="n">req</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="n">auth</span> <span class="o">=</span> <span class="n">OneLogin_Saml2_Auth</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">saml_settings</span><span class="p">)</span>
@@ -394,7 +396,7 @@
             <span class="k">return</span> <span class="kc">None</span>
 
 
-<span class="k">async</span> <span class="k">def</span> <span class="nf">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
     <span class="n">form_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">()</span>
     <span class="n">rv</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;http_host&quot;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
@@ -420,7 +422,9 @@
     <span class="k">return</span> <span class="n">rv</span>
 
 
-<div class="viewcode-block" id="LDAPAuthenticator"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator">[docs]</a><span class="k">class</span> <span class="nc">LDAPAuthenticator</span><span class="p">:</span>
+<div class="viewcode-block" id="LDAPAuthenticator">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LDAPAuthenticator</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    LDAP authenticator.</span>
 <span class="sd">    The authenticator code is based on https://github.com/jupyterhub/ldapauthenticator</span>
@@ -604,7 +608,9 @@
 
     <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
 
-<div class="viewcode-block" id="LDAPAuthenticator.__init__"><a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+<div class="viewcode-block" id="LDAPAuthenticator.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">server_address</span><span class="p">,</span>
         <span class="n">server_port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -664,14 +670,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">server_address_list</span> <span class="o">=</span> <span class="n">server_address_list</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span> <span class="o">=</span> <span class="n">server_port</span> <span class="k">if</span> <span class="n">server_port</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_port_default</span><span class="p">()</span></div>
 
-    <span class="k">def</span> <span class="nf">_server_port_default</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_server_port_default</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span><span class="p">:</span>
             <span class="k">return</span> <span class="mi">636</span>  <span class="c1"># default SSL port for LDAP</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="mi">389</span>  <span class="c1"># default plaintext port for LDAP</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">resolve_username</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username_supplied_by_user</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">ldap3</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">resolve_username</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username_supplied_by_user</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ldap3</span>
 
         <span class="n">search_dn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_user</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">escape_userdn</span><span class="p">:</span>
@@ -744,8 +751,8 @@
 
         <span class="k">return</span> <span class="p">(</span><span class="n">user_dn</span><span class="p">,</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;dn&quot;</span><span class="p">])</span>
 
-    <span class="k">def</span> <span class="nf">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">userdn</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">ldap3</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">userdn</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ldap3</span>
 
         <span class="c1"># NOTE: setting &#39;acitve=False&#39; essentially disables exclusion of inactive servers from the pool.</span>
         <span class="c1"># It probably does not matter if the pool contains only one server, but it could have implications</span>
@@ -778,7 +785,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">conn</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_user_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">,</span> <span class="n">userdn</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_user_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">conn</span><span class="p">,</span> <span class="n">userdn</span><span class="p">):</span>
         <span class="n">attrs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">auth_state_attributes</span><span class="p">:</span>
             <span class="n">search_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
@@ -789,8 +796,8 @@
                 <span class="n">attrs</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">entries</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">entry_attributes_as_dict</span>
         <span class="k">return</span> <span class="n">attrs</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">ldap3</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ldap3</span>
 
         <span class="n">username_saved</span> <span class="o">=</span> <span class="n">username</span>  <span class="c1"># Save the user name passed as a parameter</span>
 
@@ -920,6 +927,7 @@
             <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;username:</span><span class="si">%s</span><span class="s2"> attributes:</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">user_info</span><span class="p">)</span>
             <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s2">&quot;auth_state&quot;</span><span class="p">:</span> <span class="n">user_info</span><span class="p">}</span>
         <span class="k">return</span> <span class="n">username</span></div>
+
 </pre></div>
 
            </div>
