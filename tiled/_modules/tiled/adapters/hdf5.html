@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.hdf5 &mdash; tiled 0.1.0b31.dev10+g22c6c2d9 documentation</title>
+  <title>tiled.adapters.hdf5 &mdash; tiled 0.1.0b31.dev11+g43c62d86 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=866232c0"></script>
+      <script src="../../../_static/documentation_options.js?v=e7bc7f19"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -310,9 +310,6 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">dtype</span> <span class="o">=</span> <span class="n">shapes_chunks_dtypes</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="n">numpy</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;O&quot;</span><span class="p">):</span>
             <span class="c1"># TODO: It should be possible to put this in dask.delayed too -- needs to be thoroughly tested</span>
-            <span class="k">assert</span> <span class="p">(</span>
-                <span class="nb">len</span><span class="p">(</span><span class="n">file_paths</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-            <span class="p">),</span> <span class="s2">&quot;Cannot handle object arrays from multiple files&quot;</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The dataset </span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2"> is of object type, using a &quot;</span>
                 <span class="s2">&quot;Python-only feature of h5py that is not supported by &quot;</span>
@@ -338,14 +335,21 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="k">return</span> <span class="n">arr</span>
             <span class="k">return</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">())</span>
 
-        <span class="n">delayed</span> <span class="o">=</span> <span class="p">[</span><span class="n">dask</span><span class="o">.</span><span class="n">delayed</span><span class="p">(</span><span class="n">_read_hdf5_array</span><span class="p">)(</span><span class="n">fpath</span><span class="p">)</span> <span class="k">for</span> <span class="n">fpath</span> <span class="ow">in</span> <span class="n">file_paths</span><span class="p">]</span>
-        <span class="n">arrs</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">from_delayed</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">rechunk</span><span class="p">(</span>
-                <span class="n">chunks</span><span class="o">=</span><span class="n">chunk_shape</span> <span class="ow">or</span> <span class="s2">&quot;auto&quot;</span>
-            <span class="p">)</span>
-            <span class="k">for</span> <span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">chunk_shape</span><span class="p">,</span> <span class="n">dtype</span><span class="p">))</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">delayed</span><span class="p">,</span> <span class="n">shapes_chunks_dtypes</span><span class="p">)</span>
-        <span class="p">]</span>
-        <span class="n">array</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">arrs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">arrs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">arrs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">([</span><span class="n">shape</span> <span class="k">for</span> <span class="n">shape</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">shapes_chunks_dtypes</span><span class="p">]):</span>
+            <span class="c1"># All shapes are empty -&gt; all arrays are zero-dimensional (scalars)</span>
+            <span class="n">array</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">_read_hdf5_array</span><span class="p">(</span><span class="n">fp</span><span class="p">)[()]</span> <span class="k">for</span> <span class="n">fp</span> <span class="ow">in</span> <span class="n">file_paths</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Use delayed loading to read the arrays from the files</span>
+            <span class="n">delayed</span> <span class="o">=</span> <span class="p">[</span><span class="n">dask</span><span class="o">.</span><span class="n">delayed</span><span class="p">(</span><span class="n">_read_hdf5_array</span><span class="p">)(</span><span class="n">fpath</span><span class="p">)</span> <span class="k">for</span> <span class="n">fpath</span> <span class="ow">in</span> <span class="n">file_paths</span><span class="p">]</span>
+            <span class="n">arrs</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">from_delayed</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">rechunk</span><span class="p">(</span>
+                    <span class="n">chunks</span><span class="o">=</span><span class="n">chunk_shape</span> <span class="ow">or</span> <span class="s2">&quot;auto&quot;</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">chunk_shape</span><span class="p">,</span> <span class="n">dtype</span><span class="p">))</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                    <span class="n">delayed</span><span class="p">,</span> <span class="n">shapes_chunks_dtypes</span>
+                <span class="p">)</span>
+            <span class="p">]</span>
+            <span class="n">array</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">arrs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">arrs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">arrs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="k">return</span> <span class="n">array</span>
 
