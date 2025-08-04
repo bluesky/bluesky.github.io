@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.array &mdash; tiled 0.1.0b32 documentation</title>
+  <title>tiled.adapters.array &mdash; tiled 0.1.0b33.dev1+g3e7212c1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=76adb614"></script>
+      <script src="../../../_static/documentation_options.js?v=7a734ce2"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -138,7 +138,8 @@ window.addEventListener("load", () => mermaid.run());
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.adapters.array</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask.array</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>
@@ -226,6 +227,17 @@ window.addEventListener("load", () => mermaid.run());
         <span class="c1"># May be a list of something; convert to array</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="s2">&quot;__array__&quot;</span><span class="p">):</span>
             <span class="n">array</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">asanyarray</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
+
+        <span class="c1"># Convert array of arrays to ND array to expose the underlying dtype</span>
+        <span class="n">is_array_of_arrays</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">array</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="s2">&quot;object&quot;</span>
+            <span class="ow">and</span> <span class="n">array</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">numpy</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_array_of_arrays</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+                <span class="c1"># only uniform arrays (with same dimensions) are stackable</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
 
         <span class="c1"># Convert (experimental) pandas.StringDtype to numpy&#39;s unicode string dtype</span>
         <span class="n">is_likely_string_dtype</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">pandas</span><span class="o">.</span><span class="n">StringDtype</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
