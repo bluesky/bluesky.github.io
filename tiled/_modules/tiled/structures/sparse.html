@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.structures.sparse &mdash; tiled 0.1.0b33.dev19+ga7ddd557 documentation</title>
+  <title>tiled.structures.sparse &mdash; tiled 0.1.0b33.dev20+gc78fb2d8 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=b4155a8d"></script>
+      <script src="../../../_static/documentation_options.js?v=7063dc5b"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -63,6 +63,7 @@ window.addEventListener("load", () => mermaid.run());
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/writing.html">Writing Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/simple-server.html">Simple Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/zarr-integration.html">Serve Data as Zarr</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How To Guides</span></p>
 <ul>
@@ -139,8 +140,10 @@ window.addEventListener("load", () => mermaid.run());
              
   <h1>Source code for tiled.structures.sparse</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">enum</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">BuiltinDtype</span><span class="p">,</span> <span class="n">Endianness</span><span class="p">,</span> <span class="n">Kind</span><span class="p">,</span> <span class="n">StructDtype</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">SparseLayout</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
@@ -155,6 +158,12 @@ window.addEventListener("load", () => mermaid.run());
 <span class="k">class</span><span class="w"> </span><span class="nc">COOStructure</span><span class="p">:</span>
     <span class="n">chunks</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span>  <span class="c1"># tuple-of-tuples-of-ints like ((3,), (3,))</span>
     <span class="n">shape</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>  <span class="c1"># tuple of ints like (3, 3)</span>
+    <span class="n">data_type</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BuiltinDtype</span><span class="p">,</span> <span class="n">StructDtype</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">coord_data_type</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BuiltinDtype</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">BuiltinDtype</span><span class="p">(</span>
+            <span class="n">Endianness</span><span class="p">(</span><span class="s2">&quot;little&quot;</span><span class="p">),</span> <span class="n">Kind</span><span class="p">(</span><span class="s2">&quot;u&quot;</span><span class="p">),</span> <span class="mi">8</span>
+        <span class="p">)</span>  <span class="c1"># numpy &#39;uint&#39; dtype</span>
+    <span class="p">)</span>
     <span class="n">dims</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># None or tuple of names like (&quot;x&quot;, &quot;y&quot;)</span>
     <span class="n">resizable</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">layout</span><span class="p">:</span> <span class="n">SparseLayout</span> <span class="o">=</span> <span class="n">SparseLayout</span><span class="o">.</span><span class="n">COO</span>
@@ -162,7 +171,17 @@ window.addEventListener("load", () => mermaid.run());
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">structure</span><span class="p">):</span>
+        <span class="n">data_type</span> <span class="o">=</span> <span class="n">structure</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;data_type&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;fields&quot;</span> <span class="ow">in</span> <span class="n">data_type</span><span class="p">:</span>
+            <span class="n">data_type</span> <span class="o">=</span> <span class="n">StructDtype</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">data_type</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">data_type</span> <span class="o">=</span> <span class="n">BuiltinDtype</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">data_type</span><span class="p">)</span>
+        <span class="n">coord_data_type</span> <span class="o">=</span> <span class="n">structure</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;coord_data_type&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;endianness&quot;</span><span class="p">:</span> <span class="s2">&quot;little&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;itemsize&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">}</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">data_type</span><span class="o">=</span><span class="n">data_type</span><span class="p">,</span>
+            <span class="n">coord_data_type</span><span class="o">=</span><span class="n">BuiltinDtype</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">coord_data_type</span><span class="p">),</span>
             <span class="n">chunks</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="n">structure</span><span class="p">[</span><span class="s2">&quot;chunks&quot;</span><span class="p">])),</span>
             <span class="n">shape</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;shape&quot;</span><span class="p">]),</span>
             <span class="n">dims</span><span class="o">=</span><span class="n">structure</span><span class="p">[</span><span class="s2">&quot;dims&quot;</span><span class="p">],</span>

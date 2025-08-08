@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Search &mdash; tiled 0.1.0b33.dev19+ga7ddd557 documentation</title>
+  <title>Search &mdash; tiled 0.1.0b33.dev20+gc78fb2d8 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
@@ -15,7 +15,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b4155a8d"></script>
+      <script src="../_static/documentation_options.js?v=7063dc5b"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -62,6 +62,7 @@
 <li class="toctree-l1"><a class="reference internal" href="writing.html">Writing Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="simple-server.html">Simple Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zarr-integration.html">Serve Data as Zarr</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">How To Guides</span></p>
 <ul>
@@ -153,12 +154,14 @@
 </div>
 <p>Tiled has an extensible collection of queries. The client just has to
 construct the query, and server sorts out how to execute it as
-efficiently as possible given however the metadata and data are stored.</p>
+efficiently as possible given however the metadata and data are stored.
+For performance reasons, the search is only performed on a single level
+of the nested hierarchy.</p>
 <p>This example collection of data has several entries with metadata.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;short_table&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;tables/short_table&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span>
 <span class="go">DictView({&#39;animal&#39;: &#39;dog&#39;, &#39;color&#39;: &#39;red&#39;})</span>
 
-<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;long_table&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;tables/long_table&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span>
 <span class="go">DictView({&#39;animal&#39;: &#39;dog&#39;, &#39;color&#39;: &#39;green&#39;})</span>
 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;structured_data&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span>
@@ -171,13 +174,13 @@ efficiently as possible given however the metadata and data are stored.</p>
 anywhere in the metadata.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tiled.queries</span><span class="w"> </span><span class="kn">import</span> <span class="n">FullText</span>
 
-<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">FullText</span><span class="p">(</span><span class="s2">&quot;dog&quot;</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;tables&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">FullText</span><span class="p">(</span><span class="s2">&quot;dog&quot;</span><span class="p">))</span>
 <span class="go">&lt;Container {&#39;short_table&#39;, &#39;long_table&#39;, &#39;wide_table&#39;}&gt;</span>
 </pre></div>
 </div>
 <p>The result has a subset of the contents of the original.
 Searches may be chained to progressively narrow results:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">FullText</span><span class="p">(</span><span class="s2">&quot;dog&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">FullText</span><span class="p">(</span><span class="s2">&quot;red&quot;</span><span class="p">))</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;tables&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">FullText</span><span class="p">(</span><span class="s2">&quot;dog&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">FullText</span><span class="p">(</span><span class="s2">&quot;red&quot;</span><span class="p">))</span>
 <span class="go">&lt;Container {&#39;short_table&#39;, &#39;wide_table&#39;}&gt;</span>
 </pre></div>
 </div>
