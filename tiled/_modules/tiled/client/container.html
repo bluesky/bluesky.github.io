@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.container &mdash; tiled 0.0.1.dev2311+g7158cd60a documentation</title>
+  <title>tiled.client.container &mdash; tiled 0.0.1.dev2311+g06577e122 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=f74987a7"></script>
+      <script src="../../../_static/documentation_options.js?v=27b61cdd"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -158,7 +158,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">from</span><span class="w"> </span><span class="nn">..iterviews</span><span class="w"> </span><span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..queries</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeyLookup</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..query_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_query_registry</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSource</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">OneShotCachedMap</span><span class="p">,</span> <span class="n">Sentinel</span><span class="p">,</span> <span class="n">node_repr</span><span class="p">,</span> <span class="n">safe_json_dump</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">STRUCTURE_TYPES</span><span class="p">,</span> <span class="n">BaseClient</span>
@@ -168,6 +168,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="n">client_for_item</span><span class="p">,</span>
     <span class="n">export_util</span><span class="p">,</span>
     <span class="n">handle_error</span><span class="p">,</span>
+    <span class="n">normalize_specs</span><span class="p">,</span>
     <span class="n">retry_context</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -503,18 +504,8 @@ window.addEventListener("load", () => mermaid.run());
                             <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">err_arg</span><span class="p">)</span>
                         <span class="k">raise</span>
                     <span class="n">item</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
-
-                    <span class="c1"># Tables that belong to composite nodes cannot be addressed directly</span>
-                    <span class="k">if</span> <span class="p">(</span>
-                        <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;structure_family&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">table</span>
-                    <span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
-                        <span class="s2">&quot;flattened&quot;</span> <span class="ow">in</span> <span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;attributes&quot;</span><span class="p">][</span><span class="s2">&quot;specs&quot;</span><span class="p">])</span>
-                    <span class="p">):</span>
-                        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Attempting to access a table in a composite container; use .parts[&#39;</span><span class="si">{</span><span class="n">keys</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39;] instead.&quot;</span>  <span class="c1"># noqa</span>
-                        <span class="p">)</span>
-
                     <span class="k">break</span>
+
             <span class="n">result</span> <span class="o">=</span> <span class="n">client_for_item</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
@@ -858,18 +849,12 @@ window.addEventListener("load", () => mermaid.run());
         <span class="bp">self</span><span class="o">.</span><span class="n">_cached_len</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">access_blob</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;tags&quot;</span><span class="p">:</span> <span class="n">access_tags</span><span class="p">}</span> <span class="k">if</span> <span class="n">access_tags</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
-        <span class="n">specs</span> <span class="o">=</span> <span class="n">specs</span> <span class="ow">or</span> <span class="p">[]</span>
-        <span class="n">normalized_specs</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">specs</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">spec</span> <span class="o">=</span> <span class="n">Spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-            <span class="n">normalized_specs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">spec</span><span class="p">))</span>
 
         <span class="n">item</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;attributes&quot;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
                 <span class="s2">&quot;structure_family&quot;</span><span class="p">:</span> <span class="n">StructureFamily</span><span class="p">(</span><span class="n">structure_family</span><span class="p">),</span>
-                <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalized_specs</span><span class="p">,</span>
+                <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalize_specs</span><span class="p">(</span><span class="n">specs</span> <span class="ow">or</span> <span class="p">[]),</span>
                 <span class="s2">&quot;data_sources&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">asdict</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span> <span class="k">for</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">],</span>
                 <span class="s2">&quot;access_blob&quot;</span><span class="p">:</span> <span class="n">access_blob</span><span class="p">,</span>
             <span class="p">}</span>
@@ -894,7 +879,7 @@ window.addEventListener("load", () => mermaid.run());
                     <span class="p">)</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="n">structure_family</span> <span class="ow">in</span> <span class="p">{</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">,</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">composite</span><span class="p">}:</span>
+        <span class="k">if</span> <span class="n">structure_family</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">:</span>
             <span class="n">structure</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;contents&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Only containers can have multiple data_sources right now.</span>
@@ -935,10 +920,9 @@ window.addEventListener("load", () => mermaid.run());
         <span class="c1"># Ensure this is a dataclass, not a dict.</span>
         <span class="c1"># When we apply type hints and mypy to the client it should be possible</span>
         <span class="c1"># to dispense with this.</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">structure_family</span>
-            <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">,</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">composite</span><span class="p">}</span>
-        <span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structure</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">structure_family</span> <span class="o">!=</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span>
+            <span class="n">structure</span><span class="p">,</span> <span class="nb">dict</span>
+        <span class="p">):</span>
             <span class="n">structure_type</span> <span class="o">=</span> <span class="n">STRUCTURE_TYPES</span><span class="p">[</span><span class="n">structure_family</span><span class="p">]</span>
             <span class="n">structure</span> <span class="o">=</span> <span class="n">structure_type</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span><span class="n">structure</span><span class="p">)</span>
 
@@ -954,39 +938,6 @@ window.addEventListener("load", () => mermaid.run());
     <span class="c1"># When (re)chunking arrays for upload, we use this limit</span>
     <span class="c1"># to attempt to avoid bumping into size limits.</span>
     <span class="n">_SUGGESTED_MAX_UPLOAD_SIZE</span> <span class="o">=</span> <span class="mi">100_000_000</span>  <span class="c1"># 100 MB</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">create_composite</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">specs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">access_tags</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a new, empty composite container.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        key : str, optional</span>
-<span class="sd">            Key (name) for this new node. If None, the server will provide a unique key.</span>
-<span class="sd">        metadata : dict, optional</span>
-<span class="sd">            User metadata. May be nested. Must contain only basic types</span>
-<span class="sd">            (e.g. numbers, strings, lists, dicts) that are JSON-serializable.</span>
-<span class="sd">        specs : List[Spec], optional</span>
-<span class="sd">            List of names that are used to label that the data and/or metadata</span>
-<span class="sd">            conform to some named standard specification.</span>
-<span class="sd">        access_tags: List[str], optional</span>
-<span class="sd">            Server-specific authZ tags in list form, used to confer access to the node.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
-            <span class="n">StructureFamily</span><span class="o">.</span><span class="n">composite</span><span class="p">,</span>
-            <span class="p">[],</span>
-            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
-            <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
-            <span class="n">access_tags</span><span class="o">=</span><span class="n">access_tags</span><span class="p">,</span>
-        <span class="p">)</span>
 
 <div class="viewcode-block" id="Container.create_container">
 <a class="viewcode-back" href="../../../reference/generated/tiled.client.container.Container.create_container.html#tiled.client.container.Container.create_container">[docs]</a>
@@ -1467,7 +1418,9 @@ window.addEventListener("load", () => mermaid.run());
     <span class="s2">&quot;numpy&quot;</span><span class="p">:</span> <span class="n">OneShotCachedMap</span><span class="p">(</span>
         <span class="p">{</span>
             <span class="s2">&quot;container&quot;</span><span class="p">:</span> <span class="n">_Wrap</span><span class="p">(</span><span class="n">Container</span><span class="p">),</span>
-            <span class="s2">&quot;composite&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">((</span><span class="s2">&quot;..composite&quot;</span><span class="p">,</span> <span class="n">Container</span><span class="o">.</span><span class="vm">__module__</span><span class="p">),</span> <span class="s2">&quot;Composite&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;composite&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">(</span>
+                <span class="p">(</span><span class="s2">&quot;..composite&quot;</span><span class="p">,</span> <span class="n">Container</span><span class="o">.</span><span class="vm">__module__</span><span class="p">),</span> <span class="s2">&quot;CompositeClient&quot;</span>
+            <span class="p">),</span>
             <span class="s2">&quot;array&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">((</span><span class="s2">&quot;..array&quot;</span><span class="p">,</span> <span class="n">Container</span><span class="o">.</span><span class="vm">__module__</span><span class="p">),</span> <span class="s2">&quot;ArrayClient&quot;</span><span class="p">),</span>
             <span class="s2">&quot;awkward&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">((</span><span class="s2">&quot;..awkward&quot;</span><span class="p">,</span> <span class="n">Container</span><span class="o">.</span><span class="vm">__module__</span><span class="p">),</span> <span class="s2">&quot;AwkwardClient&quot;</span><span class="p">),</span>
             <span class="s2">&quot;dataframe&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">(</span>
@@ -1485,7 +1438,9 @@ window.addEventListener("load", () => mermaid.run());
     <span class="s2">&quot;dask&quot;</span><span class="p">:</span> <span class="n">OneShotCachedMap</span><span class="p">(</span>
         <span class="p">{</span>
             <span class="s2">&quot;container&quot;</span><span class="p">:</span> <span class="n">_Wrap</span><span class="p">(</span><span class="n">Container</span><span class="p">),</span>
-            <span class="s2">&quot;composite&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">((</span><span class="s2">&quot;..composite&quot;</span><span class="p">,</span> <span class="n">Container</span><span class="o">.</span><span class="vm">__module__</span><span class="p">),</span> <span class="s2">&quot;Composite&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;composite&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">(</span>
+                <span class="p">(</span><span class="s2">&quot;..composite&quot;</span><span class="p">,</span> <span class="n">Container</span><span class="o">.</span><span class="vm">__module__</span><span class="p">),</span> <span class="s2">&quot;CompositeClient&quot;</span>
+            <span class="p">),</span>
             <span class="s2">&quot;array&quot;</span><span class="p">:</span> <span class="n">_LazyLoad</span><span class="p">((</span><span class="s2">&quot;..array&quot;</span><span class="p">,</span> <span class="n">Container</span><span class="o">.</span><span class="vm">__module__</span><span class="p">),</span> <span class="s2">&quot;DaskArrayClient&quot;</span><span class="p">),</span>
             <span class="c1"># TODO Create DaskAwkwardClient</span>
             <span class="c1"># &quot;awkward&quot;: _LazyLoad((&quot;..awkward&quot;, Container.__module__), &quot;DaskAwkwardClient&quot;),</span>
