@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Navigate with the Python Client &mdash; tiled 0.0.1.dev2311+g06577e122 documentation</title>
+  <title>Navigate with the Python Client &mdash; tiled 0.0.1.dev2313+g6e0942a89 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
@@ -15,7 +15,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=27b61cdd"></script>
+      <script src="../_static/documentation_options.js?v=1cb02732"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -49,7 +49,10 @@
               <p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Navigate with the Python Client</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Navigate with the Python Client</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#performance-characteristics-of-slicing-containers">Performance Characteristics of Slicing Containers</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="slicing.html">Load Slices of Data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="export.html">Deliberate Export</a></li>
 <li class="toctree-l1"><a class="reference internal" href="login.html">Log into an Authenticated Tiled Server</a></li>
@@ -205,7 +208,7 @@ that work on Python dictionaries work on Containers. We can</p>
 </pre></div>
 </div>
 <ul class="simple">
-<li><p>or even</p></li>
+<li><p>or, equivalently</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="p">[</span><span class="s1">&#39;nested/images/tiny_image&#39;</span><span class="p">]</span>
 <span class="go">&lt;ArrayClient shape=(50, 50) chunks=((50,), (50,)) dtype=float64&gt;</span>
@@ -296,6 +299,30 @@ space to use or not.</p>
 </pre></div>
 </div>
 <p>See a later tutorial for how to search Containers with queries.</p>
+<section id="performance-characteristics-of-slicing-containers">
+<h2>Performance Characteristics of Slicing Containers<a class="headerlink" href="#performance-characteristics-of-slicing-containers" title="Link to this heading"></a></h2>
+<p>Consider what Python does when executing this code:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">c</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">][</span><span class="s1">&#39;y&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>First, it needs to construct the intermediate result <code class="docutils literal notranslate"><span class="pre">c['x']</span></code>, and then
+run <code class="docutils literal notranslate"><span class="pre">['y']</span></code> on that. This requires two HTTP requests, with associated
+latency for communication between the client and the server.</p>
+<p>Now consider these alternative spellings:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">c</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">]</span>
+<span class="n">c</span><span class="p">[</span><span class="s1">&#39;x/y&#39;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>These are not standard dictionary usage; they are Tiled specific short-hands.
+They can run faster because they give Python information up front, enabling
+Tiled to issue just a single HTTP request to fetch the description of the thing
+we actually want (<code class="docutils literal notranslate"><span class="pre">y</span></code>) and avoid spending time fetching <code class="docutils literal notranslate"><span class="pre">x</span></code> in the process.</p>
+<p>In some situations, Tiled will proactively bundle the description of <code class="docutils literal notranslate"><span class="pre">y</span></code> into
+the description of its parent <code class="docutils literal notranslate"><span class="pre">x</span></code>, in an attempt to reduce back-and-forth. In
+those cases, you will find <code class="docutils literal notranslate"><span class="pre">c['x']['y']</span></code> to be just as fast as <code class="docutils literal notranslate"><span class="pre">c['x',</span> <span class="pre">'y']</span></code> or
+<code class="docutils literal notranslate"><span class="pre">c['x/y']</span></code>.  This is not possible in all situations, because containers can be
+quite large and of course Tiled cannot predict which items the user may need.</p>
+</section>
 </section>
 
 
