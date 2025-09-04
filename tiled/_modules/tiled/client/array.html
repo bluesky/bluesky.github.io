@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.array &mdash; tiled 0.0.1.dev2309+g4aa33d74b documentation</title>
+  <title>tiled.client.array &mdash; tiled 0.0.1.dev2309+gf409d1a56 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=99ab5269"></script>
+      <script src="../../../_static/documentation_options.js?v=6b92f5fa"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -61,6 +61,7 @@ window.addEventListener("load", () => mermaid.run());
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/serving-files.html">Serve a Directory of Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/search.html">Search</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/writing.html">Writing Data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/streaming.html">Streaming</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/simple-server.html">Simple Tiled Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/plotly-integration.html">Plot Data in Plotly Chart Studio</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../tutorials/zarr-integration.html">Serve Data as Zarr</a></li>
@@ -140,7 +141,7 @@ window.addEventListener("load", () => mermaid.run());
              
   <h1>Source code for tiled.client.array</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_qs</span><span class="p">,</span> <span class="n">urlparse</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask</span>
@@ -158,6 +159,9 @@ window.addEventListener("load", () => mermaid.run());
     <span class="n">params_from_slice</span><span class="p">,</span>
     <span class="n">retry_context</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.stream</span><span class="w"> </span><span class="kn">import</span> <span class="n">Subscription</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_DaskArrayClient</span><span class="p">(</span><span class="n">BaseClient</span><span class="p">):</span>
@@ -486,6 +490,19 @@ window.addEventListener("load", () => mermaid.run());
             <span class="bp">self</span><span class="o">.</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;links&quot;</span><span class="p">][</span><span class="n">link</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">template_vars</span><span class="p">),</span>
             <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
         <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Subscription&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a Subscription on writes to this node.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        subscription : Subscription</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Keep this import here to defer the websockets import until/unless needed.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.stream</span><span class="w"> </span><span class="kn">import</span> <span class="n">Subscription</span>
+
+        <span class="k">return</span> <span class="n">Subscription</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">path_parts</span><span class="p">)</span>
 
 
 <span class="c1"># Subclass with a public class that adds the dask-specific methods.</span>
