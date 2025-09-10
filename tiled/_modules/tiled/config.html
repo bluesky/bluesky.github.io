@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.config &mdash; tiled 0.0.1.dev2316+g08c27b3bb documentation</title>
+  <title>tiled.config &mdash; tiled 0.0.1.dev2316+g5468781cf documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=a1f4e8dd"></script>
+      <script src="../../_static/documentation_options.js?v=5f18fb4c"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -148,406 +148,343 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cached_property</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">jsonschema</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">ImportString</span><span class="p">,</span> <span class="n">field_validator</span><span class="p">,</span> <span class="n">model_validator</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.server.protocols</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExternalAuthenticator</span><span class="p">,</span> <span class="n">InternalAuthenticator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.type_aliases</span><span class="w"> </span><span class="kn">import</span> <span class="n">AppTask</span><span class="p">,</span> <span class="n">TaskMap</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.adapters.mapping</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapAdapter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_uri</span><span class="p">,</span> <span class="n">in_memory</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.media_type_registration</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SerializationRegistry</span><span class="p">,</span>
     <span class="n">default_compression_registry</span><span class="p">,</span>
     <span class="n">default_deserialization_registry</span><span class="p">,</span>
     <span class="n">default_serialization_registry</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.query_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_query_registry</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.server.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.server.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_settings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_object</span><span class="p">,</span> <span class="n">parse</span><span class="p">,</span> <span class="n">prepend_to_sys_path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.validation_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_validation_registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse</span><span class="p">,</span> <span class="n">prepend_to_sys_path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.validation_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationRegistry</span><span class="p">,</span> <span class="n">default_validation_registry</span>
+
+<span class="n">TREE_ALIASES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;catalog&quot;</span><span class="p">:</span> <span class="s2">&quot;tiled.catalog:from_uri&quot;</span><span class="p">}</span>
 
 
-<span class="nd">@cache</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">schema</span><span class="p">():</span>
-    <span class="s2">&quot;Load the schema for service-side configuration.&quot;</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
-
-    <span class="n">here</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span>
-    <span class="n">schema_path</span> <span class="o">=</span> <span class="n">here</span> <span class="o">/</span> <span class="s2">&quot;config_schemas&quot;</span> <span class="o">/</span> <span class="s2">&quot;service_configuration.yml&quot;</span>
-    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">schema_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">sub_paths</span><span class="p">(</span><span class="n">segments</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">segments</span><span class="p">)):</span>
+        <span class="k">yield</span> <span class="n">segments</span><span class="p">[:</span><span class="n">i</span><span class="p">]</span>
 
 
-<div class="viewcode-block" id="construct_build_app_kwargs">
-<a class="viewcode-back" href="../../reference/generated/tiled.config.construct_build_app_kwargs.html#tiled.config.construct_build_app_kwargs">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">construct_build_app_kwargs</span><span class="p">(</span>
-    <span class="n">config</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">source_filepath</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Given parsed configuration, construct arguments for build_app(...).</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TreeSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">tree_type</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">ImportString</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="n">alias</span><span class="o">=</span><span class="s2">&quot;tree&quot;</span><span class="p">)]</span>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
 
-<span class="sd">    The singleton global instances of the registries are used (and modified).</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">config</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>  <span class="c1"># Avoid mutating input.</span>
-    <span class="n">startup_tasks</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">shutdown_tasks</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">background_tasks</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="n">sys_path_additions</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">if</span> <span class="n">source_filepath</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">source_filepath</span><span class="p">):</span>
-            <span class="n">directory</span> <span class="o">=</span> <span class="n">source_filepath</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">directory</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">source_filepath</span><span class="p">)</span>
-        <span class="n">sys_path_additions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
-    <span class="k">with</span> <span class="n">prepend_to_sys_path</span><span class="p">(</span><span class="o">*</span><span class="n">sys_path_additions</span><span class="p">):</span>
-        <span class="c1"># Process auth settings</span>
-        <span class="n">auth_spec</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;authentication&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">age</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;refresh_token_max_age&quot;</span><span class="p">,</span> <span class="s2">&quot;session_max_age&quot;</span><span class="p">,</span> <span class="s2">&quot;access_token_max_age&quot;</span><span class="p">]:</span>
-            <span class="k">if</span> <span class="n">age</span> <span class="ow">in</span> <span class="n">auth_spec</span><span class="p">:</span>
-                <span class="n">auth_spec</span><span class="p">[</span><span class="n">age</span><span class="p">]</span> <span class="o">=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="n">auth_spec</span><span class="p">[</span><span class="n">age</span><span class="p">])</span>
-        <span class="n">access_control</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;access_control&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">providers</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">auth_spec</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;providers&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-        <span class="n">provider_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="p">[</span><span class="s2">&quot;provider&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">providers</span><span class="p">]</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">provider_names</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">provider_names</span><span class="p">):</span>
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_callable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tree_type</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;The names given for &#39;provider&#39; must be unique. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Found duplicates in </span><span class="si">{</span><span class="n">providers</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Tree type &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tree_type</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2">&#39; is not callable and cannot take args&quot;</span>
             <span class="p">)</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">authenticator</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">providers</span><span class="p">):</span>
-            <span class="n">authenticator_class</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span>
-                <span class="n">authenticator</span><span class="p">[</span><span class="s2">&quot;authenticator&quot;</span><span class="p">],</span> <span class="n">accept_live_object</span><span class="o">=</span><span class="kc">True</span>
-            <span class="p">)</span>
-            <span class="n">authenticator</span> <span class="o">=</span> <span class="n">authenticator_class</span><span class="p">(</span><span class="o">**</span><span class="n">authenticator</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">,</span> <span class="p">{}))</span>
-            <span class="c1"># Replace &quot;package.module:Object&quot; with live instance.</span>
-            <span class="n">auth_spec</span><span class="p">[</span><span class="s2">&quot;providers&quot;</span><span class="p">][</span><span class="n">i</span><span class="p">][</span><span class="s2">&quot;authenticator&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">authenticator</span>
-        <span class="k">if</span> <span class="n">access_control</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;access_policy&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">access_policy_import_path</span> <span class="o">=</span> <span class="n">access_control</span><span class="p">[</span><span class="s2">&quot;access_policy&quot;</span><span class="p">]</span>
-            <span class="n">access_policy_class</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span>
-                <span class="n">access_policy_import_path</span><span class="p">,</span> <span class="n">accept_live_object</span><span class="o">=</span><span class="kc">True</span>
-            <span class="p">)</span>
-            <span class="n">access_policy</span> <span class="o">=</span> <span class="n">access_policy_class</span><span class="p">(</span><span class="o">**</span><span class="n">access_control</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">,</span> <span class="p">{}))</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">access_policy</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1"># TODO Enable entrypoint to extend aliases?</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
-        <span class="c1"># Process server settings</span>
-        <span class="n">server_settings</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="n">root_path</span> <span class="o">:=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;root_path&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">):</span>
-            <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;root_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">root_path</span>
-        <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;allow_origins&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allow_origins&quot;</span><span class="p">)</span>
-        <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;response_bytesize_limit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;response_bytesize_limit&quot;</span>
-        <span class="p">)</span>
-        <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;exact_count_limit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;exact_count_limit&quot;</span><span class="p">)</span>
-        <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;database&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;database&quot;</span><span class="p">,</span> <span class="p">{})</span>
-        <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;reject_undeclared_specs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;reject_undeclared_specs&quot;</span>
-        <span class="p">)</span>
-        <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;expose_raw_assets&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expose_raw_assets&quot;</span><span class="p">)</span>
-        <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metrics&quot;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">startup_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AppTask</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;startup_tasks&quot;</span><span class="p">,</span> <span class="p">[])</span>
 
-        <span class="c1"># Process trees</span>
-        <span class="n">tree_aliases</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;catalog&quot;</span><span class="p">:</span> <span class="s2">&quot;tiled.catalog:from_uri&quot;</span><span class="p">,</span>
-        <span class="p">}</span>
-        <span class="n">trees</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;trees&quot;</span><span class="p">,</span> <span class="p">[]):</span>
-            <span class="n">segments</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">segment</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">segment</span><span class="p">)</span>
-            <span class="n">tree_spec</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;tree&quot;</span><span class="p">]</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tree_spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">tree_spec</span> <span class="o">==</span> <span class="s2">&quot;files&quot;</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-<span class="w">                    </span><span class="sd">&quot;&quot;&quot;The way that tiled serves files has changed.</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shutdown_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AppTask</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;shutdown_tasks&quot;</span><span class="p">,</span> <span class="p">[])</span>
 
-<span class="sd">See documentation section &quot;Serve a Directory of Files&quot;.&quot;&quot;&quot;</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">background_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AppTask</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">segments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">segment</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">segment</span><span class="p">)</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tree_type</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree_type</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree_type</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree_entry</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tree</span><span class="p">)</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;tree_type&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;before&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree_alias</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">TREE_ALIASES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">AuthenticationProviderSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">provider</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">authenticator</span><span class="p">:</span> <span class="n">ImportString</span>
+    <span class="n">args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">into_auth_entry</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">InternalAuthenticator</span><span class="p">,</span> <span class="n">ExternalAuthenticator</span><span class="p">]]:</span>
+        <span class="n">auth</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">authenticator</span><span class="p">(</span><span class="o">**</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="ow">or</span> <span class="p">{}))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">auth</span><span class="p">,</span> <span class="p">(</span><span class="n">InternalAuthenticator</span><span class="p">,</span> <span class="n">ExternalAuthenticator</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Type </span><span class="si">{</span><span class="n">auth</span><span class="o">.</span><span class="vm">__class__</span><span class="si">}</span><span class="s2"> is not a known authenticator type&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">provider</span><span class="p">,</span> <span class="n">auth</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">TiledAdmin</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">provider</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Authentication</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="c1"># Defaults are all left as None to differentiate between unset and set to the default</span>
+    <span class="n">providers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">AuthenticationProviderSpec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">tiled_admins</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">TiledAdmin</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">secret_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">allow_anonymous_access</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">single_user_api_key</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Field</span><span class="p">(</span><span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;[a-zA-Z0-9]+&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">access_token_max_age</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">timedelta</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">refresh_token_max_age</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">timedelta</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">session_max_age</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">timedelta</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;providers&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_unique_names</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">AuthenticationProviderSpec</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">AuthenticationProviderSpec</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">provider</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">value</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Authenticator provider names must be unique&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">value</span> <span class="ow">or</span> <span class="p">[]</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">authenticators</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">InternalAuthenticator</span><span class="p">,</span> <span class="n">ExternalAuthenticator</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">auth</span><span class="o">.</span><span class="n">into_auth_entry</span><span class="p">()</span> <span class="k">for</span> <span class="n">auth</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">providers</span> <span class="ow">or</span> <span class="p">())</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Database</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">uri</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">init_if_not_exists</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">pool_pre_ping</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">pool_size</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">Field</span><span class="p">(</span><span class="n">ge</span><span class="o">=</span><span class="mi">2</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">max_overflow</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">AccessControl</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">access_policy</span><span class="p">:</span> <span class="n">ImportString</span>
+    <span class="n">args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">access_policy</span><span class="p">(</span><span class="o">**</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="ow">or</span> <span class="p">{}))</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MetricsConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">prometheus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidationSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">spec</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">validator</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ImportString</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">StreamingCache</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">uri</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">data_ttl</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">seq_ttl</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">socket_timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">socket_connect_timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Config</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">trees</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">]</span>
+    <span class="n">media_types</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ImportString</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">file_extensions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">authentication</span><span class="p">:</span> <span class="n">Authentication</span> <span class="o">=</span> <span class="n">Authentication</span><span class="p">()</span>
+    <span class="n">database</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Database</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># TODO: Replace Any with AccessPolicy when #1044 is merged</span>
+    <span class="n">access_policy</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Field</span><span class="p">(</span><span class="n">alias</span><span class="o">=</span><span class="s2">&quot;access_control&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">response_bytesize_limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">300_000_000</span>
+    <span class="n">exact_count_limit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">allow_origins</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">uvicorn</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">metrics</span><span class="p">:</span> <span class="n">MetricsConfig</span> <span class="o">=</span> <span class="n">MetricsConfig</span><span class="p">()</span>
+    <span class="n">specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ValidationSpec</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">reject_undeclared_specs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">expose_raw_assets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="n">catalog_pool_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">storage_pool_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">catalog_max_overflow</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">storage_max_overflow</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">streaming_cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">StreamingCache</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;access_policy&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_access_policy</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert the access policy spec into the construct instance&quot;&quot;&quot;</span>
+        <span class="n">access</span> <span class="o">=</span> <span class="n">AccessControl</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">access</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+
+    <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;trees&quot;</span><span class="p">)</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">non_overlapping_trees</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">trees</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure that paths to trees do not collide&quot;&quot;&quot;</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">t</span><span class="o">.</span><span class="n">segments</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">trees</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="nb">len</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">sub</span> <span class="ow">in</span> <span class="p">(</span><span class="o">*</span><span class="n">sub_paths</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">path</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">sub</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Tree paths cannot be subpaths of each other: &#39;/</span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sub</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39; and &#39;/</span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+                    <span class="p">)</span>
+            <span class="n">paths</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">trees</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fudge_tree_args</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Needing to fudge the args of tree specs is awful</span>
+        <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">trees</span><span class="p">:</span>
+            <span class="n">tree</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">args</span> <span class="ow">or</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="n">tree</span><span class="o">.</span><span class="n">tree_type</span> <span class="ow">is</span> <span class="n">from_uri</span><span class="p">:</span>
+                <span class="n">defaults</span> <span class="o">=</span> <span class="n">get_settings</span><span class="p">()</span>
+                <span class="c1"># Assumes none of the values can be 0</span>
+                <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;catalog_pool_size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">catalog_pool_size</span> <span class="ow">or</span> <span class="n">defaults</span><span class="o">.</span><span class="n">catalog_pool_size</span>
                 <span class="p">)</span>
-            <span class="n">import_path</span> <span class="o">=</span> <span class="n">tree_aliases</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">tree_spec</span><span class="p">,</span> <span class="n">tree_spec</span><span class="p">)</span>
-            <span class="n">obj</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">import_path</span><span class="p">,</span> <span class="n">accept_live_object</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="k">if</span> <span class="p">(</span><span class="s2">&quot;args&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="nb">callable</span><span class="p">(</span><span class="n">obj</span><span class="p">)):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Object imported from </span><span class="si">{</span><span class="n">import_path</span><span class="si">}</span><span class="s2"> cannot take args. &quot;</span>
-                    <span class="s2">&quot;It is not callable.&quot;</span>
+                <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;storage_pool_size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">storage_pool_size</span> <span class="ow">or</span> <span class="n">defaults</span><span class="o">.</span><span class="n">storage_pool_size</span>
                 <span class="p">)</span>
-            <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
-                <span class="c1"># Interpret obj as a tree *factory*.</span>
-                <span class="n">args</span> <span class="o">=</span> <span class="p">{}</span>
-                <span class="n">args</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">,</span> <span class="p">{}))</span>
+                <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;catalog_max_overflow&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">catalog_max_overflow</span> <span class="ow">or</span> <span class="n">defaults</span><span class="o">.</span><span class="n">catalog_max_overflow</span>
+                <span class="p">)</span>
+                <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;storage_max_overflow&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">storage_max_overflow</span> <span class="ow">or</span> <span class="n">defaults</span><span class="o">.</span><span class="n">storage_max_overflow</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">tree</span><span class="o">.</span><span class="n">tree_type</span> <span class="ow">in</span> <span class="p">(</span><span class="n">from_uri</span><span class="p">,</span> <span class="n">in_memory</span><span class="p">):</span>
+                <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;cache_settings&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">streaming_cache</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming_cache</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
-                <span class="c1"># Add other server-related settings falling back to Settings defaults</span>
-                <span class="c1"># TODO: To be refactroed; these parameters should be in `server_settings`</span>
-                <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="n">from_uri</span><span class="p">:</span>
-                    <span class="n">default_settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">()</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span>
-                    <span class="n">from_server_settings</span> <span class="o">=</span> <span class="p">{</span>
-                        <span class="n">k</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">default_settings</span><span class="p">[</span><span class="n">k</span><span class="p">])</span>
-                        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">{</span>
-                            <span class="s2">&quot;catalog_pool_size&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;storage_pool_size&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;catalog_max_overflow&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;storage_max_overflow&quot;</span><span class="p">,</span>
-                        <span class="p">}</span>
-                    <span class="p">}</span>
-                    <span class="n">args</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">from_server_settings</span><span class="p">)</span>
-                <span class="k">if</span> <span class="p">(</span><span class="n">obj</span> <span class="ow">is</span> <span class="n">from_uri</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">obj</span> <span class="ow">is</span> <span class="n">in_memory</span><span class="p">):</span>
-                    <span class="n">args</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;cache_settings&quot;</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;streaming_cache&quot;</span><span class="p">)})</span>
-                <span class="n">tree</span> <span class="o">=</span> <span class="n">obj</span><span class="p">(</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Interpret obj as a tree *instance*.</span>
-                <span class="n">tree</span> <span class="o">=</span> <span class="n">obj</span>
-            <span class="k">if</span> <span class="n">segments</span> <span class="ow">in</span> <span class="n">trees</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The path </span><span class="si">{</span><span class="s1">&#39;/&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">segments</span><span class="p">)</span><span class="si">}</span><span class="s2"> was specified twice.&quot;</span><span class="p">)</span>
-            <span class="n">trees</span><span class="p">[</span><span class="n">segments</span><span class="p">]</span> <span class="o">=</span> <span class="n">tree</span>
-            <span class="n">startup_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;startup_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-            <span class="n">shutdown_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;shutdown_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-            <span class="n">background_tasks</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;background_tasks&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">trees</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Configuration contains no trees&quot;</span><span class="p">)</span>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">root_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">uvicorn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;root_path&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">merged_trees</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>  <span class="c1"># TODO: update when # 1047 is merged</span>
+        <span class="n">trees</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">tree_entry</span> <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">trees</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">list</span><span class="p">(</span><span class="n">trees</span><span class="p">)</span> <span class="o">==</span> <span class="p">[()]:</span>
             <span class="c1"># Simple case: there is one tree, served at the root path /.</span>
-            <span class="n">root_tree</span> <span class="o">=</span> <span class="n">tree</span>
+            <span class="n">root_tree</span> <span class="o">=</span> <span class="n">trees</span><span class="p">[()]</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># There are one or more tree(s) to be served at</span>
-            <span class="c1"># sub-paths. Merged them into one root MapAdapter.</span>
-            <span class="c1"># Map path segments to dicts containing Adapters at that path.</span>
-            <span class="n">root_mapping</span> <span class="o">=</span> <span class="p">{}</span>
-            <span class="n">index</span> <span class="o">=</span> <span class="p">{():</span> <span class="n">root_mapping</span><span class="p">}</span>
-            <span class="n">include_routers</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="c1"># There are one or more tree(s) to be served at sub-paths so merge</span>
+            <span class="c1"># them into one root MapAdapter with map path segments to dicts</span>
+            <span class="c1"># containing Adapters at that path.</span>
+            <span class="n">root_mapping</span> <span class="o">=</span> <span class="n">trees</span><span class="o">.</span><span class="n">pop</span><span class="p">((),</span> <span class="p">{})</span>
+            <span class="n">index</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">{():</span> <span class="n">root_mapping</span><span class="p">}</span>
+            <span class="n">all_routers</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+            <span class="c1"># for rest of trees, build up parent nodes if required</span>
             <span class="k">for</span> <span class="n">segments</span><span class="p">,</span> <span class="n">tree</span> <span class="ow">in</span> <span class="n">trees</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">segments</span><span class="p">)):</span>
-                    <span class="k">if</span> <span class="n">segments</span><span class="p">[:</span><span class="n">i</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">index</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">subpath</span> <span class="ow">in</span> <span class="n">sub_paths</span><span class="p">(</span><span class="n">segments</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">subpath</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">index</span><span class="p">:</span>
                         <span class="n">mapping</span> <span class="o">=</span> <span class="p">{}</span>
-                        <span class="n">index</span><span class="p">[</span><span class="n">segments</span><span class="p">[:</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">mapping</span>
-                        <span class="n">parent</span> <span class="o">=</span> <span class="n">index</span><span class="p">[</span><span class="n">segments</span><span class="p">[:</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]]</span>
-                        <span class="n">parent</span><span class="p">[</span><span class="n">segments</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">MapAdapter</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
+                        <span class="n">index</span><span class="p">[</span><span class="n">subpath</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapping</span>
+                        <span class="n">index</span><span class="p">[</span><span class="n">subpath</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]][</span><span class="n">subpath</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">MapAdapter</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
                 <span class="n">index</span><span class="p">[</span><span class="n">segments</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]][</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">tree</span>
-                <span class="c1"># Collect any custom routers.</span>
-                <span class="n">routers</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;include_routers&quot;</span><span class="p">,</span> <span class="p">[])</span>
-                <span class="k">for</span> <span class="n">router</span> <span class="ow">in</span> <span class="n">routers</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">router</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">include_routers</span><span class="p">:</span>
-                        <span class="n">include_routers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">router</span><span class="p">)</span>
+                <span class="n">tree_routers</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;include_routers&quot;</span><span class="p">,</span> <span class="p">[])</span>
+                <span class="n">all_routers</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tree_routers</span><span class="p">)</span>
+
             <span class="n">root_tree</span> <span class="o">=</span> <span class="n">MapAdapter</span><span class="p">(</span><span class="n">root_mapping</span><span class="p">)</span>
-            <span class="n">root_tree</span><span class="o">.</span><span class="n">include_routers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">include_routers</span><span class="p">)</span>
+            <span class="n">root_tree</span><span class="o">.</span><span class="n">include_routers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">all_routers</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">root_tree</span>
 
-        <span class="c1"># Process other configuration items</span>
-        <span class="k">for</span> <span class="n">structure_family</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;media_types&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">for</span> <span class="n">media_type</span><span class="p">,</span> <span class="n">import_path</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">serializer</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">import_path</span><span class="p">,</span> <span class="n">accept_live_object</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                <span class="n">default_serialization_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-                    <span class="n">structure_family</span><span class="p">,</span> <span class="n">media_type</span><span class="p">,</span> <span class="n">serializer</span>
-                <span class="p">)</span>
-        <span class="k">for</span> <span class="n">ext</span><span class="p">,</span> <span class="n">media_type</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;file_extensions&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">default_serialization_registry</span><span class="o">.</span><span class="n">register_alias</span><span class="p">(</span><span class="n">ext</span><span class="p">,</span> <span class="n">media_type</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TaskMap</span><span class="p">:</span>
+        <span class="n">startup</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">shutdown</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">background</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">trees</span><span class="p">:</span>
+            <span class="n">startup</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">startup_tasks</span><span class="p">)</span>
+            <span class="n">shutdown</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">shutdown_tasks</span><span class="p">)</span>
+            <span class="n">background</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">background_tasks</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;startup&quot;</span><span class="p">:</span> <span class="n">startup</span><span class="p">,</span>
+            <span class="s2">&quot;shutdown&quot;</span><span class="p">:</span> <span class="n">shutdown</span><span class="p">,</span>
+            <span class="s2">&quot;background&quot;</span><span class="p">:</span> <span class="n">background</span><span class="p">,</span>
+        <span class="p">}</span>
 
-        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;specs&quot;</span><span class="p">,</span> <span class="p">[]):</span>
-            <span class="k">if</span> <span class="s2">&quot;validator&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">:</span>
-                <span class="n">validator</span> <span class="o">=</span> <span class="n">import_object</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;validator&quot;</span><span class="p">])</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># no-op</span>
-                <span class="n">validator</span> <span class="o">=</span> <span class="n">_no_op_validator</span>
-            <span class="n">default_validation_registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">Spec</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;spec&quot;</span><span class="p">]),</span> <span class="n">validator</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">serialization_registry</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SerializationRegistry</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">default_serialization_registry</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">family</span><span class="p">,</span> <span class="n">types</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">media_types</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">typ</span><span class="p">,</span> <span class="n">func</span> <span class="ow">in</span> <span class="n">types</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">base</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">typ</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ext</span><span class="p">,</span> <span class="n">media_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">file_extensions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">base</span><span class="o">.</span><span class="n">register_alias</span><span class="p">(</span><span class="n">ext</span><span class="p">,</span> <span class="n">media_type</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">base</span>
 
-    <span class="c1"># TODO Make compression_registry extensible via configuration.</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">&quot;tree&quot;</span><span class="p">:</span> <span class="n">root_tree</span><span class="p">,</span>
-        <span class="s2">&quot;authentication&quot;</span><span class="p">:</span> <span class="n">auth_spec</span><span class="p">,</span>
-        <span class="s2">&quot;server_settings&quot;</span><span class="p">:</span> <span class="n">server_settings</span><span class="p">,</span>
-        <span class="s2">&quot;query_registry&quot;</span><span class="p">:</span> <span class="n">default_query_registry</span><span class="p">,</span>
-        <span class="s2">&quot;serialization_registry&quot;</span><span class="p">:</span> <span class="n">default_serialization_registry</span><span class="p">,</span>
-        <span class="s2">&quot;deserialization_registry&quot;</span><span class="p">:</span> <span class="n">default_deserialization_registry</span><span class="p">,</span>
-        <span class="s2">&quot;compression_registry&quot;</span><span class="p">:</span> <span class="n">default_compression_registry</span><span class="p">,</span>
-        <span class="s2">&quot;validation_registry&quot;</span><span class="p">:</span> <span class="n">default_validation_registry</span><span class="p">,</span>
-        <span class="s2">&quot;tasks&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;startup&quot;</span><span class="p">:</span> <span class="n">startup_tasks</span><span class="p">,</span>
-            <span class="s2">&quot;shutdown&quot;</span><span class="p">:</span> <span class="n">shutdown_tasks</span><span class="p">,</span>
-            <span class="s2">&quot;background&quot;</span><span class="p">:</span> <span class="n">background_tasks</span><span class="p">,</span>
-        <span class="p">},</span>
-        <span class="s2">&quot;access_policy&quot;</span><span class="p">:</span> <span class="n">access_policy</span><span class="p">,</span>
-    <span class="p">}</span></div>
-
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">merge</span><span class="p">(</span><span class="n">configs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-    <span class="n">merged</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;trees&quot;</span><span class="p">:</span> <span class="p">[]}</span>
-
-    <span class="c1"># These variables are used to produce error messages that point</span>
-    <span class="c1"># to the relevant config file(s).</span>
-    <span class="n">authentication_config_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">access_control_config_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">uvicorn_config_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">metrics_config_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">database_config_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">response_bytesize_limit_config_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">allow_origins</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">media_types</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)</span>
-    <span class="n">specs</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">reject_undeclared_specs_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">streaming_cache_source</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">file_extensions</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">paths</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># map each item&#39;s path to config file that specified it</span>
-
-    <span class="k">for</span> <span class="n">filepath</span><span class="p">,</span> <span class="n">config</span> <span class="ow">in</span> <span class="n">configs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">for</span> <span class="n">structure_family</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;media_types&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">media_types</span><span class="p">[</span><span class="n">structure_family</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-
-        <span class="n">file_extensions</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;file_extensions&quot;</span><span class="p">,</span> <span class="p">{}))</span>
-        <span class="n">allow_origins</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allow_origins&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-        <span class="k">if</span> <span class="s2">&quot;access_control&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;access_control&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;access_control can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">access_control_config_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">access_control_config_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;access_control&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;access_control&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="s2">&quot;authentication&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;authentication&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;authentication can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">authentication_config_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">authentication_config_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;authentication&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="s2">&quot;uvicorn&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;uvicorn&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;uvicorn can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">uvicorn_config_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">uvicorn_config_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;uvicorn&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;uvicorn&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="s2">&quot;object_cache&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="s2">&quot;The object cache has been removed. &quot;</span>
-                <span class="s2">&quot;The config of the object cache no longer has any effect.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="s2">&quot;response_bytesize_limit&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;response_bytesize_limit&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;response_bytesize_limit can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">response_bytesize_limit_config_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">response_bytesize_limit_config_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;response_bytesize_limit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;response_bytesize_limit&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="s2">&quot;metrics&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;metrics&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;metrics can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">metrics_config_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">metrics_config_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;metrics&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="s2">&quot;database&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;database&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;database configuration can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">database_config_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">database_config_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;database&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;database&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="s2">&quot;reject_undeclared_specs&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;reject_undeclared_specs&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;&#39;reject_undeclared_specs&#39; can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">reject_undeclared_specs_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">reject_undeclared_specs_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;reject_undeclared_specs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;reject_undeclared_specs&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="s2">&quot;streaming_cache&quot;</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;streaming_cache&quot;</span> <span class="ow">in</span> <span class="n">merged</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="s2">&quot;&#39;streaming_cache&#39; can only be specified in one file. &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;It was found in both </span><span class="si">{</span><span class="n">streaming_cache_source</span><span class="si">}</span><span class="s2"> and &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">streaming_cache_source</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;streaming_cache&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;streaming_cache&quot;</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;trees&quot;</span><span class="p">,</span> <span class="p">[]):</span>
-            <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
-                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;A given path may be only be specified once.&quot;</span>
-                <span class="s2">&quot;The path </span><span class="si">{item[&#39;path&#39;]}</span><span class="s2"> was found twice in &quot;</span>
-                <span class="k">if</span> <span class="n">filepath</span> <span class="o">==</span> <span class="n">paths</span><span class="p">[</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">]]:</span>
-                    <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">.&quot;</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">msg</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">paths</span><span class="p">[</span><span class="n">item</span><span class="p">[</span><span class="s1">&#39;path&#39;</span><span class="p">]]</span><span class="si">}</span><span class="s2">.&quot;</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
-            <span class="n">paths</span><span class="p">[</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">filepath</span>
-            <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;trees&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-        <span class="n">specs</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;specs&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-    <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;media_types&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">media_types</span><span class="p">)</span>  <span class="c1"># convert from defaultdict</span>
-    <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;file_extensions&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">file_extensions</span>
-    <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;allow_origins&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">allow_origins</span>
-    <span class="n">merged</span><span class="p">[</span><span class="s2">&quot;specs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">specs</span>
-    <span class="k">return</span> <span class="n">merged</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validation_registry</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ValidationRegistry</span><span class="p">:</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">default_validation_registry</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">specs</span><span class="p">:</span>
+            <span class="n">base</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">Spec</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">spec</span><span class="p">),</span> <span class="n">spec</span><span class="o">.</span><span class="n">validator</span> <span class="ow">or</span> <span class="n">_no_op_validator</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">base</span>
 
 
 <div class="viewcode-block" id="parse_configs">
 <a class="viewcode-back" href="../../reference/generated/tiled.config.parse_configs.html#tiled.config.parse_configs">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">parse_configs</span><span class="p">(</span><span class="n">config_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Parse configuration file or directory of configuration files.</span>
-
-<span class="sd">    If a directory is given, any files not ending in `.yml` or `.yaml` are</span>
-<span class="sd">    ignored. Therefore, the directory may also contain a README file and</span>
-<span class="sd">    supporting Python scripts with custom objects.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_path</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="n">config_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">config_path</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">config_path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
-        <span class="n">filepaths</span> <span class="o">=</span> <span class="p">[</span><span class="n">config_path</span><span class="p">]</span>
-    <span class="k">elif</span> <span class="n">config_path</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
-        <span class="n">filepaths</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">fn</span>
-            <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">config_path</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">fn</span><span class="o">.</span><span class="n">suffix</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;.yml&quot;</span><span class="p">,</span> <span class="s2">&quot;.yaml&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fn</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span>
-        <span class="p">]</span>
-    <span class="k">elif</span> <span class="ow">not</span> <span class="n">config_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The config path </span><span class="si">{</span><span class="n">config_path</span><span class="si">!s}</span><span class="s2"> doesn&#39;t exist.&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_configs</span><span class="p">(</span><span class="n">src_file</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Config</span><span class="p">:</span>
+    <span class="n">src_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">src_file</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">src_file</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+        <span class="n">conf</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">src_file</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="ow">and</span> <span class="n">f</span><span class="o">.</span><span class="n">suffix</span> <span class="o">==</span> <span class="s2">&quot;.yml&quot;</span><span class="p">:</span>
+                <span class="n">new_config</span> <span class="o">=</span> <span class="n">parse</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">common</span> <span class="o">:=</span> <span class="n">new_config</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">conf</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duplicate configuration for </span><span class="si">{</span><span class="n">common</span><span class="si">}</span><span class="s2"> in </span><span class="si">{</span><span class="n">f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">conf</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_config</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># the path points to something we don&#39;t support, eg fifo/block_device/etc</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;The config path </span><span class="si">{</span><span class="n">config_path</span><span class="si">!s}</span><span class="s2"> exists but is not a file or directory.&quot;</span>
-        <span class="p">)</span>
+        <span class="n">conf</span> <span class="o">=</span> <span class="n">parse</span><span class="p">(</span><span class="n">src_file</span><span class="p">)</span>
 
-    <span class="n">parsed_configs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="c1"># The sorting here is just to make the order of the results deterministic.</span>
-    <span class="c1"># There is *not* any sorting-based precedence applied.</span>
-    <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">filepaths</span><span class="p">):</span>
-        <span class="c1"># Ignore hidden files and .py files.</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">filepath</span><span class="o">.</span><span class="n">parts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
-            <span class="ow">or</span> <span class="n">filepath</span><span class="o">.</span><span class="n">suffix</span> <span class="o">==</span> <span class="s2">&quot;.py&quot;</span>
-            <span class="ow">or</span> <span class="n">filepath</span><span class="o">.</span><span class="n">parts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;__pycache__&quot;</span>
-        <span class="p">):</span>
-            <span class="k">continue</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-            <span class="n">config</span> <span class="o">=</span> <span class="n">parse</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">jsonschema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">instance</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">())</span>
-            <span class="k">except</span> <span class="n">jsonschema</span><span class="o">.</span><span class="n">ValidationError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-                <span class="n">msg</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="k">raise</span> <span class="n">ConfigError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;ValidationError while parsing configuration file </span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
-            <span class="n">parsed_configs</span><span class="p">[</span><span class="n">filepath</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
-
-    <span class="n">merged_config</span> <span class="o">=</span> <span class="n">merge</span><span class="p">(</span><span class="n">parsed_configs</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">merged_config</span></div>
+    <span class="k">with</span> <span class="n">prepend_to_sys_path</span><span class="p">(</span><span class="n">src_file</span> <span class="k">if</span> <span class="n">src_file</span><span class="o">.</span><span class="n">is_dir</span><span class="p">()</span> <span class="k">else</span> <span class="n">src_file</span><span class="o">.</span><span class="n">parent</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Config</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span></div>
 
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ConfigError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
-    <span class="k">pass</span>
+<div class="viewcode-block" id="construct_build_app_kwargs">
+<a class="viewcode-back" href="../../reference/generated/tiled.config.construct_build_app_kwargs.html#tiled.config.construct_build_app_kwargs">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">construct_build_app_kwargs</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">Config</span><span class="p">):</span>
+    <span class="n">server_settings</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">root_path</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span>
+        <span class="n">allow_origins</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">allow_origins</span><span class="p">,</span>
+        <span class="n">response_bytesize_limit</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">response_bytesize_limit</span><span class="p">,</span>
+        <span class="n">exact_count_limit</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">exact_count_limit</span><span class="p">,</span>
+        <span class="n">database</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">database</span><span class="p">,</span>
+        <span class="n">reject_undeclared_specs</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">reject_undeclared_specs</span><span class="p">,</span>
+        <span class="n">expose_raw_assets</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">expose_raw_assets</span><span class="p">,</span>
+        <span class="n">metrics</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">metrics</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">tree</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">merged_trees</span><span class="p">,</span>
+        <span class="n">authentication</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">authentication</span><span class="p">,</span>
+        <span class="n">server_settings</span><span class="o">=</span><span class="n">server_settings</span><span class="p">,</span>
+        <span class="n">query_registry</span><span class="o">=</span><span class="n">default_query_registry</span><span class="p">,</span>
+        <span class="n">serialization_registry</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">serialization_registry</span><span class="p">(),</span>
+        <span class="n">deserialization_registry</span><span class="o">=</span><span class="n">default_deserialization_registry</span><span class="p">,</span>
+        <span class="n">compression_registry</span><span class="o">=</span><span class="n">default_compression_registry</span><span class="p">,</span>
+        <span class="n">validation_registry</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">validation_registry</span><span class="p">(),</span>
+        <span class="n">tasks</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">tree_tasks</span><span class="p">(),</span>
+        <span class="n">access_policy</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_no_op_validator</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
