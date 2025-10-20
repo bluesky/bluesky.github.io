@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.client.context &mdash; tiled 0.0.1.dev2327+g67cd01dcb documentation</title>
+  <title>tiled.client.context &mdash; tiled 0.0.1.dev2327+gd3ffcbe94 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=1a2f8c0e"></script>
+      <script src="../../../_static/documentation_options.js?v=6899483f"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -149,7 +149,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">import</span><span class="w"> </span><span class="nn">urllib.parse</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_qs</span><span class="p">,</span> <span class="n">urlparse</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
@@ -167,6 +167,7 @@ window.addEventListener("load", () => mermaid.run());
     <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span>
     <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
     <span class="n">handle_error</span><span class="p">,</span>
+    <span class="n">polling_retry_context</span><span class="p">,</span>
     <span class="n">retry_context</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -246,6 +247,9 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">spec</span> <span class="o">=</span> <span class="n">identity_provider_input</span><span class="p">(</span><span class="n">providers</span><span class="p">)</span>
     <span class="n">auth_endpoint</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">links</span><span class="p">[</span><span class="s2">&quot;auth_endpoint&quot;</span><span class="p">]</span>
     <span class="n">provider</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">provider</span>
+    <span class="n">client_id</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client_id&quot;</span><span class="p">)</span>
+    <span class="n">token_endpoint</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;token_endpoint&quot;</span><span class="p">)</span>
+    <span class="n">oauth2_spec</span> <span class="o">=</span> <span class="kc">True</span> <span class="k">if</span> <span class="n">client_id</span> <span class="ow">and</span> <span class="n">token_endpoint</span> <span class="k">else</span> <span class="kc">False</span>
     <span class="n">mode</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">mode</span>
     <span class="c1"># Note: &quot;password&quot; is included here for back-compat with older servers;</span>
     <span class="c1"># the new name for this mode is &quot;internal&quot;.</span>
@@ -277,12 +281,14 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;external&quot;</span><span class="p">:</span>
         <span class="c1"># Display link and access code, and try to open web browser.</span>
         <span class="c1"># Block while polling the server awaiting confirmation of authorization.</span>
-        <span class="n">tokens</span> <span class="o">=</span> <span class="n">device_code_grant</span><span class="p">(</span><span class="n">http_client</span><span class="p">,</span> <span class="n">auth_endpoint</span><span class="p">)</span>
+        <span class="n">tokens</span> <span class="o">=</span> <span class="n">device_code_grant</span><span class="p">(</span>
+            <span class="n">http_client</span><span class="p">,</span> <span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">token_endpoint</span>
+        <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Server has unknown authentication mechanism </span><span class="si">{</span><span class="n">mode</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">confirmation_message</span>
     <span class="k">if</span> <span class="n">confirmation_message</span><span class="p">:</span>
-        <span class="n">username</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;identity&quot;</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="s2">&quot;external user&quot;</span> <span class="k">if</span> <span class="n">oauth2_spec</span> <span class="k">else</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;identity&quot;</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">confirmation_message</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">username</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">tokens</span>
 
@@ -423,7 +429,17 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">:</span> <span class="n">About</span> <span class="o">=</span> <span class="n">TypeAdapter</span><span class="p">(</span><span class="n">About</span><span class="p">)</span><span class="o">.</span><span class="n">validate_python</span><span class="p">(</span><span class="n">server_info</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>  <span class="c1"># property setter sets Authorization header</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">admin</span> <span class="o">=</span> <span class="n">Admin</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>  <span class="c1"># accessor for admin-related requests</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">admin</span> <span class="o">=</span> <span class="n">Admin</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>  <span class="c1"># accessor for admin-related requests</span>
+
+        <span class="c1"># Check if the using Oauth2 type of device_flow</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">providers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client_id&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">providers</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">:</span>
+            <span class="n">client</span><span class="o">.</span><span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/x-www-form-urlencoded&quot;</span><span class="p">}</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -830,18 +846,20 @@ window.addEventListener("load", () => mermaid.run());
         <span class="c1"># will manage refreshing the tokens as needed.</span>
         <span class="n">refresh_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">refresh_session</span>
         <span class="n">csrf_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">cookies</span><span class="p">[</span><span class="s2">&quot;tiled_csrf&quot;</span><span class="p">]</span>
+
         <span class="k">if</span> <span class="n">remember_me</span><span class="p">:</span>
             <span class="n">token_directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_directory</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Clear any existing tokens.</span>
-            <span class="n">temp_auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span><span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_directory</span><span class="p">())</span>
+            <span class="n">temp_auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span>
+                <span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_directory</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span>
+            <span class="p">)</span>
             <span class="n">temp_auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span>
             <span class="n">temp_auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
             <span class="c1"># Store tokens in memory only, with no syncing to disk.</span>
             <span class="n">token_directory</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span><span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">)</span>
-        <span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">])</span>
-        <span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">])</span>
+        <span class="n">auth</span><span class="o">.</span><span class="n">sync_tokens</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">auth</span>
 
     <span class="nd">@property</span>
@@ -900,7 +918,9 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">token_directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_token_directory</span><span class="p">()</span>
         <span class="c1"># We have to make an HTTP request to let the server validate whether we</span>
         <span class="c1"># have a valid session.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span><span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span>
+            <span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span>
+        <span class="p">)</span>
         <span class="c1"># This will either:</span>
         <span class="c1"># * Use an access_token and succeed.</span>
         <span class="c1"># * Use a refresh_token to attempt refresh flow and succeed.</span>
@@ -925,7 +945,7 @@ window.addEventListener("load", () => mermaid.run());
 <span class="sd">        automatically executed by tiled.client.auth.TiledAuth when the current</span>
 <span class="sd">        access_token expires.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="p">,</span> <span class="n">TiledAuth</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;No authentication has been set up. Cannot reauthenticate.&quot;</span>
             <span class="p">)</span>
@@ -939,6 +959,7 @@ window.addEventListener("load", () => mermaid.run());
             <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">refresh_url</span><span class="p">,</span>
             <span class="n">refresh_token</span><span class="p">,</span>
             <span class="n">csrf_token</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
@@ -949,8 +970,7 @@ window.addEventListener("load", () => mermaid.run());
                     <span class="p">)</span>
                 <span class="n">handle_error</span><span class="p">(</span><span class="n">token_response</span><span class="p">)</span>
         <span class="n">tokens</span> <span class="o">=</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">])</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_set_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">,</span> <span class="n">tokens</span><span class="p">[</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_tokens</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tokens</span></div>
 
 
@@ -980,20 +1000,33 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">refresh_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_get_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
-                <span class="n">handle_error</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">auth/session/revoke&quot;</span><span class="p">,</span>
-                        <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">:</span> <span class="n">refresh_token</span><span class="p">},</span>
-                        <span class="c1"># Circumvent auth because this request is not authenticated.</span>
-                        <span class="c1"># The refresh_token in the body is the relevant proof, not the</span>
-                        <span class="c1"># &#39;Authentication&#39; header.</span>
-                        <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">:</span>
+                    <span class="n">id_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_get_token</span><span class="p">(</span><span class="s2">&quot;id_token&quot;</span><span class="p">)</span>
+                    <span class="n">handle_error</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">logout</span><span class="p">,</span>
+                            <span class="n">params</span><span class="o">=</span><span class="p">{</span>
+                                <span class="s2">&quot;id_token_hint&quot;</span><span class="p">:</span> <span class="n">id_token</span><span class="p">,</span>
+                                <span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
+                            <span class="p">},</span>
+                        <span class="p">)</span>
                     <span class="p">)</span>
-                <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">handle_error</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_uri</span><span class="si">}</span><span class="s2">auth/session/revoke&quot;</span><span class="p">,</span>
+                            <span class="n">json</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">:</span> <span class="n">refresh_token</span><span class="p">},</span>
+                            <span class="c1"># Circumvent auth because this request is not authenticated.</span>
+                            <span class="c1"># The refresh_token in the body is the relevant proof, not the</span>
+                            <span class="c1"># &#39;Authentication&#39; header.</span>
+                            <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
 
         <span class="c1"># Clear on-disk state.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;id_token&quot;</span><span class="p">)</span>
 
         <span class="c1"># Clear in-memory state.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;Authorization&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -1174,13 +1207,30 @@ window.addEventListener("load", () => mermaid.run());
     <span class="k">return</span> <span class="n">token_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">device_code_grant</span><span class="p">(</span><span class="n">http_client</span><span class="p">,</span> <span class="n">auth_endpoint</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">device_code_grant</span><span class="p">(</span>
+    <span class="n">http_client</span><span class="p">,</span>
+    <span class="n">auth_endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">client_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">token_endpoint</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">scopes</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;openid offline_access&quot;</span><span class="p">,</span>
+<span class="p">):</span>
     <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
         <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
-            <span class="n">verification_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="p">{},</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">client_id</span> <span class="ow">and</span> <span class="n">token_endpoint</span><span class="p">:</span>
+                <span class="n">oauth2_spec</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">uri</span> <span class="o">=</span> <span class="s2">&quot;verification_uri_complete&quot;</span>
+                <span class="n">verification_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">auth_endpoint</span><span class="p">,</span>
+                    <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="n">client_id</span><span class="p">,</span> <span class="s2">&quot;scope&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">},</span>
+                <span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">oauth2_spec</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">uri</span> <span class="o">=</span> <span class="s2">&quot;authorization_uri&quot;</span>
+                <span class="n">verification_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">)</span>
             <span class="n">handle_error</span><span class="p">(</span><span class="n">verification_response</span><span class="p">)</span>
     <span class="n">verification</span> <span class="o">=</span> <span class="n">verification_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-    <span class="n">authorization_uri</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;authorization_uri&quot;</span><span class="p">]</span>
+    <span class="n">authorization_uri</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="n">uri</span><span class="p">]</span>
     <span class="nb">print</span><span class="p">(</span>
         <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">You have </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s1">&#39;expires_in&#39;</span><span class="p">])</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="mi">60</span><span class="si">}</span><span class="s2"> minutes to visit this URL</span>
@@ -1202,23 +1252,38 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">deadline</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Deadline expired.&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">polling_retry_context</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;expires_in&quot;</span><span class="p">]):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="c1"># Intentionally do not wrap this in handle_error(...).</span>
                 <span class="c1"># Check status codes manually below.</span>
-                <span class="n">access_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                    <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">],</span>
-                    <span class="n">json</span><span class="o">=</span><span class="p">{</span>
-                        <span class="s2">&quot;device_code&quot;</span><span class="p">:</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;device_code&quot;</span><span class="p">],</span>
-                        <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:ietf:params:oauth:grant-type:device_code&quot;</span><span class="p">,</span>
-                    <span class="p">},</span>
-                    <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="p">(</span><span class="n">access_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">BAD_REQUEST</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
-                    <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;detail&quot;</span><span class="p">][</span><span class="s2">&quot;error&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;authorization_pending&quot;</span>
-                <span class="p">):</span>
-                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">oauth2_spec</span><span class="p">:</span>
+                    <span class="n">access_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="n">token_endpoint</span><span class="p">,</span>
+                        <span class="n">data</span><span class="o">=</span><span class="p">{</span>
+                            <span class="s2">&quot;device_code&quot;</span><span class="p">:</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;device_code&quot;</span><span class="p">],</span>
+                            <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:ietf:params:oauth:grant-type:device_code&quot;</span><span class="p">,</span>
+                            <span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="n">client_id</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">access_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">],</span>
+                        <span class="n">json</span><span class="o">=</span><span class="p">{</span>
+                            <span class="s2">&quot;device_code&quot;</span><span class="p">:</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;device_code&quot;</span><span class="p">],</span>
+                            <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:ietf:params:oauth:grant-type:device_code&quot;</span><span class="p">,</span>
+                        <span class="p">},</span>
+                        <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">access_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">BAD_REQUEST</span><span class="p">:</span>
+                    <span class="n">access_response_error</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;error&quot;</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">oauth2_spec</span>
+                        <span class="k">else</span> <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;detail&quot;</span><span class="p">][</span><span class="s2">&quot;error&quot;</span><span class="p">]</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">access_response_error</span> <span class="o">==</span> <span class="s2">&quot;authorization_pending&quot;</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">])</span>
+                        <span class="n">access_response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
                 <span class="n">handle_error</span><span class="p">(</span><span class="n">access_response</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
         <span class="k">break</span>
