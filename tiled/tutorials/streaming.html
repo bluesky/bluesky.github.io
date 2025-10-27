@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Streaming &mdash; tiled 0.0.1.dev2331+g0af94761e documentation</title>
+  <title>Streaming &mdash; tiled 0.0.1.dev2371+gb01df99c7 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
@@ -15,7 +15,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=2bf81de3"></script>
+      <script src="../_static/documentation_options.js?v=864b6b98"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -196,11 +196,13 @@ streaming_cache:
 <span class="n">sub</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
 
 <span class="c1"># Register a callback, a function that will be called when updates are received.</span>
-<span class="c1"># For a simple example, we will just use the print function.</span>
-<span class="n">sub</span><span class="o">.</span><span class="n">add_callback</span><span class="p">(</span><span class="nb">print</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">on_child_created</span><span class="p">(</span><span class="n">update</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;NEW:&quot;</span><span class="p">,</span> <span class="n">update</span><span class="o">.</span><span class="n">child</span><span class="p">())</span>
+
+<span class="n">sub</span><span class="o">.</span><span class="n">child_created</span><span class="o">.</span><span class="n">add_callback</span><span class="p">(</span><span class="n">on_child_created</span><span class="p">)</span>
 
 <span class="c1"># Start listening for updates.</span>
-<span class="n">sub</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="n">sub</span><span class="o">.</span><span class="n">start_in_thread</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>In a separate process (if you like) create a new array.</p>
@@ -213,15 +215,17 @@ streaming_cache:
 </div>
 <p>Back in the process with the subscription, you will see that something has been
 printed.</p>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;Subscription / &gt; {&#39;sequence&#39;: 1, &#39;timestamp&#39;: &#39;2025-09-03T16:58:59.682183&#39;, &#39;key&#39;: &#39;x&#39;, &#39;structure_family&#39;: &#39;array&#39;, &#39;specs&#39;: [], &#39;metadata&#39;: {}, &#39;data_sources&#39;: [{&#39;id&#39;: None, &#39;structure_family&#39;: &#39;array&#39;, &#39;structure&#39;: {&#39;data_type&#39;: {&#39;endianness&#39;: &#39;little&#39;, &#39;kind&#39;: &#39;i&#39;, &#39;itemsize&#39;: 8, &#39;dt_units&#39;: None}, &#39;chunks&#39;: [[3]], &#39;shape&#39;: [3], &#39;dims&#39;: None, &#39;resizable&#39;: False}, &#39;mimetype&#39;: &#39;application/x-zarr&#39;, &#39;parameters&#39;: {}, &#39;assets&#39;: [], &#39;management&#39;: &#39;writable&#39;}], &#39;uri&#39;: &#39;http://localhost:8000/api/v1/array/full/&#39;}
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>NEW: &lt;ArrayClient shape=(3,) chunks=((3,)) dtype=int64&gt;
 </pre></div>
 </div>
-<p>Our callback, <code class="docutils literal notranslate"><span class="pre">print</span></code>, has been called with the arguments <code class="docutils literal notranslate"><span class="pre">print(sub,</span> <span class="pre">data)</span></code>
-where <code class="docutils literal notranslate"><span class="pre">sub</span></code> is our Subscription and <code class="docutils literal notranslate"><span class="pre">data</span></code> is a dict with information
-about what is new. In this case, it contains a detailed description of the
-new array named <code class="docutils literal notranslate"><span class="pre">x</span></code> that was created by the other client.</p>
 <p>If we are interested, we can subscribe to updates about <code class="docutils literal notranslate"><span class="pre">x</span></code> and its data.</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">x_sub</span> <span class="o">=</span> <span class="n">c</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">x_sub</span> <span class="o">=</span> <span class="n">c</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">new_data</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">on_new_data</span><span class="p">(</span><span class="n">update</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;offset:&quot;</span><span class="p">,</span> <span class="n">update</span><span class="o">.</span><span class="n">offset</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">update</span><span class="o">.</span><span class="n">data</span><span class="p">())</span>
+
+<span class="n">x_sub</span><span class="o">.</span><span class="n">new_data</span><span class="o">.</span><span class="n">add_callback</span><span class="p">(</span><span class="n">on_new_data</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Suppose that, while we are getting that set up, the other process extends the
@@ -236,26 +240,29 @@ access, but it may shed history earlier if it grows short on available RAM.)</p>
 <p>This feature is not designed to provide a comprehensive history, only to allow
 clients to catch up if they start late—such as a live data processing job
 launched after an experiment is already in progress.</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">x_sub</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">x_sub</span><span class="o">.</span><span class="n">start_in_thread</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>It will receive updates that have already happened:</p>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>&lt;Subscription /x &gt; {&#39;sequence&#39;: 1, &#39;timestamp&#39;: &#39;2025-09-03T17:37:29.754038&#39;, &#39;content-type&#39;: &#39;application/octet-stream&#39;, &#39;shape&#39;: [3], &#39;offset&#39;: None, &#39;block&#39;: None, &#39;uri&#39;: &#39;http://localhost:8000/api/v1/array/full/x&#39;, &#39;payload&#39;: b&#39;\x01\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00&#39;}
-&lt;Subscription /x &gt; {&#39;sequence&#39;: 2, &#39;timestamp&#39;: &#39;2025-09-03T17:37:36.678614&#39;, &#39;content-type&#39;: &#39;application/octet-stream&#39;, &#39;shape&#39;: [3], &#39;offset&#39;: [3], &#39;block&#39;: None, &#39;uri&#39;: &#39;http://localhost:8000/api/v1/array/full/x&#39;, &#39;payload&#39;: b&#39;\x04\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00&#39;}
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>offset: (0,)
+[1, 2, 3]
+offset: (3,)
+[4, 5, 6]
 </pre></div>
 </div>
 <p>and, from there, any new updates as well.</p>
-<p>Notice that content of the updates includes a <code class="docutils literal notranslate"><span class="pre">sequence</span></code> counter, starting from
-the number 1. Subscribers can use this if, for example, they need to recover
-from an interruption. They can subscribe from a specific counter index <code class="docutils literal notranslate"><span class="pre">sub.start(N)</span></code>.
-As already mentioned above, <code class="docutils literal notranslate"><span class="pre">x.start(0)</span></code> means, “Start from the oldest record retained.”</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">update</span></code> includes a <code class="docutils literal notranslate"><span class="pre">sequence</span></code> counter, starting from the number 1.
+Subscribers can use this if, for example, they need to recover from an
+interruption. They can subscribe from a specific counter index
+<code class="docutils literal notranslate"><span class="pre">sub.start_in_thread(N)</span></code>. As already mentioned above, <code class="docutils literal notranslate"><span class="pre">x.start_in_thread(0)</span></code>
+means, “Start from the oldest record retained.”</p>
 <p>Of course, clients can always fetch <em>all</em> of the data via the non-streaming
 interface.</p>
 </section>
 <section id="disconnecting-or-closing">
 <h2>Disconnecting or Closing<a class="headerlink" href="#disconnecting-or-closing" title="Link to this heading"></a></h2>
 <p>A subscriber can disconnect from a stream at any point, like so:</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">sub</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>Producers (writers) can indicate that no more data is expected (for now).</p>
