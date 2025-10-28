@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>tiled.adapters.zarr &mdash; tiled 0.0.1.dev2371+gb01df99c7 documentation</title>
+  <title>tiled.adapters.zarr &mdash; tiled 0.0.1.dev2371+gc4b169315 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=864b6b98"></script>
+      <script src="../../../_static/documentation_options.js?v=f32881f8"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -141,12 +141,13 @@ window.addEventListener("load", () => mermaid.run());
            <div itemprop="articleBody">
              
   <h1>Source code for tiled.adapters.zarr</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">builtins</span>
+<span></span><span class="c1"># mypy: ignore-errors</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">builtins</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">importlib.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">version</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">cast</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">quote_plus</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">quote_plus</span><span class="p">,</span> <span class="n">urljoin</span><span class="p">,</span> <span class="n">urlparse</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numpy._typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDArray</span>
@@ -160,7 +161,13 @@ window.addEventListener("load", () => mermaid.run());
 <span class="kn">from</span><span class="w"> </span><span class="nn">..catalog.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..iterviews</span><span class="w"> </span><span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..ndslice</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDSlice</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">FileStorage</span><span class="p">,</span> <span class="n">Storage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..storage</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SUPPORTED_OBJECT_URI_SCHEMES</span><span class="p">,</span>
+    <span class="n">FileStorage</span><span class="p">,</span>
+    <span class="n">ObjectStorage</span><span class="p">,</span>
+    <span class="n">Storage</span><span class="p">,</span>
+    <span class="n">get_storage</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayStructure</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">DataSource</span>
@@ -174,7 +181,8 @@ window.addEventListener("load", () => mermaid.run());
     <span class="kn">from</span><span class="w"> </span><span class="nn">zarr.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">init_array</span> <span class="k">as</span> <span class="n">create_array</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_array</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">zarr.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalStore</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">zarr.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalStore</span><span class="p">,</span> <span class="n">ObjectStore</span>
+
 
 <span class="n">INLINED_DEPTH</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_HDF5_INLINED_CONTENTS_MAX_DEPTH&quot;</span><span class="p">,</span> <span class="s2">&quot;7&quot;</span><span class="p">))</span>
 
@@ -208,22 +216,24 @@ window.addEventListener("load", () => mermaid.run());
         <span class="n">path_parts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataSource</span><span class="p">[</span><span class="n">ArrayStructure</span><span class="p">]:</span>
         <span class="n">data_source</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span>  <span class="c1"># Do not mutate caller input.</span>
-        <span class="n">data_uri</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">uri</span> <span class="o">+</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;/</span><span class="si">{</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">path_parts</span>
-        <span class="p">)</span>
+
         <span class="c1"># Zarr requires evenly-sized chunks within each dimension.</span>
         <span class="c1"># Use the first chunk along each dimension.</span>
         <span class="n">zarr_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">dim</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">data_source</span><span class="o">.</span><span class="n">structure</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
         <span class="n">shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">dim</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="n">data_source</span><span class="o">.</span><span class="n">structure</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
-        <span class="n">directory</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_uri</span><span class="p">)</span>
-        <span class="n">directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">store</span> <span class="o">=</span> <span class="n">LocalStore</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">directory</span><span class="p">))</span>
-        <span class="n">create_array</span><span class="p">(</span>
-            <span class="n">store</span><span class="p">,</span>
-            <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
-            <span class="n">chunks</span><span class="o">=</span><span class="n">zarr_chunks</span><span class="p">,</span>
-            <span class="n">dtype</span><span class="o">=</span><span class="n">data_source</span><span class="o">.</span><span class="n">structure</span><span class="o">.</span><span class="n">data_type</span><span class="o">.</span><span class="n">to_numpy_dtype</span><span class="p">(),</span>
+        <span class="n">data_type</span> <span class="o">=</span> <span class="n">data_source</span><span class="o">.</span><span class="n">structure</span><span class="o">.</span><span class="n">data_type</span><span class="o">.</span><span class="n">to_numpy_dtype</span><span class="p">()</span>
+        <span class="n">data_uri</span> <span class="o">=</span> <span class="n">urljoin</span><span class="p">(</span>
+            <span class="n">storage</span><span class="o">.</span><span class="n">uri</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="s2">&quot;/&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">path_parts</span><span class="p">)</span>
         <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">ZARR_LIB_V2</span><span class="p">:</span>
+            <span class="n">zarr_store</span> <span class="o">=</span> <span class="n">LocalStore</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_uri</span><span class="p">)))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">zarr_store</span> <span class="o">=</span> <span class="n">ObjectStore</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">storage</span><span class="o">.</span><span class="n">get_obstore_location</span><span class="p">(</span><span class="n">data_uri</span><span class="p">))</span>
+
+        <span class="n">create_array</span><span class="p">(</span><span class="n">zarr_store</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="n">zarr_chunks</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">data_type</span><span class="p">)</span>
+
+        <span class="c1"># Update data source to include the new asset</span>
         <span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="n">Asset</span><span class="p">(</span>
                 <span class="n">data_uri</span><span class="o">=</span><span class="n">data_uri</span><span class="p">,</span>
@@ -231,6 +241,7 @@ window.addEventListener("load", () => mermaid.run());
                 <span class="n">parameter</span><span class="o">=</span><span class="s2">&quot;data_uri&quot;</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
+
         <span class="k">return</span> <span class="n">data_source</span>
 
     <span class="nd">@property</span>
@@ -353,7 +364,7 @@ window.addEventListener("load", () => mermaid.run());
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">supported_storage</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Set</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">Storage</span><span class="p">]]:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="n">FileStorage</span><span class="p">}</span></div>
+        <span class="k">return</span> <span class="p">{</span><span class="n">FileStorage</span><span class="p">}</span> <span class="k">if</span> <span class="n">ZARR_LIB_V2</span> <span class="k">else</span> <span class="p">{</span><span class="n">FileStorage</span><span class="p">,</span> <span class="n">ObjectStorage</span><span class="p">}</span></div>
 
 
 
@@ -453,10 +464,29 @@ window.addEventListener("load", () => mermaid.run());
         <span class="o">/</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ZarrGroupAdapter</span><span class="p">,</span> <span class="n">ZarrArrayAdapter</span><span class="p">]:</span>
-        <span class="n">zarr_obj</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">open</span><span class="p">(</span>
-            <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data_uri</span><span class="p">)</span>
-        <span class="p">)</span>  <span class="c1"># Group or Array</span>
-        <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">structure_family</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span><span class="p">:</span>
+        <span class="n">is_container_type</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">structure_family</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span>
+        <span class="n">uri</span> <span class="o">=</span> <span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data_uri</span>
+
+        <span class="k">if</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span><span class="o">.</span><span class="n">scheme</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span><span class="p">:</span>
+            <span class="c1"># This is a file-based Zarr storage</span>
+            <span class="n">zarr_obj</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">))</span>
+
+        <span class="k">elif</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span><span class="o">.</span><span class="n">scheme</span> <span class="ow">in</span> <span class="n">SUPPORTED_OBJECT_URI_SCHEMES</span><span class="p">:</span>
+            <span class="c1"># This is an object-store-based Zarr storage</span>
+            <span class="n">storage</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">ObjectStorage</span><span class="p">,</span> <span class="n">get_storage</span><span class="p">(</span><span class="n">uri</span><span class="p">))</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">parse_blob_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+            <span class="n">zarr_store</span> <span class="o">=</span> <span class="n">ObjectStore</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">storage</span><span class="o">.</span><span class="n">get_obstore_location</span><span class="p">())</span>
+            <span class="c1"># zarr_obj = zarr.open(store=zarr_store)</span>
+
+            <span class="k">if</span> <span class="n">is_container_type</span><span class="p">:</span>
+                <span class="n">zarr_obj</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">open_group</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">zarr_store</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">prefix</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">zarr_obj</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">open_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">zarr_store</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">prefix</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported URI scheme in </span><span class="si">{</span><span class="n">uri</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">is_container_type</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">ZarrGroupAdapter</span><span class="p">(</span>
                 <span class="n">zarr_obj</span><span class="p">,</span>
                 <span class="n">metadata</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">metadata_</span><span class="p">,</span>
