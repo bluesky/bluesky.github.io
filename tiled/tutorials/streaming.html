@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Streaming &mdash; tiled 0.0.1.dev2381+g4a8b49903 documentation</title>
+  <title>Streaming &mdash; tiled 0.0.1.dev2381+g0388f21d3 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../_static/plot_directive.css" />
@@ -15,7 +15,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b1c60302"></script>
+      <script src="../_static/documentation_options.js?v=11b6661c"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -62,6 +62,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#write-and-stream-data">Write and Stream Data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#disconnecting-or-closing">Disconnecting or Closing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#sequence-number-guarantees">Sequence Number Guarantees</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-optimization-non-persistent-updates">Performance Optimization: Non-persistent Updates</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#limitations">Limitations</a></li>
 </ul>
 </li>
@@ -188,7 +189,7 @@ streaming_cache:
 </div>
 </section>
 <section id="write-and-stream-data">
-<h2>Write and Stream Data<a class="headerlink" href="#write-and-stream-data" title="Link to this heading"></a></h2>
+<span id="write-stream-data"></span><h2>Write and Stream Data<a class="headerlink" href="#write-and-stream-data" title="Link to this heading"></a></h2>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tiled.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_uri</span>
 
 <span class="c1"># Connect</span>
@@ -291,12 +292,78 @@ closed or slowly (30 days, by default) if a stream is left un-closed but
 dormant. These intervals are configurable via the settings <code class="docutils literal notranslate"><span class="pre">data_ttl</span></code> and
 <code class="docutils literal notranslate"><span class="pre">seq_ttl</span></code> respectively under <code class="docutils literal notranslate"><span class="pre">streaming_cach</span></code> configuration.  (In the <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">serve</span></code> CLI they are <code class="docutils literal notranslate"><span class="pre">--cache-data-ttl</span></code> and <code class="docutils literal notranslate"><span class="pre">--cache-seq-ttl</span></code>.)</p>
 </section>
+<section id="performance-optimization-non-persistent-updates">
+<h2>Performance Optimization: Non-persistent Updates<a class="headerlink" href="#performance-optimization-non-persistent-updates" title="Link to this heading"></a></h2>
+<p>To rapidly stream large arrays of transitory data, it might be unnecessary
+or even undesirable to persist the intermediate arrays to storage.
+In this case, pass the parameter <code class="docutils literal notranslate"><span class="pre">persist=False</span></code> to <code class="docutils literal notranslate"><span class="pre">ArrayClient.write()</span></code>
+or <code class="docutils literal notranslate"><span class="pre">ArrayClient.patch()</span></code>.</p>
+<p>This could be useful for serving reconstructed images to an on-screen display
+while an iterative algorithm is refining that reconstruction. Only the final
+image needs to be persisted. The intermediate images can be discarded as each
+new image is received.</p>
+<p>To try this yourself, modify the code in <a class="reference internal" href="#write-stream-data"><span class="std std-ref">Write and Stream Data</span></a> to include the
+<code class="docutils literal notranslate"><span class="pre">persist=False</span></code> when sending updates.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># Intial state: x == [1, 2, 3]</span>
+
+<span class="c1"># PUT (write) new values</span>
+<span class="n">x</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+  <span class="c1"># x == [1, 2, 3], update.data() == [4, 5, 6]</span>
+<span class="n">x</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">]),</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+  <span class="c1"># x == [1, 2, 3], update.data() == [7, 8, 9]</span>
+
+<span class="c1"># Persist the final array</span>
+<span class="n">x</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">13</span><span class="p">]))</span>  <span class="c1"># x == [11, 12, 13], persist == True</span>
+</pre></div>
+</div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># Intial state: x == [1, 2, 3]</span>
+
+<span class="c1"># PATCH (patch) new values</span>
+<span class="n">x</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">11</span><span class="p">],</span> <span class="n">offset</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,)),</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+  <span class="c1"># x == [1, 2, 3], update.data() == [11], update.offset() == (0,)</span>
+<span class="n">x</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">12</span><span class="p">],</span> <span class="n">offset</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,)),</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+  <span class="c1"># x == [1, 2, 3], update.data() == [12], update.offset() == (1,)</span>
+<span class="n">x</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">13</span><span class="p">],</span> <span class="n">offset</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,)),</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+  <span class="c1"># x == [1, 2, 3], update.data() == [13], update.offset() == (2,)</span>
+
+<span class="c1"># Persist the final array</span>
+<span class="n">x</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">13</span><span class="p">]))</span>  <span class="c1"># x == [11, 12, 13], persist == True</span>
+</pre></div>
+</div>
+<p>The array could initially be left empty to further reduce the writes to disk.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">client</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="s1">&#39;http://localhost:8000&#39;</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="s1">&#39;secret&#39;</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
+    <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">array</span><span class="p">,</span>
+    <span class="n">data_sources</span><span class="o">=</span><span class="p">[</span><span class="n">tiff_data_source</span><span class="p">],</span>  <span class="c1"># DataSource details omitted for brevity</span>
+    <span class="n">data_sources</span><span class="o">=</span><span class="p">[</span>
+        <span class="c1"># In-memory DataSource details omitted for brevity</span>
+        <span class="n">DataSource</span><span class="p">(</span><span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span> <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">array</span><span class="p">),</span>
+        <span class="c1"># Or use an external data source, such as a TIFF file</span>
+        <span class="n">tiff_data_source</span><span class="p">,</span>  <span class="c1"># DataSource details omitted for brevity</span>
+    <span class="p">],</span>
+    <span class="n">key</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># Intial state: x == [?, ?, ?]</span>
+
+<span class="c1"># PUT (write) new values</span>
+<span class="n">x</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+  <span class="c1"># x == [?, ?, ?], update.data() == [4, 5, 6]</span>
+<span class="n">x</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">]),</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+  <span class="c1"># x == [?, ?, ?], update.data() == [7, 8, 9]</span>
+
+<span class="c1"># Persist the final array</span>
+<span class="n">x</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">13</span><span class="p">]))</span>  <span class="c1"># x == [11, 12, 13], persist == True</span>
+</pre></div>
+</div>
+</section>
 <section id="limitations">
 <h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading"></a></h2>
 <p>This feature is in a very early preview stage.</p>
 <ul class="simple">
 <li><p>External registered tabular data is not yet supported.</p></li>
 <li><p>Other data structures (sparse, awkward) are not yet supported.</p></li>
+<li><p>Arrays can be patched with either <code class="docutils literal notranslate"><span class="pre">extend=True</span></code> or <code class="docutils literal notranslate"><span class="pre">persist=False</span></code>,
+but not both.</p></li>
 <li><p>Deletions of nodes are not yet visible to subscribers.</p></li>
 </ul>
 </section>
