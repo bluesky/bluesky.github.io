@@ -156,7 +156,7 @@ Remote Monitoring of Console Output
 -----------------------------------
 
 RE Manager is capable of capturing and publishing console output to 0MQ socket.
-0MQ publishing is disabled by default and must be enabled using ``--zmq-publish``
+0MQ publishing is disabled by default and must be enabled using ``--zmq-publish-console``
 parameter of ``start-re-manager``. A simple monitoring application (``qserver-console-monitor``)
 allows to visualize the published output. See :ref:`tutorial_remote_monitoring` for a brief
 tutorial.
@@ -164,3 +164,11 @@ tutorial.
 ``bluesky_queueserver`` package provides ``ReceiveConsoleOutput`` and ``ReceiveConsoleOutputAsync``
 class, which can be helpful in implementing remote monitoring features in client applications. See
 :ref:`subscribing_to_console_output` for more details.
+
+Remote Monitoring of System Info
+--------------------------------
+
+In addition to streaming console output, RE Manager is streaming system information over the
+same 0MQ socket. Currently only RE Manager status is streamed. The convenience classes
+``ReceiveSystemInfo`` and ``ReceiveSystemInfoAsync`` can be used to implement remote monitoring
+features in client applications. See :ref:`subscribing_to_system_info` for more details.

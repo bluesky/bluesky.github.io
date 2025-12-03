@@ -192,11 +192,19 @@ Parameters    ---
 Returns       **msg**: *str*
                  application name and version, e.g. 'RE Manager v0.0.10'
 
+              **time**: *str*
+                 timestamp of the last status update. Time is formatted accoring to iso8601,
+                 e.g. '2025-11-24T15:25:54.956818'.
+
               **items_in_queue**: *int*
                  the number of items in the plan queue
 
               **items_in_history**: *int*
                  the number of items in the plan history
+
+              **status_uid**: *str*
+                 status UID is changed each time status is updated at the server. The UID can
+                 be used to detect changes in other status parameters.
 
               **running_item_uid**: *str* or *None*
                  item UID of the currently running plan or *None* if no plan is currently running.

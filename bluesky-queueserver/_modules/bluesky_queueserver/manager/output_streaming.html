@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.0.23.post5+gb8ee112 documentation</title>
+  <title>bluesky_queueserver.manager.output_streaming &mdash; bluesky-queueserver 0.0.23.post31+g1d16701 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
       <link rel="stylesheet" type="text/css" href="../../../_static/plot_directive.css" />
@@ -14,7 +14,7 @@
   
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../../_static/documentation_options.js?v=ae2c6c15"></script>
+      <script src="../../../_static/documentation_options.js?v=4a0931cd"></script>
       <script src="../../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/js/theme.js"></script>
@@ -148,7 +148,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">s</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
 
-        <span class="n">msg</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span> <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="n">s</span><span class="p">}</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="s2">&quot;console&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span> <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="n">s</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
 
@@ -193,10 +193,35 @@
             <span class="k">pass</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">push_info_to_msg_queue</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">msg_queue</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Format the message and put it into the message queue. The message is published to</span>
+<span class="sd">    the ``info`` socket in the ``&quot;info&quot;`` channel.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    key : str</span>
+<span class="sd">        The key used for the message. The message is formatted as a dictionary:</span>
+<span class="sd">        ``{&quot;channel&quot;: &quot;info&quot;, &quot;time&quot;: ttime.time(), &quot;msg&quot;: {key: msg}}``.</span>
+<span class="sd">        The key is used to identify the information in the message. E.g. ``&quot;status&quot;``.</span>
+<span class="sd">    msg : dict</span>
+<span class="sd">        The message is a dictionary with useful information (actual payload).</span>
+<span class="sd">    msg_queue : multiprocessing.Queue</span>
+<span class="sd">        Reference to the queue used for collecting messages.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">msg</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="s2">&quot;info&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">ttime</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span> <span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">msg</span><span class="p">}}</span>
+    <span class="n">msg_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+
 <span class="n">_default_zmq_console_topic</span> <span class="o">=</span> <span class="s2">&quot;QS_Console&quot;</span>
+<span class="n">_default_zmq_info_topic</span> <span class="o">=</span> <span class="s2">&quot;QS_Info&quot;</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">PublishConsoleOutput</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PublishZMQStreamOutput</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    The class that is publishing the collected console output messages to 0MQ socket.</span>
 <span class="sd">    The queue is expected to be filled with messages in the format</span>
@@ -219,8 +244,10 @@
 <span class="sd">        the default address ``tcp://*:60625`` is used.</span>
 <span class="sd">    encoding : str or ZMQEncoding</span>
 <span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
-<span class="sd">    zmq_topic : str</span>
-<span class="sd">        Name of the 0MQ topic where the messages are published.</span>
+<span class="sd">    zmq_topic_console : str</span>
+<span class="sd">        Name of the 0MQ topic where the console messages are published.</span>
+<span class="sd">    zmq_topic_info : str</span>
+<span class="sd">        Name of the 0MQ topic where the system information messages are published.</span>
 <span class="sd">    name : str</span>
 <span class="sd">        Name of the thread where the messages are published.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -233,7 +260,8 @@
         <span class="n">zmq_publish_on</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">zmq_publish_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span>
-        <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span>
+        <span class="n">zmq_topic_console</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span>
+        <span class="n">zmq_topic_info</span><span class="o">=</span><span class="n">_default_zmq_info_topic</span><span class="p">,</span>
         <span class="n">name</span><span class="o">=</span><span class="s2">&quot;RE Console Output Publisher&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_thread_running</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># Set True to exit the thread</span>
@@ -249,7 +277,8 @@
         <span class="n">zmq_publish_addr</span> <span class="o">=</span> <span class="n">zmq_publish_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address_for_server</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_publish_addr</span> <span class="o">=</span> <span class="n">zmq_publish_addr</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span> <span class="o">=</span> <span class="n">zmq_topic</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic_console</span> <span class="o">=</span> <span class="n">zmq_topic_console</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic_info</span> <span class="o">=</span> <span class="n">zmq_topic_info</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_publish_on</span><span class="p">:</span>
@@ -305,12 +334,19 @@
                 <span class="k">break</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_publish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">payload</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_console_output_on</span><span class="p">:</span>
+        <span class="n">channel</span> <span class="o">=</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;channel&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_console_output_on</span> <span class="ow">and</span> <span class="n">channel</span> <span class="o">==</span> <span class="s2">&quot;console&quot;</span><span class="p">:</span>
             <span class="n">sys</span><span class="o">.</span><span class="n">__stdout__</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">payload</span><span class="p">[</span><span class="s2">&quot;msg&quot;</span><span class="p">])</span>
             <span class="n">sys</span><span class="o">.</span><span class="n">__stdout__</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_publish_on</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="p">:</span>
-            <span class="n">topic</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span>
+            <span class="k">if</span> <span class="n">channel</span> <span class="o">==</span> <span class="s2">&quot;console&quot;</span><span class="p">:</span>
+                <span class="n">topic</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic_console</span>
+            <span class="k">elif</span> <span class="n">channel</span> <span class="o">==</span> <span class="s2">&quot;info&quot;</span><span class="p">:</span>
+                <span class="n">topic</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic_info</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to publish the message: unsupported 0MQ channel </span><span class="si">%s</span><span class="s2">.&quot;</span><span class="p">)</span>
+            <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">payload</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;msg&quot;</span><span class="p">)}</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_encoding</span> <span class="o">==</span> <span class="n">ZMQEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">:</span>
                 <span class="n">payload_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">([</span><span class="n">topic</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">),</span> <span class="n">payload_json</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf8&quot;</span><span class="p">)])</span>
@@ -319,9 +355,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">([</span><span class="n">topic</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;ascii&quot;</span><span class="p">),</span> <span class="n">payload_pickle</span><span class="p">])</span>
 
 
-<div class="viewcode-block" id="ReceiveConsoleOutput">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.html#bluesky_queueserver.ReceiveConsoleOutput">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ReceiveConsoleOutput</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_ReceiveZMQStreamOutput</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    The class allows to subscribe to published 0MQ messages and read the messages one by</span>
 <span class="sd">    one as they arrive. Subscription is performed using the remote 0MQ address and topic.</span>
@@ -334,6 +368,9 @@
 <span class="sd">    The ``subscribe()`` and ``unsubscribe()`` methods allow to explicitly subscribe and</span>
 <span class="sd">    unsubscribe the socket to the topic. The messages published while the socket is unsubscribed</span>
 <span class="sd">    are discarded. First call to ``recv()`` method automatically subscribes the socket.</span>
+
+<span class="sd">    The following code is an example of using the ``ReceiveConsoleOutput`` subclass,</span>
+<span class="sd">    which is configured to receive console output:</span>
 
 <span class="sd">    .. code-block:: python</span>
 
@@ -365,18 +402,16 @@
 <span class="sd">        ``tcp://localhost:60625`` is used.</span>
 <span class="sd">    encoding : str or ZMQEncoding</span>
 <span class="sd">        Encoding of used for 0MQ messages. Supported values: &quot;json&quot; or &quot;msgpack&quot;.</span>
-<span class="sd">    zmq_topic : str</span>
+<span class="sd">    zmq_topic_console : str</span>
 <span class="sd">        0MQ topic for console output. Only messages from this topic are going to be received.</span>
+<span class="sd">    zmq_topic_info : str</span>
+<span class="sd">        0MQ topic for info output. Only messages from this topic are going to be received.</span>
 <span class="sd">    timeout : int, float or None</span>
 <span class="sd">        Timeout for the receive operation in milliseconds. If `None`, then wait</span>
 <span class="sd">        for the message indefinitely.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ReceiveConsoleOutput.__init__">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.html#bluesky_queueserver.ReceiveConsoleOutput.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
-    <span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="p">,</span> <span class="n">encoding</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
 
         <span class="n">zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span> <span class="ow">or</span> <span class="n">default_zmq_info_address</span>
@@ -394,36 +429,27 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">:</span>
             <span class="n">context</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUB</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">)</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutput.subscribe">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.subscribe.html#bluesky_queueserver.ReceiveConsoleOutput.subscribe">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Subscribe 0MQ socket to the console output topic. Once the socket is subscribed,</span>
+<span class="sd">        Subscribe 0MQ socket to the topic. Once the socket is subscribed,</span>
 <span class="sd">        the published messages are cached by 0MQ and could be loaded with ``recv()`` method.</span>
 <span class="sd">        The function does nothing if the socket is already subscribed.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">True</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">True</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutput.unsubscribe">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.unsubscribe.html#bluesky_queueserver.ReceiveConsoleOutput.unsubscribe">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Unsubscribe 0MQ socket from the console output topic. Once the socket is unsubscribed,</span>
+<span class="sd">        Unsubscribe 0MQ socket from the topic. Once the socket is unsubscribed,</span>
 <span class="sd">        all published messages are discarded.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutput.recv">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.recv.html#bluesky_queueserver.ReceiveConsoleOutput.recv">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Get the next published message. The function subscribes the socket to 0MQ topic</span>
@@ -465,20 +491,64 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">payload</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span><span class="n">payload_received</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">payload</span></div>
-
+        <span class="k">return</span> <span class="n">payload</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.html#bluesky_queueserver.ReceiveConsoleOutputAsync">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ReceiveConsoleOutputAsync</span><span class="p">:</span>
+<div class="viewcode-block" id="ReceiveConsoleOutput">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.html#bluesky_queueserver.ReceiveConsoleOutput">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReceiveConsoleOutput</span><span class="p">(</span><span class="n">_ReceiveZMQStreamOutput</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Async version of ``ReceiveConsoleOutput`` class. There are two ways to use the class:</span>
-<span class="sd">    explicitly awaiting for the ``recv`` function (same as in ``ReceiveConsoleOutput``)</span>
+<span class="sd">    The class defaults are set to receive 0MQ messages with console output.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ReceiveConsoleOutput.__init__">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutput.html#bluesky_queueserver.ReceiveConsoleOutput.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_subscribe_addr</span><span class="p">,</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span>
+            <span class="n">zmq_topic</span><span class="o">=</span><span class="n">zmq_topic</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ReceiveSystemInfo">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveSystemInfo.html#bluesky_queueserver.ReceiveSystemInfo">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReceiveSystemInfo</span><span class="p">(</span><span class="n">_ReceiveZMQStreamOutput</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The class defaults are set to receive 0MQ messages with system information.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ReceiveSystemInfo.__init__">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveSystemInfo.html#bluesky_queueserver.ReceiveSystemInfo.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_info_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_subscribe_addr</span><span class="p">,</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span>
+            <span class="n">zmq_topic</span><span class="o">=</span><span class="n">zmq_topic</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<span class="n">ReceiveConsoleOutput</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">+=</span> <span class="n">_ReceiveZMQStreamOutput</span><span class="o">.</span><span class="vm">__doc__</span>
+<span class="n">ReceiveSystemInfo</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">+=</span> <span class="n">_ReceiveZMQStreamOutput</span><span class="o">.</span><span class="vm">__doc__</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_ReceiveZMQStreamOutputAsync</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Async version of ``_ReceiveZMQStreamOutput`` class. There are two ways to use the class:</span>
+<span class="sd">    explicitly awaiting for the ``recv`` function (same as in ``_ReceiveZMQStreamOutput``)</span>
 <span class="sd">    or setting up a callback function (plain function or coroutine).</span>
 
 <span class="sd">    The ``subscribe()`` and ``unsubscribe()`` methods allow to explicitly subscribe and</span>
@@ -486,7 +556,7 @@
 <span class="sd">    are discarded. Calls to ``recv()`` and ``start()`` methods always subscribe the socket,</span>
 <span class="sd">    ``stop()`` method unsubscribes the socket unless called with ``unsubscribe=False``.</span>
 
-<span class="sd">    Explicitly awaiting ``recv`` function:</span>
+<span class="sd">    Explicitly awaiting ``recv`` function (``ReceiveConsoleOutputAsync`` is a subclass):</span>
 
 <span class="sd">    .. code-block:: python</span>
 
@@ -571,11 +641,7 @@
 <span class="sd">        for the message indefinitely.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.__init__">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.html#bluesky_queueserver.ReceiveConsoleOutputAsync.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
-    <span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="p">,</span> <span class="n">encoding</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>  <span class="c1"># Timeout for &#39;recv&#39; operation (ms)</span>
 
         <span class="n">zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_subscribe_addr</span> <span class="ow">or</span> <span class="s2">&quot;tcp://localhost:60625&quot;</span>
@@ -598,36 +664,27 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">:</span>
             <span class="n">context</span> <span class="o">=</span> <span class="n">zmq</span><span class="o">.</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Context</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SUB</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">)</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.subscribe">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.subscribe.html#bluesky_queueserver.ReceiveConsoleOutputAsync.subscribe">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Subscribe 0MQ socket to the console output topic. Once the socket is subscribed,</span>
+<span class="sd">        Subscribe 0MQ socket to the topic. Once the socket is subscribed,</span>
 <span class="sd">        the published messages are cached by 0MQ and could be loaded with ``recv()`` method.</span>
 <span class="sd">        The function does nothing if the socket is already subscribed.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">True</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">True</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.unsubscribe">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.unsubscribe.html#bluesky_queueserver.ReceiveConsoleOutputAsync.unsubscribe">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Unsubscribe 0MQ socket from the console output topic. Once the socket is unsubscribed,</span>
+<span class="sd">        Unsubscribe 0MQ socket from the topic. Once the socket is unsubscribed,</span>
 <span class="sd">        all published messages are discarded.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_topic</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket_subscribed</span> <span class="o">=</span> <span class="kc">False</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.set_callback">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.set_callback.html#bluesky_queueserver.ReceiveConsoleOutputAsync.set_callback">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">set_callback</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cb</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Set callback function, which is called once for each received message. If ``cb`` is</span>
@@ -644,11 +701,8 @@
 <span class="sd">            and return ``None``. The function is expected to handle exceptions that are raised</span>
 <span class="sd">            internally. Pass ``None`` to clear callback (messages will be received and discarded).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="o">=</span> <span class="n">cb</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_callback</span> <span class="o">=</span> <span class="n">cb</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.recv">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.recv.html#bluesky_queueserver.ReceiveConsoleOutputAsync.recv">[docs]</a>
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=-</span><span class="mi">1</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Get the next published message. If timeout expires then ``TimeoutError`` is raised.</span>
@@ -689,8 +743,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">payload</span> <span class="o">=</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span><span class="n">payload_received</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">payload</span></div>
-
+        <span class="k">return</span> <span class="n">payload</span>
 
     <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_recv_next_message</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
@@ -714,8 +767,6 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">False</span>
 
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.start">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.start.html#bluesky_queueserver.ReceiveConsoleOutputAsync.start">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Start collection of messages published by RE Manager. Collection may be started and stopped</span>
@@ -726,11 +777,8 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_is_running</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
-            <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_next_message</span><span class="p">())</span></div>
+            <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_next_message</span><span class="p">())</span>
 
-
-<div class="viewcode-block" id="ReceiveConsoleOutputAsync.stop">
-<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.stop.html#bluesky_queueserver.ReceiveConsoleOutputAsync.stop">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">unsubscribe</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Stop collection of messages published by RE Manager. Call to ``stop`` method unsubscribes</span>
@@ -743,14 +791,60 @@
 <span class="sd">            Unsubscribe the socket if ``True`` (default), otherwise leave the socket subscribed.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_unsubscribe_when_stopping</span> <span class="o">=</span> <span class="n">unsubscribe</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_exit</span> <span class="o">=</span> <span class="kc">True</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_exit</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
+
+<div class="viewcode-block" id="ReceiveConsoleOutputAsync">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.html#bluesky_queueserver.ReceiveConsoleOutputAsync">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReceiveConsoleOutputAsync</span><span class="p">(</span><span class="n">_ReceiveZMQStreamOutputAsync</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The class defaults are set to receive 0MQ messages with console output.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ReceiveConsoleOutputAsync.__init__">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveConsoleOutputAsync.html#bluesky_queueserver.ReceiveConsoleOutputAsync.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_console_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_subscribe_addr</span><span class="p">,</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span>
+            <span class="n">zmq_topic</span><span class="o">=</span><span class="n">zmq_topic</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ReceiveSystemInfoAsync">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveSystemInfoAsync.html#bluesky_queueserver.ReceiveSystemInfoAsync">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReceiveSystemInfoAsync</span><span class="p">(</span><span class="n">_ReceiveZMQStreamOutputAsync</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The class defaults are set to receive 0MQ messages with system information.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ReceiveSystemInfoAsync.__init__">
+<a class="viewcode-back" href="../../../generated/bluesky_queueserver.ReceiveSystemInfoAsync.html#bluesky_queueserver.ReceiveSystemInfoAsync.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">,</span> <span class="n">zmq_topic</span><span class="o">=</span><span class="n">_default_zmq_info_topic</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1000</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="n">zmq_subscribe_addr</span><span class="p">,</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span>
+            <span class="n">zmq_topic</span><span class="o">=</span><span class="n">zmq_topic</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<span class="n">ReceiveConsoleOutputAsync</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">+=</span> <span class="n">_ReceiveZMQStreamOutputAsync</span><span class="o">.</span><span class="vm">__doc__</span>
+<span class="n">ReceiveSystemInfoAsync</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">+=</span> <span class="n">_ReceiveZMQStreamOutputAsync</span><span class="o">.</span><span class="vm">__doc__</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">qserver_console_monitor_cli</span><span class="p">():</span>

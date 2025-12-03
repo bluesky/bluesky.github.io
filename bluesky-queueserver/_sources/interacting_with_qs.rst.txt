@@ -9,7 +9,7 @@ Interacting with Queue Server
 Subscribing to Published Console Output
 ---------------------------------------
 
-If console output publishing is enabled at RE Manager (parameter ``--zmq-publish``), the output
+If console output publishing is enabled at RE Manager (parameter ``--zmq-publish-console``), the output
 is published to 0MQ socket. Client applications may subscribe to the messages and use them
 for processing, display them to users or forward to other applications.
 
@@ -59,6 +59,50 @@ and starting and then stopping acquisition with ``start()`` and ``stop()`` metho
     ReceiveConsoleOutputAsync.set_callback
     ReceiveConsoleOutputAsync.start
     ReceiveConsoleOutputAsync.stop
+
+.. _subscribing_to_system_info:
+
+Subscribing to Published System Info
+------------------------------------
+
+In addition to streaming of console output, RE Manager is publishing status information to
+the same 0MQ PUB socket. The status information published using a different topic and can
+be easily separated from console output messages. The messages are published once per
+second or each time status is changed by RE Manager. Periodically published status can be
+used as 'heartbeat' to detect that RE Manager is running properly.
+
+The message format used for streaming is similar to the message format for console output.
+The ``status`` key indicates that the message contains status information. Messages with
+other information may be added to the stream in the future::
+
+  {"time": <timestamp>, "msg": {"status": <status-info>}}
+
+
+The ``ReceiveSystemInfo`` class can be used in synchronous or thread-based applications to
+receive the streamed messages:
+
+.. autosummary::
+   :nosignatures:
+   :toctree: generated
+
+    ReceiveSystemInfo
+    ReceiveSystemInfo.subscribe
+    ReceiveSystemInfo.unsubscribe
+    ReceiveSystemInfo.recv
+
+``ReceiveSystemInfoAsync`` is the asyncio-based version of the class:
+
+.. autosummary::
+   :nosignatures:
+   :toctree: generated
+
+    ReceiveSystemInfoAsync
+    ReceiveSystemInfoAsync.subscribe
+    ReceiveSystemInfoAsync.unsubscribe
+    ReceiveSystemInfoAsync.recv
+    ReceiveSystemInfoAsync.set_callback
+    ReceiveSystemInfoAsync.start
+    ReceiveSystemInfoAsync.stop
 
 
 Formatting Descriptions of Plans and Plan Parameters

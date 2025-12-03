@@ -112,28 +112,33 @@ Monitoring of Status of RE Manager
 Status of RE Manager may be loaded at any time using :ref:`method_status` API. The API returns
 a dictionary with status parameters::
 
-  {'devices_allowed_uid': '0639bc7a-15c1-4bc2-bfeb-41f58a08a8b9',
-  'devices_existing_uid': '2fe9df70-5f0f-4c17-bb7b-cda8a0aa80b0',
-  'items_in_history': 0,
+  {'msg': 'RE Manager v0.0.24',
+  'time': '2025-11-24T15:25:54.956818',
   'items_in_queue': 0,
-  'lock': {'environment': False, 'queue': False},
-  'lock_info_uid': '2b438226-f715-4ed3-a057-400a42717bb0',
-  'manager_state': 'idle',
-  'msg': 'RE Manager v0.0.16.post28.dev0+ge2491ae',
-  'pause_pending': False,
-  'plan_history_uid': '5894c896-b2ea-42c1-9dd0-f4faaa52cb39',
-  'plan_queue_mode': {'loop': False},
-  'plan_queue_uid': '5589b7ac-01b9-4f51-a7f2-8e883c352053',
-  'plans_allowed_uid': '835a998a-e01e-439f-bb3a-b65817904f7a',
-  'plans_existing_uid': '609ec025-2552-4e06-aa54-5e9ae7b7ed2c',
-  'queue_stop_pending': False,
-  're_state': 'idle',
-  'run_list_uid': '0b088775-1cc3-46de-9563-b83e04c0e243',
+  'items_in_history': 10,
   'running_item_uid': None,
-  'task_results_uid': '846b6dd3-d9c2-4a12-bd03-b82580b8f742',
+  'manager_state': 'idle',
+  'queue_stop_pending': False,
+  'queue_autostart_enabled': False,
+  'worker_environment_exists': False,
+  'worker_environment_state': 'closed',
   'worker_background_tasks': 0,
-  'worker_environment_exists': True,
-  'worker_environment_state': 'idle'}
+  're_state': None,
+  'ip_kernel_state': None,
+  'ip_kernel_captured': None,
+  'pause_pending': False,
+  'status_uid': 'bff85f14-1385-4bd2-b6c1-ca10ce6e9fb7',
+  'run_list_uid': 'df43e1f9-897c-42a3-886b-a74cca92b9a5',
+  'plan_queue_uid': '8480de4e-1ce7-4ca4-a1dc-a70c217f4d70',
+  'plan_history_uid': 'd87aa9df-317d-4633-8773-a6acdb0cd0d3',
+  'devices_existing_uid': '129a3100-4719-4f6a-8994-78cd58391ece',
+  'plans_existing_uid': 'eed0604d-8f6e-4c80-b41b-fe724947c177',
+  'devices_allowed_uid': '2bab7afe-57ac-4fd7-8ff1-cb3c100a8679',
+  'plans_allowed_uid': 'eb253deb-a7f4-434a-bc57-448d83e1f077',
+  'plan_queue_mode': {'loop': False, 'ignore_failures': False},
+  'task_results_uid': '4378acb7-fd66-46a4-9ee6-61eae87fef66',
+  'lock_info_uid': '026b0a83-4de0-4974-b8c7-1db0031bb91b',
+  'lock': {'environment': False, 'queue': False}}
 
 The parameter *msg* contains the version information on currently running RE Manager. The states
 of RE Manager and Run Engine are returned using parameters *manager_state* and *re_state*.
@@ -146,6 +151,12 @@ objects that are changed each time the objects are updated. For example, *plan_q
 each time the queue is updated either in response to API request from a client or due to internal
 processes. Tracking changes in UIDs and downloading the respective objects only when the UIDs
 change is more efficient than continuously polling the objects themselves.
+
+The *status_uid* parameter is updated each time the status is changed and can be used for detecting
+changes of other status parameters. The parameter *time* is the timestamp of last updated of
+status. In some conditions status may not update for long period of time. For example,
+as long as RE Manager remains idle and no operations are performed on the queue or history,
+then *status_uid* and *time* remains unchanged.
 
 See documentation on :ref:`method_status` API for detailed description of the status parameters.
 
