@@ -1,0 +1,702 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bluesky_queueserver_api.system_info_monitor &mdash; Bluesky Queue Server API 0.0.12.post19+g9a780c2 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=ea22fd5c"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            Bluesky Queue Server API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api-reference.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../release-history.html">Release History</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../contributing.html">Contributing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Bluesky Queue Server API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bluesky_queueserver_api.system_info_monitor</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bluesky_queueserver_api.system_info_monitor</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">queue</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ttime</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bluesky_queueserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReceiveSystemInfo</span><span class="p">,</span> <span class="n">ReceiveSystemInfoAsync</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.comm_base</span><span class="w"> </span><span class="kn">import</span> <span class="n">RequestTimeoutError</span>
+
+<span class="n">_system_info_monitor_endpoint</span> <span class="o">=</span> <span class="s2">&quot;/api/info/ws&quot;</span>
+
+
+<span class="n">_doc_SystemInfoMonitor_ZMQ</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    System Info Monitor API (0MQ). The class implements a monitor for console output</span>
+<span class="s2">    published by RE Manager over 0MQ. The asynchronous version of the class must</span>
+<span class="s2">    be instantiated in the loop.</span>
+
+<span class="s2">    Parameters</span>
+<span class="s2">    ----------</span>
+<span class="s2">    zmq_info_addr: str</span>
+<span class="s2">        Address of 0MQ PUB socket. The SUB socket of the monitor subscribes to this address</span>
+<span class="s2">        once the class is instantiated.</span>
+<span class="s2">    poll_timeout: float</span>
+<span class="s2">        Timeout used internally for polling 0MQ socket. The value does not influence performance.</span>
+<span class="s2">        It may take longer to stop the background thread or task, if the value is too large.</span>
+<span class="s2">    max_msgs: int</span>
+<span class="s2">        Maximum number of messages in the buffer. New messages are ignored if the buffer</span>
+<span class="s2">        is full. This could happen only if console monitoring is enabled, but messages</span>
+<span class="s2">        are not read from the buffer. Setting the value to 0 disables collection of messages</span>
+<span class="s2">        in the buffer.</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">_doc_SystemInfoMonitor_HTTP</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Console Monitor API (HTTP). The class implements a monitor for console output</span>
+<span class="s2">    published by RE Manager over HTTP. The asynchronous version of the class must</span>
+<span class="s2">    be instantiated in the loop.</span>
+
+<span class="s2">    Parameters</span>
+<span class="s2">    ----------</span>
+<span class="s2">    parent: class</span>
+<span class="s2">        Reference to the parent class (or any class). The class must expose the attribute</span>
+<span class="s2">        ``_client`` that references configured ``httpx`` client.</span>
+<span class="s2">    poll_period: float</span>
+<span class="s2">        Period between consecutive retries to connect to the websocket at the server.</span>
+<span class="s2">        The value is also used as a timeout for websocket receive operation. It may take</span>
+<span class="s2">        longer to stop background thread if the value is too large.</span>
+<span class="s2">    max_msgs: int</span>
+<span class="s2">        Maximum number of messages in the buffer. New messages are ignored if the buffer</span>
+<span class="s2">        is full. This could happen only if console monitoring is enabled, but messages</span>
+<span class="s2">        are not read from the buffer. Setting the value to 0 disables collection of messages</span>
+<span class="s2">        in the buffer.</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">_doc_SystemInfoMonitor_enabled</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Indicates if monitoring is enabled. Returns ``True`` if monitoring is enabled,</span>
+<span class="s2">    ``False`` otherwise.</span>
+
+<span class="s2">    Examples</span>
+<span class="s2">    --------</span>
+
+<span class="s2">    Synchronous and asyncronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        is_enabled = RM.system_info_monitor.enabled</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">_doc_SystemInfoMonitor_enable</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Enable monitoring of the system info. Received messages are accumulated in the buffer</span>
+<span class="s2">    and need to be continuosly read using ``next_msg()`` to prevent buffer from overflowing.</span>
+<span class="s2">    If the API is called when background thread or task is not running, the buffer is cleared</span>
+<span class="s2">    and all old messages are discarded. Note, that disabling and then enabling the monitor in</span>
+<span class="s2">    rapid sequence is unlikely to clear the buffer, because the background thread or task may</span>
+<span class="s2">    still be running. Use ``clear()`` API to remove messages from the buffer.</span>
+
+<span class="s2">    Examples</span>
+<span class="s2">    --------</span>
+
+<span class="s2">    Synchronous and asyncronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        RM.system_info_monitor.enable()</span>
+<span class="s2">        RM.system_info_monitor.disable()</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">_doc_SystemInfoMonitor_disable</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Disable monitoring of the system info. The API does not immediately stop the background thread</span>
+<span class="s2">    or task. If the monitor is quickly re-enabled, the background thread or task may continue running</span>
+<span class="s2">    continously.</span>
+
+<span class="s2">    Examples</span>
+<span class="s2">    --------</span>
+
+<span class="s2">    Synchronous and asyncronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        RM.system_info_monitor.enable()</span>
+<span class="s2">        RM.system_info_monitor.disable()</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">_doc_SystemInfoMonitor_disable_wait</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Disable monitoring and wait for completion.</span>
+
+<span class="s2">    Parameters</span>
+<span class="s2">    ----------</span>
+<span class="s2">    timeout: float</span>
+<span class="s2">        Wait timeout.</span>
+
+<span class="s2">    Raises</span>
+<span class="s2">    ------</span>
+<span class="s2">    TimeoutError</span>
+<span class="s2">        Wait timeout (synchronous API)</span>
+<span class="s2">    asyncio.TimeoutError</span>
+<span class="s2">        Wait timeout (asynchronous API)</span>
+
+<span class="s2">    Examples</span>
+<span class="s2">    --------</span>
+
+<span class="s2">    Syncronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        RM.system_info_monitor.enable()</span>
+<span class="s2">        RM.system_info_monitor.disable_wait()</span>
+
+<span class="s2">    Asynchronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        RM.system_info_monitor.enable()</span>
+<span class="s2">        await RM.system_info_monitor.disable_wait()</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">_doc_SystemInfoMonitor_clear</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Clear the message buffer. Removes all messages from the buffer.</span>
+
+<span class="s2">    Examples</span>
+<span class="s2">    --------</span>
+
+<span class="s2">    Synchronous and asyncronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        RM.system_info_monitor.clear()</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">_doc_SystemInfoMonitor_next_msg</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    Returns the next message from the buffer. If ``timeout`` is ``None`` or zero, then</span>
+<span class="s2">    the API returns the next available message. If the buffer contains no messages, the</span>
+<span class="s2">    function waits for the next published message for ``timeout`` period and raises</span>
+<span class="s2">    ``RequestTimeoutError`` if no messages were received. If ``timeout is ``None`` or zero</span>
+<span class="s2">    and the buffer contains no messages, then the function immediately raises</span>
+<span class="s2">    ``RequestTimeoutError``.</span>
+
+<span class="s2">    The returned message is a dictionary with two keys: ``&quot;time&quot;`` (timestamp indicating time</span>
+<span class="s2">    when the message was sent by RE Manager) and ``&quot;msg&quot;`` (dictionary with one key, the key</span>
+<span class="s2">    indicates the message type, e.g. ``&quot;status&quot;``, and the value is the information itself).</span>
+<span class="s2">    For example:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        {&quot;time&quot;: 1764605683.1407075, &quot;msg&quot;: {&quot;status&quot;: {&lt;status info of RE Manager&gt;}}}</span>
+
+<span class="s2">    Parameters</span>
+<span class="s2">    ----------</span>
+<span class="s2">    timeout: float or None</span>
+<span class="s2">        If timeout is positive floating point number, zero or ``None``.</span>
+
+<span class="s2">    Raises</span>
+<span class="s2">    ------</span>
+<span class="s2">    RequestTimeoutError</span>
+<span class="s2">        No messages were no messages received during timeout period.</span>
+
+<span class="s2">    Examples</span>
+<span class="s2">    --------</span>
+
+<span class="s2">    Synchronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        # Make sure RE Manager is started with option &#39;--zmq-publish-console=ON&#39;</span>
+
+<span class="s2">        RM = REManagerAPI()</span>
+<span class="s2">        RM.system_info_monitor.enable()</span>
+
+<span class="s2">        # Run any command that generates console output</span>
+<span class="s2">        RM.environment_open()</span>
+<span class="s2">        RM.wait_for_idle()</span>
+
+<span class="s2">        try:</span>
+<span class="s2">            msg = RM.system_info_monitor.next_msg(timeout=1)</span>
+<span class="s2">            print(msg[&quot;msg&quot;])</span>
+<span class="s2">        except RM.RequestTimeoutError:</span>
+<span class="s2">            pass</span>
+
+<span class="s2">        RM.system_info_monitor.disable()</span>
+<span class="s2">        RM.close()</span>
+
+<span class="s2">    Asynchronous API:</span>
+
+<span class="s2">    .. code-block:: python</span>
+
+<span class="s2">        # Make sure RE Manager is started with option &#39;--zmq-publish-console=ON&#39;</span>
+
+<span class="s2">        RM = REManagerAPI()</span>
+<span class="s2">        RM.system_info_monitor.enable()</span>
+
+<span class="s2">        # Run any command that generates console output</span>
+<span class="s2">        await RM.environment_open()</span>
+<span class="s2">        await RM.wait_for_idle()</span>
+
+<span class="s2">        try:</span>
+<span class="s2">            msg = await RM.system_info_monitor.next_msg(timeout=1)</span>
+<span class="s2">            print(msg[&quot;msg&quot;])</span>
+<span class="s2">        except RM.RequestTimeoutError:</span>
+<span class="s2">            pass</span>
+
+<span class="s2">        RM.system_info_monitor.disable()</span>
+<span class="s2">        await RM.close()</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_websocket_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate websocket URI based on the base URI used for http requests</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">uri</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;://&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">uri_base</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;ws://</span><span class="si">{</span><span class="n">uri</span><span class="p">[</span><span class="n">n</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="p">:]</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">uri_base</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;ws://</span><span class="si">{</span><span class="n">uri</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">uri_base</span><span class="si">}{</span><span class="n">endpoint</span><span class="si">}</span><span class="s2">&quot;</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_SystemInfoMonitor</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_init</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_enable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">enable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enable</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">disable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clear</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_SystemInfoMonitor_Threads</span><span class="p">(</span><span class="n">_SystemInfoMonitor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_msgs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue_max</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_msgs</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span> <span class="o">=</span> <span class="n">queue</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="n">max_msgs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Thread or asyncio task</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_enable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_thread_receive_msgs</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;QS API - Console monitoring&quot;</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add_msg_to_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue_max</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">put_nowait</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">disable_wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Timeout occurred while disabling console monitor: timeout=</span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">next_msg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">block</span><span class="o">=</span><span class="n">block</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Empty</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">RequestTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No message was received (timeout=</span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="p">{})</span>
+
+
+<div class="viewcode-block" id="SystemInfoMonitor_ZMQ_Threads">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Threads.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Threads">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemInfoMonitor_ZMQ_Threads</span><span class="p">(</span><span class="n">_SystemInfoMonitor_Threads</span><span class="p">):</span>
+    <span class="c1"># Docstring is maintained separately</span>
+
+<div class="viewcode-block" id="SystemInfoMonitor_ZMQ_Threads.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Threads.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Threads.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_info_addr</span><span class="p">,</span> <span class="n">zmq_encoding</span><span class="p">,</span> <span class="n">poll_timeout</span><span class="p">,</span> <span class="n">max_msgs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_info_addr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_encoding</span> <span class="o">=</span> <span class="n">zmq_encoding</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_timeout</span> <span class="o">=</span> <span class="n">poll_timeout</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_msgs</span><span class="o">=</span><span class="n">max_msgs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span> <span class="o">=</span> <span class="n">ReceiveSystemInfo</span><span class="p">(</span>
+            <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">,</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_encoding</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_timeout</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_thread_receive_msgs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
+
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_lock</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                    <span class="k">break</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_add_msg_to_queue</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
+                <span class="c1"># No published messages are detected</span>
+                <span class="k">pass</span>
+            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
+                <span class="c1"># Queue is full, ignore the new messages</span>
+                <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">queue</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="SystemInfoMonitor_HTTP_Threads">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Threads.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Threads">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemInfoMonitor_HTTP_Threads</span><span class="p">(</span><span class="n">_SystemInfoMonitor_Threads</span><span class="p">):</span>
+    <span class="c1"># Docstring is maintained separately</span>
+
+<div class="viewcode-block" id="SystemInfoMonitor_HTTP_Threads.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Threads.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Threads.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">poll_period</span><span class="p">,</span> <span class="n">max_msgs</span><span class="p">):</span>
+        <span class="c1"># The parent class is must have ``_client`` attribute with</span>
+        <span class="c1">#   active httpx client.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span> <span class="o">=</span> <span class="n">parent</span>  <span class="c1"># Reference to the parent class</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span> <span class="o">=</span> <span class="n">poll_period</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_msgs</span><span class="o">=</span><span class="n">max_msgs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_thread_receive_msgs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_lock</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                    <span class="k">break</span>
+
+            <span class="n">websocket_uri</span> <span class="o">=</span> <span class="n">_websocket_uri</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_http_server_uri</span><span class="p">,</span> <span class="n">_system_info_monitor_endpoint</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">websockets.sync.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
+
+                <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="n">websocket_uri</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+                    <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">msg_json</span> <span class="o">=</span> <span class="n">websocket</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span><span class="p">,</span> <span class="n">decode</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                            <span class="k">try</span><span class="p">:</span>
+                                <span class="n">msg</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">msg_json</span><span class="p">)</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">_add_msg_to_queue</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                            <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">:</span>
+                                <span class="k">pass</span>
+                            <span class="k">except</span> <span class="n">queue</span><span class="o">.</span><span class="n">Full</span><span class="p">:</span>
+                                <span class="c1"># Queue is full, ignore the new messages</span>
+                                <span class="k">pass</span>
+                        <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
+                            <span class="k">pass</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="c1"># Ignore communication errors. More detailed processing may be added later.</span>
+                <span class="k">pass</span>
+            <span class="n">ttime</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">queue</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_SystemInfoMonitor_Async</span><span class="p">(</span><span class="n">_SystemInfoMonitor</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_msgs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue_max</span> <span class="o">=</span> <span class="n">max_msgs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="n">max_msgs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Thread or asyncio task</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_lock</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add_msg_to_queue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue_max</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">put_nowait</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_enable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_task_receive_msgs</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">disable_wait</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">wait</span><span class="p">(),</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">next_msg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Docstring is maintained separately</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">timeout</span><span class="p">:</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">get</span><span class="p">(),</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">get_nowait</span><span class="p">()</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">QueueEmpty</span><span class="p">,</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">RequestTimeoutError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No message was received (timeout=</span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="p">{})</span>
+
+
+<div class="viewcode-block" id="SystemInfoMonitor_ZMQ_Async">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Async.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Async">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemInfoMonitor_ZMQ_Async</span><span class="p">(</span><span class="n">_SystemInfoMonitor_Async</span><span class="p">):</span>
+    <span class="c1"># Docstring is maintained separately</span>
+
+<div class="viewcode-block" id="SystemInfoMonitor_ZMQ_Async.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Async.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_ZMQ_Async.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">zmq_info_addr</span><span class="p">,</span> <span class="n">zmq_encoding</span><span class="p">,</span> <span class="n">poll_timeout</span><span class="p">,</span> <span class="n">max_msgs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span> <span class="o">=</span> <span class="n">zmq_info_addr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_encoding</span> <span class="o">=</span> <span class="n">zmq_encoding</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_timeout</span> <span class="o">=</span> <span class="n">poll_timeout</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_msgs</span><span class="o">=</span><span class="n">max_msgs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span> <span class="o">=</span> <span class="n">ReceiveSystemInfoAsync</span><span class="p">(</span>
+            <span class="n">zmq_subscribe_addr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_subscribe_addr</span><span class="p">,</span>
+            <span class="n">encoding</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_encoding</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_timeout</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_task_receive_msgs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span><span class="o">.</span><span class="n">subscribe</span><span class="p">()</span>
+
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_lock</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                    <span class="k">break</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rco</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_add_msg_to_queue</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">TimeoutError</span><span class="p">:</span>
+                <span class="c1"># No published messages are detected</span>
+                <span class="k">pass</span>
+            <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">QueueFull</span><span class="p">:</span>
+                <span class="c1"># Queue is full, ignore the new messages</span>
+                <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">get_nowait</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">QueueEmpty</span><span class="p">:</span>
+            <span class="k">pass</span></div>
+
+
+
+<div class="viewcode-block" id="SystemInfoMonitor_HTTP_Async">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Async.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Async">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemInfoMonitor_HTTP_Async</span><span class="p">(</span><span class="n">_SystemInfoMonitor_Async</span><span class="p">):</span>
+    <span class="c1"># Docstring is maintained separately</span>
+
+<div class="viewcode-block" id="SystemInfoMonitor_HTTP_Async.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Async.html#bluesky_queueserver_api.system_info_monitor.SystemInfoMonitor_HTTP_Async.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">poll_period</span><span class="p">,</span> <span class="n">max_msgs</span><span class="p">):</span>
+        <span class="c1"># The parent class is must have ``_client`` attribute with</span>
+        <span class="c1">#   active httpx client.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span> <span class="o">=</span> <span class="n">parent</span>  <span class="c1"># Reference to the parent class</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span> <span class="o">=</span> <span class="n">poll_period</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">max_msgs</span><span class="o">=</span><span class="n">max_msgs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_monitor_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_task_receive_msgs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">is_set</span><span class="p">():</span>
+                <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_lock</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+                    <span class="k">break</span>
+
+            <span class="n">websocket_uri</span> <span class="o">=</span> <span class="n">_websocket_uri</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_http_server_uri</span><span class="p">,</span> <span class="n">_system_info_monitor_endpoint</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">websockets.asyncio.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
+
+                <span class="k">async</span> <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="n">websocket_uri</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+                    <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="n">msg_json</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span>
+                                <span class="n">websocket</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">decode</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span>
+                            <span class="p">)</span>
+                            <span class="k">try</span><span class="p">:</span>
+                                <span class="n">msg</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">msg_json</span><span class="p">)</span>
+                                <span class="bp">self</span><span class="o">.</span><span class="n">_add_msg_to_queue</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                            <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">:</span>
+                                <span class="k">pass</span>
+                            <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">QueueFull</span><span class="p">:</span>
+                                <span class="c1"># Queue is full, ignore the new messages</span>
+                                <span class="k">pass</span>
+                        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+                            <span class="k">pass</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="c1"># Ignore communication errors. More detailed processing may be added later.</span>
+                <span class="k">pass</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_msg_queue</span><span class="o">.</span><span class="n">get_nowait</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">QueueEmpty</span><span class="p">:</span>
+            <span class="k">pass</span></div>
+
+
+
+<span class="n">_SystemInfoMonitor</span><span class="o">.</span><span class="n">enabled</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_enabled</span>
+<span class="n">_SystemInfoMonitor</span><span class="o">.</span><span class="n">enable</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_enable</span>
+<span class="n">_SystemInfoMonitor</span><span class="o">.</span><span class="n">disable</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_disable</span>
+<span class="n">_SystemInfoMonitor</span><span class="o">.</span><span class="n">clear</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_clear</span>
+
+<span class="n">_SystemInfoMonitor_Threads</span><span class="o">.</span><span class="n">disable_wait</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_disable_wait</span>
+<span class="n">_SystemInfoMonitor_Threads</span><span class="o">.</span><span class="n">next_msg</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_next_msg</span>
+
+<span class="n">SystemInfoMonitor_ZMQ_Threads</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_ZMQ</span>
+<span class="n">SystemInfoMonitor_HTTP_Threads</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_HTTP</span>
+
+<span class="n">_SystemInfoMonitor_Async</span><span class="o">.</span><span class="n">disable_wait</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_disable_wait</span>
+<span class="n">_SystemInfoMonitor_Async</span><span class="o">.</span><span class="n">next_msg</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_next_msg</span>
+
+<span class="n">SystemInfoMonitor_ZMQ_Async</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_ZMQ</span>
+<span class="n">SystemInfoMonitor_HTTP_Async</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">_doc_SystemInfoMonitor_HTTP</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Brookhaven National Laboratory.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
