@@ -5,17 +5,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_queueserver_api.system_info_monitor &mdash; Bluesky Queue Server API 0.0.12.post24+g90fbcc0 documentation</title>
+  <title>bluesky_queueserver_api.system_info_monitor &mdash; Bluesky Queue Server API 0.0.12.post27+gbd8fe3f documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../_static/plot_directive.css" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=50c6d874"></script>
-      <script src="../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/documentation_options.js?v=160ce677"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" /> 
@@ -468,11 +468,44 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_thread_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
                     <span class="k">break</span>
 
+            <span class="n">auth_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_auth_method</span>
+            <span class="n">auth_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_auth_key</span>
+            <span class="n">api_key_first_eight</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">use_apikey</span> <span class="o">=</span> <span class="n">auth_method</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">AuthorizationMethods</span><span class="o">.</span><span class="n">API_KEY</span>
+            <span class="n">use_token</span> <span class="o">=</span> <span class="n">auth_method</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">AuthorizationMethods</span><span class="o">.</span><span class="n">TOKEN</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">delete_api_key</span><span class="p">(</span><span class="n">use_token</span><span class="p">,</span> <span class="n">api_key_first_eight</span><span class="p">):</span>
+                <span class="c1"># Send request to delete temporary API key if it exists</span>
+                <span class="k">if</span> <span class="n">use_token</span> <span class="ow">and</span> <span class="n">api_key_first_eight</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">send_request</span><span class="p">(</span>
+                            <span class="n">method</span><span class="o">=</span><span class="s2">&quot;apikey_delete&quot;</span><span class="p">,</span> <span class="n">url_params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">api_key_first_eight</span><span class="p">}</span>
+                        <span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="k">pass</span>
+
             <span class="n">websocket_uri</span> <span class="o">=</span> <span class="n">_websocket_uri</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_http_server_uri</span><span class="p">,</span> <span class="n">_system_info_monitor_endpoint</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="kn">from</span><span class="w"> </span><span class="nn">websockets.sync.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
 
-                <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="n">websocket_uri</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+                <span class="n">_api_key</span> <span class="o">=</span> <span class="kc">None</span>
+
+                <span class="c1"># Request temporary API key</span>
+                <span class="k">if</span> <span class="n">use_apikey</span><span class="p">:</span>
+                    <span class="n">_api_key</span> <span class="o">=</span> <span class="n">auth_key</span>
+                <span class="k">elif</span> <span class="n">use_token</span><span class="p">:</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">send_request</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s2">&quot;apikey_new&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="mi">60</span><span class="p">})</span>
+                    <span class="n">_api_key</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;secret&quot;</span><span class="p">]</span>
+                    <span class="n">api_key_first_eight</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;first_eight&quot;</span><span class="p">]</span>
+
+                <span class="n">additional_headers</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">if</span> <span class="n">_api_key</span><span class="p">:</span>
+                    <span class="n">additional_headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;ApiKey </span><span class="si">{</span><span class="n">_api_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+                <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="n">websocket_uri</span><span class="p">,</span> <span class="n">additional_headers</span><span class="o">=</span><span class="n">additional_headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+                    <span class="n">delete_api_key</span><span class="p">(</span><span class="n">use_token</span><span class="p">,</span> <span class="n">api_key_first_eight</span><span class="p">)</span>
+                    <span class="n">api_key_first_eight</span> <span class="o">=</span> <span class="kc">None</span>
+
                     <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
                         <span class="k">try</span><span class="p">:</span>
                             <span class="n">msg_json</span> <span class="o">=</span> <span class="n">websocket</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span><span class="p">,</span> <span class="n">decode</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -489,6 +522,9 @@
             <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
                 <span class="c1"># Ignore communication errors. More detailed processing may be added later.</span>
                 <span class="k">pass</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">delete_api_key</span><span class="p">(</span><span class="n">use_token</span><span class="p">,</span> <span class="n">api_key_first_eight</span><span class="p">)</span>
+
             <span class="n">ttime</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -620,11 +656,44 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_task_running</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
                     <span class="k">break</span>
 
+            <span class="n">auth_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_auth_method</span>
+            <span class="n">auth_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_auth_key</span>
+            <span class="n">api_key_first_eight</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">use_apikey</span> <span class="o">=</span> <span class="n">auth_method</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">AuthorizationMethods</span><span class="o">.</span><span class="n">API_KEY</span>
+            <span class="n">use_token</span> <span class="o">=</span> <span class="n">auth_method</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">AuthorizationMethods</span><span class="o">.</span><span class="n">TOKEN</span>
+
+            <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">delete_api_key</span><span class="p">(</span><span class="n">use_token</span><span class="p">,</span> <span class="n">api_key_first_eight</span><span class="p">):</span>
+                <span class="c1"># Send request to delete temporary API key if it exists</span>
+                <span class="k">if</span> <span class="n">use_token</span> <span class="ow">and</span> <span class="n">api_key_first_eight</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">send_request</span><span class="p">(</span>
+                            <span class="n">method</span><span class="o">=</span><span class="s2">&quot;apikey_delete&quot;</span><span class="p">,</span> <span class="n">url_params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;first_eight&quot;</span><span class="p">:</span> <span class="n">api_key_first_eight</span><span class="p">}</span>
+                        <span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="k">pass</span>
+
             <span class="n">websocket_uri</span> <span class="o">=</span> <span class="n">_websocket_uri</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">_http_server_uri</span><span class="p">,</span> <span class="n">_system_info_monitor_endpoint</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="kn">from</span><span class="w"> </span><span class="nn">websockets.asyncio.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">connect</span>
 
-                <span class="k">async</span> <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="n">websocket_uri</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+                <span class="n">_api_key</span> <span class="o">=</span> <span class="kc">None</span>
+
+                <span class="c1"># Request temporary API key</span>
+                <span class="k">if</span> <span class="n">use_apikey</span><span class="p">:</span>
+                    <span class="n">_api_key</span> <span class="o">=</span> <span class="n">auth_key</span>
+                <span class="k">elif</span> <span class="n">use_token</span><span class="p">:</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parent</span><span class="o">.</span><span class="n">send_request</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s2">&quot;apikey_new&quot;</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;expires_in&quot;</span><span class="p">:</span> <span class="mi">60</span><span class="p">})</span>
+                    <span class="n">_api_key</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;secret&quot;</span><span class="p">]</span>
+                    <span class="n">api_key_first_eight</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;first_eight&quot;</span><span class="p">]</span>
+
+                <span class="n">additional_headers</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">if</span> <span class="n">_api_key</span><span class="p">:</span>
+                    <span class="n">additional_headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;ApiKey </span><span class="si">{</span><span class="n">_api_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+                <span class="k">async</span> <span class="k">with</span> <span class="n">connect</span><span class="p">(</span><span class="n">websocket_uri</span><span class="p">,</span> <span class="n">additional_headers</span><span class="o">=</span><span class="n">additional_headers</span><span class="p">)</span> <span class="k">as</span> <span class="n">websocket</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="n">delete_api_key</span><span class="p">(</span><span class="n">use_token</span><span class="p">,</span> <span class="n">api_key_first_eight</span><span class="p">)</span>
+                    <span class="n">api_key_first_eight</span> <span class="o">=</span> <span class="kc">None</span>
+
                     <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitor_enabled</span><span class="p">:</span>
                         <span class="k">try</span><span class="p">:</span>
                             <span class="n">msg_json</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span>
@@ -643,6 +712,8 @@
             <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
                 <span class="c1"># Ignore communication errors. More detailed processing may be added later.</span>
                 <span class="k">pass</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">delete_api_key</span><span class="p">(</span><span class="n">use_token</span><span class="p">,</span> <span class="n">api_key_first_eight</span><span class="p">)</span>
             <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitor_poll_period</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_clear</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
