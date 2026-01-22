@@ -2,6 +2,21 @@
 Release History
 ===============
 
+
+v0.0.24 (2026-01-21)
+====================
+
+The code for collecting Manager status was refactored. Now the returned status is based on cached data (no
+communication with Redis) and the respective requests return quicker than in previous versions.
+
+Added
+-----
+
+- Additional fields in RE Manager status: ``time`` and ``status_uid``.
+
+- Implemented streaming of RE Manager status over ``info`` 0MQ socket.
+
+
 v0.0.23 (2025-10-31)
 ====================
 
