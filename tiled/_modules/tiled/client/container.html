@@ -860,6 +860,7 @@ window.addEventListener("load", load);</script>
 <span class="kn">import</span><span class="w"> </span><span class="nn">entrypoints</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">orjson</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">packaging.version</span><span class="w"> </span><span class="kn">import</span> <span class="n">Version</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..iterviews</span><span class="w"> </span><span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..queries</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeyLookup</span>
@@ -1566,13 +1567,24 @@ window.addEventListener("load", load);</script>
         <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">access_blob</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;tags&quot;</span><span class="p">:</span> <span class="n">access_tags</span><span class="p">}</span> <span class="k">if</span> <span class="n">access_tags</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
 
+        <span class="c1"># Backompatibility: if the server is older than 0.2.4,</span>
+        <span class="c1"># it can not accept the &quot;properties&quot; field in the data source.</span>
+        <span class="c1"># This can be removed in later releases.</span>
+        <span class="k">if</span> <span class="n">Version</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">library_version</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">Version</span><span class="p">(</span><span class="s2">&quot;0.2.4&quot;</span><span class="p">):</span>
+            <span class="n">data_sources_as_dicts</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">asdict</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;properties&quot;</span><span class="p">}</span>
+                <span class="k">for</span> <span class="n">ds</span> <span class="ow">in</span> <span class="n">data_sources</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">data_sources_as_dicts</span> <span class="o">=</span> <span class="p">[</span><span class="n">asdict</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span> <span class="k">for</span> <span class="n">ds</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">]</span>
+
         <span class="n">item</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;attributes&quot;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">&quot;ancestors&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">path_parts</span><span class="p">,</span>
                 <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
                 <span class="s2">&quot;structure_family&quot;</span><span class="p">:</span> <span class="n">StructureFamily</span><span class="p">(</span><span class="n">structure_family</span><span class="p">),</span>
                 <span class="s2">&quot;specs&quot;</span><span class="p">:</span> <span class="n">normalize_specs</span><span class="p">(</span><span class="n">specs</span> <span class="ow">or</span> <span class="p">[]),</span>
-                <span class="s2">&quot;data_sources&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">asdict</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span> <span class="k">for</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">],</span>
+                <span class="s2">&quot;data_sources&quot;</span><span class="p">:</span> <span class="n">data_sources_as_dicts</span><span class="p">,</span>
                 <span class="s2">&quot;access_blob&quot;</span><span class="p">:</span> <span class="n">access_blob</span><span class="p">,</span>
             <span class="p">}</span>
         <span class="p">}</span>
