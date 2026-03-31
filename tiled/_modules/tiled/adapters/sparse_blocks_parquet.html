@@ -852,7 +852,6 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">quote_plus</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">dask.base</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask.dataframe</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span>
@@ -861,9 +860,8 @@ window.runMermaid = runMermaid;</script>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tiled.adapters.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Adapter</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..adapters.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">slice_and_shape_from_block_and_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..catalog.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..ndslice</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDSlice</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..ndslice</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDBlock</span><span class="p">,</span> <span class="n">NDSlice</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">FileStorage</span><span class="p">,</span> <span class="n">Storage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">DataSource</span>
@@ -874,16 +872,6 @@ window.runMermaid = runMermaid;</script>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">load_block</span><span class="p">(</span><span class="n">uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    uri :</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-
-<span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># TODO This can be done without pandas.</span>
     <span class="c1"># Better to use a plain I/O library.</span>
     <span class="n">df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">))</span>
@@ -933,17 +921,6 @@ window.runMermaid = runMermaid;</script>
         <span class="n">data_source</span><span class="p">:</span> <span class="n">DataSource</span><span class="p">[</span><span class="n">COOStructure</span><span class="p">],</span>
         <span class="n">path_parts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataSource</span><span class="p">[</span><span class="n">COOStructure</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        data_uri :</span>
-<span class="sd">        structure :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">data_source</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">data_source</span><span class="p">)</span>  <span class="c1"># Do not mutate caller input.</span>
         <span class="n">data_uri</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="n">uri</span> <span class="o">+</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;/</span><span class="si">{</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">segment</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">path_parts</span>
@@ -979,32 +956,12 @@ window.runMermaid = runMermaid;</script>
         <span class="n">data</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        data :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span>
         <span class="n">uri</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">[(</span><span class="mi">0</span><span class="p">,)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">)]</span>
         <span class="n">data</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">slice</span><span class="p">:</span> <span class="n">NDSlice</span> <span class="o">=</span> <span class="n">NDSlice</span><span class="p">(</span><span class="o">...</span><span class="p">))</span> <span class="o">-&gt;</span> <span class="n">sparse</span><span class="o">.</span><span class="n">COO</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        slice :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">all_coords</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">all_data</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">block</span><span class="p">,</span> <span class="n">uri</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -1023,22 +980,9 @@ window.runMermaid = runMermaid;</script>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">arr</span><span class="p">[</span><span class="nb">slice</span><span class="p">]</span> <span class="k">if</span> <span class="nb">slice</span> <span class="k">else</span> <span class="n">arr</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">read_block</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">slice</span><span class="p">:</span> <span class="n">NDSlice</span> <span class="o">=</span> <span class="n">NDSlice</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sparse</span><span class="o">.</span><span class="n">COO</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        block :</span>
-<span class="sd">        slice :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="n">NDBlock</span><span class="p">,</span> <span class="nb">slice</span><span class="p">:</span> <span class="n">NDSlice</span> <span class="o">=</span> <span class="n">NDSlice</span><span class="p">(</span><span class="o">...</span><span class="p">))</span> <span class="o">-&gt;</span> <span class="n">sparse</span><span class="o">.</span><span class="n">COO</span><span class="p">:</span>
         <span class="n">coords</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="n">load_block</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">[</span><span class="n">block</span><span class="p">])</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">shape</span> <span class="o">=</span> <span class="n">slice_and_shape_from_block_and_chunks</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_structure</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">shape_from_chunks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_structure</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
         <span class="n">arr</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">COO</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">[:],</span> <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">[:],</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">arr</span><span class="p">[</span><span class="nb">slice</span><span class="p">]</span> <span class="k">if</span> <span class="nb">slice</span> <span class="k">else</span> <span class="n">arr</span></div>
 

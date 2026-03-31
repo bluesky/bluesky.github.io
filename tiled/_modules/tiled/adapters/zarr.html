@@ -865,7 +865,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..adapters.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">IndexersMixin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..catalog.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..iterviews</span><span class="w"> </span><span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..ndslice</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDSlice</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..ndslice</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDBlock</span><span class="p">,</span> <span class="n">NDSlice</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..storage</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">SUPPORTED_OBJECT_URI_SCHEMES</span><span class="p">,</span>
     <span class="n">FileStorage</span><span class="p">,</span>
@@ -876,9 +876,9 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayStructure</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">DataSource</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..type_aliases</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSON</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..type_aliases</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSON</span><span class="p">,</span> <span class="n">Chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Conflicts</span><span class="p">,</span> <span class="n">node_repr</span><span class="p">,</span> <span class="n">path_from_uri</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayAdapter</span><span class="p">,</span> <span class="n">slice_and_shape_from_block_and_chunks</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayAdapter</span>
 
 <span class="n">ZARR_LIB_V2</span> <span class="o">=</span> <span class="n">Version</span><span class="p">(</span><span class="n">version</span><span class="p">(</span><span class="s2">&quot;zarr&quot;</span><span class="p">))</span> <span class="o">&lt;</span> <span class="n">Version</span><span class="p">(</span><span class="s2">&quot;3&quot;</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">ZARR_LIB_V2</span><span class="p">:</span>
@@ -964,29 +964,12 @@ window.runMermaid = runMermaid;</script>
         <span class="bp">self</span><span class="p">,</span>
         <span class="nb">slice</span><span class="p">:</span> <span class="n">NDSlice</span> <span class="o">=</span> <span class="n">NDSlice</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        slice :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">arr</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">NDArray</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_stencil</span><span class="p">()])</span>
         <span class="k">return</span> <span class="n">arr</span><span class="p">[</span><span class="nb">slice</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">read_block</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">block</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
-        <span class="nb">slice</span><span class="p">:</span> <span class="n">NDSlice</span> <span class="o">=</span> <span class="n">NDSlice</span><span class="p">(</span><span class="o">...</span><span class="p">),</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
-        <span class="n">block_slice</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">slice_and_shape_from_block_and_chunks</span><span class="p">(</span>
-            <span class="n">block</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">chunks</span>
-        <span class="p">)</span>
-        <span class="c1"># Slice the block out of the whole array,</span>
-        <span class="c1"># and optionally a sub-slice therein.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">read_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="n">NDBlock</span><span class="p">,</span> <span class="nb">slice</span><span class="p">:</span> <span class="n">NDSlice</span> <span class="o">=</span> <span class="n">NDSlice</span><span class="p">(</span><span class="o">...</span><span class="p">))</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+        <span class="s2">&quot;Slice the block out of the whole array and optionally a sub-slice therein.&quot;</span>
+        <span class="n">block_slice</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">slice_from_chunks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_stencil</span><span class="p">()][</span><span class="n">block_slice</span><span class="p">][</span><span class="nb">slice</span> <span class="ow">or</span> <span class="o">...</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span>
@@ -998,14 +981,8 @@ window.runMermaid = runMermaid;</script>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_stencil</span><span class="p">()]</span> <span class="o">=</span> <span class="n">data</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">write_block</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">data</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
-        <span class="n">block</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">block_slice</span><span class="p">,</span> <span class="n">shape</span> <span class="o">=</span> <span class="n">slice_and_shape_from_block_and_chunks</span><span class="p">(</span>
-            <span class="n">block</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">chunks</span>
-        <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">write_block</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">block</span><span class="p">:</span> <span class="n">NDBlock</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">block_slice</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">slice_from_chunks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_array</span><span class="p">[</span><span class="n">block_slice</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">patch</span><span class="p">(</span>
@@ -1013,7 +990,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">data</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
         <span class="n">offset</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
         <span class="n">extend</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">Chunks</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Write data into a slice of the array, maybe extending it.</span>
 
