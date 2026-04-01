@@ -858,7 +858,12 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">field_validator</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">ValidationError</span><span class="p">,</span> <span class="n">field_validator</span><span class="p">,</span> <span class="n">model_validator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic_settings</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseSettings</span><span class="p">,</span>
+    <span class="n">PydanticBaseSettingsSource</span><span class="p">,</span>
+    <span class="n">SettingsConfigDict</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tiled.authenticators</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProxiedOIDCAuthenticator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tiled.server.protocols</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExternalAuthenticator</span><span class="p">,</span> <span class="n">InternalAuthenticator</span>
@@ -885,6 +890,38 @@ window.runMermaid = runMermaid;</script>
 <span class="k">def</span><span class="w"> </span><span class="nf">sub_paths</span><span class="p">(</span><span class="n">segments</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">segments</span><span class="p">)):</span>
         <span class="k">yield</span> <span class="n">segments</span><span class="p">[:</span><span class="n">i</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">settings_customise_sources</span><span class="p">(</span>
+    <span class="c1"># Give env vars priority over config file.</span>
+    <span class="c1"># https://docs.pydantic.dev/latest/concepts/pydantic_settings/#changing-priority</span>
+    <span class="bp">cls</span><span class="p">,</span>
+    <span class="n">settings_cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">BaseSettings</span><span class="p">],</span>
+    <span class="n">init_settings</span><span class="p">:</span> <span class="n">PydanticBaseSettingsSource</span><span class="p">,</span>
+    <span class="n">env_settings</span><span class="p">:</span> <span class="n">PydanticBaseSettingsSource</span><span class="p">,</span>
+    <span class="n">dotenv_settings</span><span class="p">:</span> <span class="n">PydanticBaseSettingsSource</span><span class="p">,</span>
+    <span class="n">file_secret_settings</span><span class="p">:</span> <span class="n">PydanticBaseSettingsSource</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">PydanticBaseSettingsSource</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="n">env_settings</span><span class="p">,</span> <span class="n">init_settings</span><span class="p">,</span> <span class="n">file_secret_settings</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CatalogConfig</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
+    <span class="n">uri</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">specs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Spec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">writable_storage</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">readable_storage</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">init_if_not_exists</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">adapters_by_mimetype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">EntryPointString</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">top_level_access_blob</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">mount_node</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">catalog_pool_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="n">storage_pool_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
+    <span class="n">catalog_max_overflow</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">storage_max_overflow</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_CATALOG_&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">TreeSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
@@ -951,7 +988,7 @@ window.runMermaid = runMermaid;</script>
     <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">Authentication</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Authentication</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
     <span class="c1"># Defaults are all left as None to differentiate between unset and set to the default</span>
     <span class="n">providers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">AuthenticationProviderSpec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">tiled_admins</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">TiledAdmin</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
@@ -997,42 +1034,61 @@ window.runMermaid = runMermaid;</script>
 
         <span class="k">return</span> <span class="bp">self</span>
 
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_AUTHN&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">Database</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Database</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
     <span class="n">uri</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">init_if_not_exists</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">pool_pre_ping</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">pool_size</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">Field</span><span class="p">(</span><span class="n">ge</span><span class="o">=</span><span class="mi">2</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">5</span>
     <span class="n">max_overflow</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">10</span>
 
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_AUTHN_DATABASSE&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">AccessControl</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">AccessControl</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
     <span class="n">access_policy</span><span class="p">:</span> <span class="n">EntryPointString</span>
     <span class="n">args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">access_policy</span><span class="p">(</span><span class="o">**</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="ow">or</span> <span class="p">{}))</span>
 
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_ACCESS_CONTROL&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">MetricsConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MetricsConfig</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
     <span class="n">prometheus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_METRICS&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ValidationSpec</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ValidationSpec</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
     <span class="n">spec</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">validator</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">EntryPointString</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_VALIDATORS&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">StreamingCacheConfig</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">StreamingCacheConfig</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
     <span class="n">uri</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">data_ttl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>  <span class="c1"># 1 hr</span>
     <span class="n">seq_ttl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2592000</span>  <span class="c1"># 30 days</span>
     <span class="n">socket_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">86400</span>  <span class="c1"># 1 day</span>
     <span class="n">socket_connect_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
 
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_STREAMING_CACHE_&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">Config</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-    <span class="n">trees</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">]</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Config</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
+    <span class="n">catalog</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CatalogConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># recommended</span>
+    <span class="n">trees</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># advanced alternative</span>
     <span class="n">media_types</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">EntryPointString</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="n">file_extensions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="n">authentication</span><span class="p">:</span> <span class="n">Authentication</span> <span class="o">=</span> <span class="n">Authentication</span><span class="p">()</span>
@@ -1048,27 +1104,75 @@ window.runMermaid = runMermaid;</script>
     <span class="n">reject_undeclared_specs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">expose_raw_assets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">routers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">EntryPointString</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">streaming_cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">StreamingCacheConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="c1"># If recommended &#39;catalog&#39; config is used, these parameters are</span>
+    <span class="c1"># not used; they are set inside the CatalogConfig.</span>
+    <span class="c1"># If legacy / flexible &#39;trees&#39; config is used, these are used.</span>
     <span class="n">catalog_pool_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
     <span class="n">storage_pool_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
     <span class="n">catalog_max_overflow</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
     <span class="n">storage_max_overflow</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
 
-    <span class="n">streaming_cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">StreamingCacheConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
     <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;access_policy&quot;</span><span class="p">)</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">check_access_policy</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert the access policy spec into the construct instance&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
         <span class="n">access</span> <span class="o">=</span> <span class="n">AccessControl</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">access</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">populate_streaming_cache_from_env</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Config&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">streaming_cache</span> <span class="o">=</span> <span class="n">StreamingCacheConfig</span><span class="p">()</span>
+            <span class="k">except</span> <span class="n">ValidationError</span><span class="p">:</span>
+                <span class="k">pass</span>  <span class="c1"># uri not set, leave as None</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reconcile_catalog_and_trees</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The &#39;catalog&#39; and &#39;trees&#39; config are mutually exclusive.</span>
+
+<span class="sd">        The &#39;catalog&#39; (recommended) specifies one catalog; &#39;trees&#39; (advanced)</span>
+<span class="sd">        can specify multiple catalogs, mounted at different prefixes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">catalog</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trees</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The configuration &#39;catalog&#39; specifies a single catalog, &quot;</span>
+                    <span class="s2">&quot;whereas &#39;trees&#39; can specify multiple catalogs. &quot;</span>
+                    <span class="s2">&quot;It is not allowed to use both &#39;catalog&#39; and &#39;trees&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># Build a TreeSpec out of the catalog.</span>
+            <span class="n">tree</span> <span class="o">=</span> <span class="n">TreeSpec</span><span class="p">(</span>
+                <span class="n">tree</span><span class="o">=</span><span class="s2">&quot;catalog&quot;</span><span class="p">,</span>
+                <span class="n">path</span><span class="o">=</span><span class="s2">&quot;/&quot;</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">catalog</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(),</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trees</span> <span class="o">=</span> <span class="p">[</span><span class="n">tree</span><span class="p">]</span>
+            <span class="c1"># Having parsed the catalog into a tree, put the model in a</span>
+            <span class="c1"># self-consistent state.</span>
+            <span class="c1"># (The model cannot have *both* catalog and trees.)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">catalog</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">trees</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Configuration must specific &#39;catalog&#39; or &#39;trees&#39; (multiple catalogs).&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
     <span class="nd">@field_validator</span><span class="p">(</span><span class="s2">&quot;trees&quot;</span><span class="p">)</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">non_overlapping_trees</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">trees</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure that paths to trees do not collide&quot;&quot;&quot;</span>
         <span class="n">paths</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">t</span><span class="o">.</span><span class="n">segments</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">trees</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="nb">len</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">t</span><span class="o">.</span><span class="n">segments</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">(</span><span class="n">trees</span> <span class="ow">or</span> <span class="p">[])),</span> <span class="n">key</span><span class="o">=</span><span class="nb">len</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">sub</span> <span class="ow">in</span> <span class="p">(</span><span class="o">*</span><span class="n">sub_paths</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">path</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">sub</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1080,7 +1184,7 @@ window.runMermaid = runMermaid;</script>
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">fudge_tree_args</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Needing to fudge the args of tree specs is awful</span>
-        <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">trees</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">trees</span> <span class="ow">or</span> <span class="p">[]:</span>
             <span class="n">tree</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">args</span> <span class="ow">or</span> <span class="p">{}</span>
             <span class="k">if</span> <span class="n">tree</span><span class="o">.</span><span class="n">tree_type</span> <span class="ow">is</span> <span class="n">from_uri</span><span class="p">:</span>
                 <span class="n">defaults</span> <span class="o">=</span> <span class="n">get_settings</span><span class="p">()</span>
