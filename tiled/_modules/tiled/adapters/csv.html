@@ -853,13 +853,15 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">quote_plus</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask.dataframe</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.types</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">patypes</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">tiled.adapters.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Adapter</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..catalog.orm</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">FileStorage</span><span class="p">,</span> <span class="n">Storage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayStructure</span><span class="p">,</span> <span class="n">StructDtype</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayStructure</span><span class="p">,</span> <span class="n">BuiltinDtype</span><span class="p">,</span> <span class="n">StructDtype</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">DataSource</span><span class="p">,</span> <span class="n">Management</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">TableStructure</span>
@@ -902,6 +904,8 @@ window.runMermaid = runMermaid;</script>
         <span class="bp">self</span><span class="o">.</span><span class="n">_read_csv_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
         <span class="k">if</span> <span class="n">structure</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file_paths</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_read_csv_kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">usecols</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_csv_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usecols&quot;</span><span class="p">):</span>
+                <span class="n">ddf</span> <span class="o">=</span> <span class="n">ddf</span><span class="p">[</span><span class="n">usecols</span><span class="p">]</span>  <span class="c1"># Ensure the order of columns is preserved</span>
             <span class="n">structure</span> <span class="o">=</span> <span class="n">TableStructure</span><span class="o">.</span><span class="n">from_dask_dataframe</span><span class="p">(</span><span class="n">ddf</span><span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">structure</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">)</span></div>
 
@@ -1015,59 +1019,55 @@ window.runMermaid = runMermaid;</script>
         <span class="n">uri</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_file_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">data</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        fields :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
         <span class="n">dfs</span> <span class="o">=</span> <span class="p">[</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">read_partition</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file_paths</span><span class="p">))</span>
         <span class="p">]</span>
 
-        <span class="k">return</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pandas</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">read_partition</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">indx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read a single partition</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">indx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pandas</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read a single partition (a single csv file)</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        indx : int</span>
 <span class="sd">            index of the partition to read</span>
-<span class="sd">        fields :</span>
+<span class="sd">        fields : list of str or int, optional</span>
+<span class="sd">            list of columns to read from the partition</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-
+<span class="sd">        pandas.DataFrame</span>
+<span class="sd">            DataFrame containing the requested columns from the partition</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="n">df</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file_paths</span><span class="p">[</span><span class="n">indx</span><span class="p">],</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_read_csv_kwargs</span><span class="p">)</span>
-
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_read_csv_kwargs</span><span class="p">}</span>
         <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">fields</span><span class="p">]</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;usecols&quot;</span><span class="p">:</span> <span class="n">fields</span><span class="p">})</span>
 
-        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
+        <span class="c1"># If we assumed any missing values when determining the structure with dask, we need</span>
+        <span class="c1"># change the dtype of the column(s) to be read to the corresponding pandas nullable dtype</span>
+        <span class="c1"># (pandas does not support the `assume_missing` parameter).</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;assume_missing&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">arrow_schema_decoded</span>
+            <span class="n">dtypes</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">indx</span><span class="p">:</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">to_pandas_dtype</span><span class="p">()</span> <span class="k">for</span> <span class="n">indx</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+            <span class="p">}</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file_paths</span><span class="p">[</span><span class="n">indx</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtypes</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file_paths</span><span class="p">[</span><span class="n">indx</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Ensure the order of columns is preserved if identified by names rather than indices</span>
+        <span class="k">if</span> <span class="n">usecols</span> <span class="o">:=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usecols&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">col</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">usecols</span><span class="p">):</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">usecols</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">df</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ArrayAdapter</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        key :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">([</span><span class="n">key</span><span class="p">])[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
@@ -1079,19 +1079,6 @@ window.runMermaid = runMermaid;</script>
         <span class="n">item</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span>
         <span class="n">is_directory</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">DataSource</span><span class="p">[</span><span class="n">TableStructure</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        mimetype :</span>
-<span class="sd">        dict_or_none :</span>
-<span class="sd">        item :</span>
-<span class="sd">        is_directory :</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">[</span>
             <span class="n">DataSource</span><span class="p">(</span>
                 <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">table</span><span class="p">,</span>
@@ -1111,17 +1098,6 @@ window.runMermaid = runMermaid;</script>
         <span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ArrayAdapter</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get an ArrayAdapter for a single column</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        key : str</span>
-<span class="sd">            column name to get</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        An array adapter corresponding to a single column in the table.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Must compute to determine shape.</span>
         <span class="k">return</span> <span class="n">ArrayAdapter</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">([</span><span class="n">key</span><span class="p">])[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
 
@@ -1209,12 +1185,76 @@ window.runMermaid = runMermaid;</script>
         <span class="o">*</span><span class="n">data_uris</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CSVArrayAdapter&quot;</span><span class="p">:</span>
-        <span class="n">file_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span> <span class="k">for</span> <span class="n">uri</span> <span class="ow">in</span> <span class="n">data_uris</span><span class="p">]</span>
-        <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">file_paths</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="s2">&quot;header&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">})</span>
-        <span class="k">if</span> <span class="n">usecols</span> <span class="o">:=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usecols&quot;</span><span class="p">):</span>
-            <span class="n">ddf</span> <span class="o">=</span> <span class="n">ddf</span><span class="p">[</span><span class="n">usecols</span><span class="p">]</span>  <span class="c1"># Ensure the order of columns is preserved</span>
-        <span class="n">array</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">to_dask_array</span><span class="p">()</span>
-        <span class="n">structure</span> <span class="o">=</span> <span class="n">ArrayStructure</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
+        <span class="n">tbl_adapter</span> <span class="o">=</span> <span class="n">CSVAdapter</span><span class="o">.</span><span class="n">from_uris</span><span class="p">(</span><span class="o">*</span><span class="n">data_uris</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="s2">&quot;header&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">})</span>
+        <span class="n">tbl_structure</span> <span class="o">=</span> <span class="n">tbl_adapter</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span>
+        <span class="n">column_dtypes</span> <span class="o">=</span> <span class="n">tbl_structure</span><span class="o">.</span><span class="n">arrow_schema_decoded</span><span class="o">.</span><span class="n">types</span>
+        <span class="c1"># Is this a structured or a simple array</span>
+        <span class="n">is_structured</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">column_dtypes</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">1</span>
+
+        <span class="c1"># If any column is of string dtype, read the entire table to convert to `&lt;Un` dtype</span>
+        <span class="c1"># Otherwise -- read just the first column to determine the number of rows and chunking</span>
+        <span class="n">string_columns</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">patypes</span><span class="o">.</span><span class="n">is_string</span><span class="p">(</span><span class="n">_cdtype</span><span class="p">)</span> <span class="ow">or</span> <span class="n">patypes</span><span class="o">.</span><span class="n">is_large_string</span><span class="p">(</span><span class="n">_cdtype</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">_cdtype</span> <span class="ow">in</span> <span class="n">column_dtypes</span>
+        <span class="p">]</span>
+
+        <span class="c1"># Determine the true shape and chunks for the entire dataset</span>
+        <span class="c1"># Read onlythe first column of the CSV file, if possible (i.e. no string columns)</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">string_columns</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">n_part</span> <span class="o">=</span> <span class="n">tbl_structure</span><span class="o">.</span><span class="n">npartitions</span>
+        <span class="n">dfs</span> <span class="o">=</span> <span class="p">[</span><span class="n">tbl_adapter</span><span class="o">.</span><span class="n">read_partition</span><span class="p">(</span><span class="n">indx</span><span class="p">,</span> <span class="n">fields</span><span class="p">)</span> <span class="k">for</span> <span class="n">indx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_part</span><span class="p">)]</span>
+        <span class="n">chunks_0</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span> <span class="k">for</span> <span class="n">df</span> <span class="ow">in</span> <span class="n">dfs</span><span class="p">)</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pandas</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">n_cols</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">tbl_structure</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_structured</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="n">true_shape</span><span class="p">,</span> <span class="n">true_chunks</span> <span class="o">=</span> <span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">chunks_0</span><span class="p">),</span> <span class="n">n_cols</span><span class="p">),</span> <span class="p">(</span><span class="n">chunks_0</span><span class="p">,</span> <span class="p">(</span><span class="n">n_cols</span><span class="p">,))</span>
+        <span class="n">true_dtype</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BuiltinDtype</span><span class="p">,</span> <span class="n">StructDtype</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">is_structured</span><span class="p">:</span>
+            <span class="c1"># This is a table with heterogeneous column types; construct StructDtype</span>
+            <span class="n">_np_struct</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">column_names</span> <span class="o">=</span> <span class="n">tbl_structure</span><span class="o">.</span><span class="n">columns</span>
+            <span class="k">for</span> <span class="n">indx</span><span class="p">,</span> <span class="p">(</span><span class="n">col_dtype</span><span class="p">,</span> <span class="n">col_name</span><span class="p">,</span> <span class="n">is_col_str</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                <span class="nb">zip</span><span class="p">(</span><span class="n">column_dtypes</span><span class="p">,</span> <span class="n">column_names</span><span class="p">,</span> <span class="n">string_columns</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">if</span> <span class="n">is_col_str</span><span class="p">:</span>
+                    <span class="c1"># Convert strings to &quot;&lt;Un&quot; dtype, df must exist since we read the entire table</span>
+                    <span class="n">_np_dtype</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="n">indx</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;&lt;U&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">_np_dtype</span> <span class="o">=</span> <span class="n">col_dtype</span><span class="o">.</span><span class="n">to_pandas_dtype</span><span class="p">()</span>
+                <span class="n">_np_struct</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">col_name</span><span class="p">,</span> <span class="n">_np_dtype</span><span class="p">))</span>
+            <span class="n">true_dtype</span> <span class="o">=</span> <span class="n">StructDtype</span><span class="o">.</span><span class="n">from_numpy_dtype</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="n">_np_struct</span><span class="p">))</span>
+
+        <span class="c1"># Construct the array object</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">string_columns</span><span class="p">):</span>
+            <span class="c1"># Need to read the entire array, use dask for lazy loading and proper chunking</span>
+            <span class="n">file_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span> <span class="k">for</span> <span class="n">uri</span> <span class="ow">in</span> <span class="n">data_uris</span><span class="p">]</span>
+            <span class="n">ddf</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">file_paths</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="s2">&quot;header&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">})</span>
+
+            <span class="k">if</span> <span class="n">usecols</span> <span class="o">:=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usecols&quot;</span><span class="p">):</span>
+                <span class="n">ddf</span> <span class="o">=</span> <span class="n">ddf</span><span class="p">[</span><span class="n">usecols</span><span class="p">]</span>  <span class="c1"># Ensure the order of columns is preserved</span>
+
+            <span class="k">if</span> <span class="n">is_structured</span><span class="p">:</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">to_records</span><span class="p">(</span><span class="n">lengths</span><span class="o">=</span><span class="n">chunks_0</span><span class="p">)[</span><span class="nb">list</span><span class="p">(</span><span class="n">ddf</span><span class="o">.</span><span class="n">columns</span><span class="p">)]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+                    <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span>
+                <span class="p">)</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">true_dtype</span><span class="o">.</span><span class="n">to_numpy_dtype</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="n">ddf</span><span class="o">.</span><span class="n">to_dask_array</span><span class="p">(</span><span class="n">lengths</span><span class="o">=</span><span class="n">chunks_0</span><span class="p">)</span>
+                <span class="n">true_dtype</span> <span class="o">=</span> <span class="n">BuiltinDtype</span><span class="o">.</span><span class="n">from_numpy_dtype</span><span class="p">(</span><span class="n">array</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># We have already read the data into pandas DataFrame, convert to numpy</span>
+            <span class="k">if</span> <span class="n">is_structured</span><span class="p">:</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">to_records</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">true_shape</span><span class="p">)</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">true_dtype</span><span class="o">.</span><span class="n">to_numpy_dtype</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;&lt;U&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">true_shape</span><span class="p">)</span>
+                <span class="n">true_dtype</span> <span class="o">=</span> <span class="n">BuiltinDtype</span><span class="o">.</span><span class="n">from_numpy_dtype</span><span class="p">(</span><span class="n">array</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="c1"># Define the structure with the correct dtype, shape, and chunking</span>
+        <span class="n">structure</span> <span class="o">=</span> <span class="n">ArrayStructure</span><span class="p">(</span>
+            <span class="n">data_type</span><span class="o">=</span><span class="n">true_dtype</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">true_shape</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="n">true_chunks</span>
+        <span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">structure</span><span class="p">)</span>
 </pre></div>
