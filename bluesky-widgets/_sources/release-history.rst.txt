@@ -2,6 +2,20 @@
 Release History
 ===============
 
+v0.0.18 (2026-04-14)
+====================
+
+Added
+-----
+
+- IPython widget for Queue Server.
+
+Fixed
+-----
+
+- Minor fixes for improving performance.
+
+
 v0.0.17 (2025-06-23)
 ====================
 
