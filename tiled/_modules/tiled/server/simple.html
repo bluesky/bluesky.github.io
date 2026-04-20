@@ -863,10 +863,13 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">cast</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">quote_plus</span><span class="p">,</span> <span class="n">urlparse</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uvicorn</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLStorage</span><span class="p">,</span> <span class="n">get_storage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_uri</span>
+
+<span class="n">_STARTUP_TIMEOUT</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># seconds; used for both socket listen and readiness checks</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ThreadedServer</span><span class="p">(</span><span class="n">uvicorn</span><span class="o">.</span><span class="n">Server</span><span class="p">):</span>
@@ -875,21 +878,23 @@ window.runMermaid = runMermaid;</script>
 
     <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">run_in_thread</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">)</span>
-        <span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">thread</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">thread</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="c1"># Wait for server to start up, or raise TimeoutError.</span>
-            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">200</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">_STARTUP_TIMEOUT</span> <span class="o">/</span> <span class="mf">0.1</span><span class="p">)):</span>
                 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">started</span><span class="p">:</span>
                     <span class="k">break</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;Server did not start in 20 seconds.&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Server did not start in </span><span class="si">{</span><span class="n">_STARTUP_TIMEOUT</span><span class="si">}</span><span class="s2"> seconds.&quot;</span>
+                <span class="p">)</span>
             <span class="n">host</span><span class="p">,</span> <span class="n">port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">servers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">sockets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()</span>
             <span class="k">yield</span> <span class="sa">f</span><span class="s2">&quot;http://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">should_exit</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">thread</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
 
 
 <div class="viewcode-block" id="SimpleTiledServer">
@@ -997,10 +1002,46 @@ window.runMermaid = runMermaid;</script>
         <span class="bp">self</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="n">build_app</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">catalog</span><span class="p">,</span> <span class="n">authentication</span><span class="o">=</span><span class="n">Authentication</span><span class="p">(</span><span class="n">single_user_api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">)</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_cm</span> <span class="o">=</span> <span class="n">ThreadedServer</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server</span> <span class="o">=</span> <span class="n">ThreadedServer</span><span class="p">(</span>
             <span class="n">uvicorn</span><span class="o">.</span><span class="n">Config</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">port</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="s2">&quot;asyncio&quot;</span><span class="p">,</span> <span class="n">log_config</span><span class="o">=</span><span class="n">log_config</span><span class="p">)</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">run_in_thread</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="o">.</span><span class="n">run_in_thread</span><span class="p">()</span>
         <span class="n">base_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cm</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
+
+        <span class="c1"># ThreadedServer.started is True as soon as uvicorn opens the</span>
+        <span class="c1"># socket, but FastAPI does not serve requests until the lifespan</span>
+        <span class="c1"># startup_event() completes. Poll /healthz to wait for that.</span>
+        <span class="c1"># Ensure the background server thread is shut down if anything</span>
+        <span class="c1"># in the readiness probe fails; otherwise it would leak.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">deadline</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">+</span> <span class="n">_STARTUP_TIMEOUT</span>
+            <span class="k">with</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">trust_env</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+                <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server</span><span class="o">.</span><span class="n">thread</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
+                        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                            <span class="s2">&quot;Tiled server thread exited before the application &quot;</span>
+                            <span class="s2">&quot;became ready. Check the log files in the server&#39;s &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;directory for details: </span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                    <span class="n">remaining</span> <span class="o">=</span> <span class="n">deadline</span> <span class="o">-</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">remaining</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
+                            <span class="s2">&quot;Tiled server started listening but the application &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;did not become ready within </span><span class="si">{</span><span class="n">_STARTUP_TIMEOUT</span><span class="si">}</span><span class="s2"> seconds.&quot;</span>
+                        <span class="p">)</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">r</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/healthz&quot;</span><span class="p">,</span>
+                            <span class="n">timeout</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">remaining</span><span class="p">),</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
+                            <span class="k">break</span>
+                    <span class="k">except</span> <span class="n">httpx</span><span class="o">.</span><span class="n">RequestError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">deadline</span> <span class="o">-</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">())))</span>
+        <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cm</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">raise</span>
 
         <span class="c1"># Extract port from base_url.</span>
         <span class="n">actual_port</span> <span class="o">=</span> <span class="n">urlparse</span><span class="p">(</span><span class="n">base_url</span><span class="p">)</span><span class="o">.</span><span class="n">port</span>
