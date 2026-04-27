@@ -1093,6 +1093,35 @@ window.runMermaid = runMermaid;</script>
     <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
 
 
+<span class="k">class</span><span class="w"> </span><span class="nc">WebhooksConfig</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Configuration for the optional webhooks feature.</span>
+
+<span class="sd">    When this section is present in the server configuration, the</span>
+<span class="sd">    ``/api/v1/webhooks`` router is mounted and the WebhookDispatcher is</span>
+<span class="sd">    started alongside the catalog.  When absent, webhooks are fully disabled.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    secret_keys : list of str</span>
+<span class="sd">        Keys used to encrypt webhook HMAC signing secrets at rest.</span>
+<span class="sd">        Required; generate one with ``openssl rand -hex 32``.</span>
+<span class="sd">    allow_http : bool</span>
+<span class="sd">        When ``True``, webhook URLs are allowed to use plain HTTP instead of</span>
+<span class="sd">        HTTPS.  Default ``False`` (HTTPS is required).</span>
+<span class="sd">    allow_private_addresses : bool</span>
+<span class="sd">        When ``True``, webhook URLs may target private, loopback, or reserved</span>
+<span class="sd">        IP addresses.  Default ``False`` (such addresses are blocked to</span>
+<span class="sd">        mitigate SSRF).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">secret_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">allow_http</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">allow_private_addresses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_WEBHOOKS_&quot;</span><span class="p">)</span>
+    <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
+
+
 <span class="k">class</span><span class="w"> </span><span class="nc">Config</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
     <span class="n">catalog</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CatalogConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># recommended</span>
     <span class="n">trees</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">TreeSpec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># advanced alternative</span>
@@ -1112,6 +1141,7 @@ window.runMermaid = runMermaid;</script>
     <span class="n">expose_raw_assets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">routers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">EntryPointString</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">streaming_cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">StreamingCacheConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">webhooks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">WebhooksConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">create_mount_nodes_if_not_exist</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="c1"># If recommended &#39;catalog&#39; config is used, these parameters are</span>
@@ -1141,6 +1171,15 @@ window.runMermaid = runMermaid;</script>
                 <span class="bp">self</span><span class="o">.</span><span class="n">streaming_cache</span> <span class="o">=</span> <span class="n">StreamingCacheConfig</span><span class="p">()</span>
             <span class="k">except</span> <span class="n">ValidationError</span><span class="p">:</span>
                 <span class="k">pass</span>  <span class="c1"># uri not set, leave as None</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">populate_webhooks_from_env</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Config&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">webhooks</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">webhooks</span> <span class="o">=</span> <span class="n">WebhooksConfig</span><span class="p">()</span>
+            <span class="k">except</span> <span class="n">ValidationError</span><span class="p">:</span>
+                <span class="k">pass</span>  <span class="c1"># secret_keys not set, leave as None</span>
         <span class="k">return</span> <span class="bp">self</span>
 
     <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
@@ -1212,6 +1251,9 @@ window.runMermaid = runMermaid;</script>
             <span class="k">if</span> <span class="n">tree</span><span class="o">.</span><span class="n">tree_type</span> <span class="ow">in</span> <span class="p">(</span><span class="n">from_uri</span><span class="p">,</span> <span class="n">in_memory</span><span class="p">):</span>
                 <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;cache_config&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">streaming_cache</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming_cache</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">)</span>
+                <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;webhook_secret_keys&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">webhooks</span><span class="o">.</span><span class="n">secret_keys</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">webhooks</span> <span class="k">else</span> <span class="kc">None</span>
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">tree</span><span class="o">.</span><span class="n">tree_type</span> <span class="ow">is</span> <span class="n">from_uri</span><span class="p">:</span>
                 <span class="n">tree</span><span class="o">.</span><span class="n">args</span><span class="p">[</span>
@@ -1323,6 +1365,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">reject_undeclared_specs</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">reject_undeclared_specs</span><span class="p">,</span>
         <span class="n">expose_raw_assets</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">expose_raw_assets</span><span class="p">,</span>
         <span class="n">metrics</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">metrics</span><span class="p">,</span>
+        <span class="n">webhooks</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">webhooks</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span>
         <span class="n">tree</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">merged_trees</span><span class="p">,</span>

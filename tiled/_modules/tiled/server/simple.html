@@ -923,6 +923,12 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">    readable_storage : Optional[Union[str, pathlib.Path, list[Union[str, pathlib.Path]]]</span>
 <span class="sd">        If provided, the server will be able to read from these storage locations, in addition</span>
 <span class="sd">        to the default storage location defined by `directory`.</span>
+<span class="sd">    enable_webhooks : bool</span>
+<span class="sd">        If True, mount the webhooks API and start the webhook dispatcher.</span>
+<span class="sd">        HTTP targets and local addresses are accepted (no HTTPS or SSRF</span>
+<span class="sd">        checks), making it easy to test against a local receiver.</span>
+<span class="sd">        A ``webhook_secret_key`` is auto-generated and exposed as an</span>
+<span class="sd">        attribute.  Default is False.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -953,12 +959,14 @@ window.runMermaid = runMermaid;</script>
         <span class="n">readable_storage</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
             <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">]]]</span>
         <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">enable_webhooks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="c1"># Delay import to avoid circular import.</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_uri</span> <span class="k">as</span> <span class="n">catalog_from_uri</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Authentication</span><span class="p">,</span> <span class="n">StreamingCacheConfig</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Authentication</span><span class="p">,</span> <span class="n">StreamingCacheConfig</span><span class="p">,</span> <span class="n">WebhooksConfig</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.app</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_app</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.logging_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">LOGGING_CONFIG</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.webhook_router</span><span class="w"> </span><span class="kn">import</span> <span class="n">_noop_url_validator</span>
 
         <span class="k">if</span> <span class="n">directory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">directory</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">())</span>
@@ -974,6 +982,11 @@ window.runMermaid = runMermaid;</script>
         <span class="c1"># and is not intended for production use, so we think this is an</span>
         <span class="c1"># acceptable concession to usability.</span>
         <span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span> <span class="ow">or</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+
+        <span class="c1"># If webhooks are enabled, generate a secret key for encrypting HMAC</span>
+        <span class="c1"># signing secrets at rest.  Use a full 32-byte key here since it is</span>
+        <span class="c1"># stored on disk and not typed by humans.</span>
+        <span class="n">webhook_secret_key</span> <span class="o">=</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">32</span><span class="p">)</span> <span class="k">if</span> <span class="n">enable_webhooks</span> <span class="k">else</span> <span class="kc">None</span>
 
         <span class="c1"># Alter copy of default LOGGING_CONFIG to log to files instead of</span>
         <span class="c1"># stdout and stderr.</span>
@@ -1001,8 +1014,15 @@ window.runMermaid = runMermaid;</script>
             <span class="n">readable_storage</span><span class="o">=</span><span class="n">readable_storage</span><span class="p">,</span>
             <span class="n">cache_config</span><span class="o">=</span><span class="n">StreamingCacheConfig</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s2">&quot;memory&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(),</span>
         <span class="p">)</span>
+        <span class="n">server_settings</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">enable_webhooks</span><span class="p">:</span>
+            <span class="n">webhook_cfg</span> <span class="o">=</span> <span class="n">WebhooksConfig</span><span class="p">(</span><span class="n">secret_keys</span><span class="o">=</span><span class="p">[</span><span class="n">webhook_secret_key</span><span class="p">])</span>
+            <span class="n">server_settings</span><span class="p">[</span><span class="s2">&quot;webhooks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">webhook_cfg</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="n">build_app</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">catalog</span><span class="p">,</span> <span class="n">authentication</span><span class="o">=</span><span class="n">Authentication</span><span class="p">(</span><span class="n">single_user_api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">catalog</span><span class="p">,</span>
+            <span class="n">authentication</span><span class="o">=</span><span class="n">Authentication</span><span class="p">(</span><span class="n">single_user_api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">),</span>
+            <span class="n">server_settings</span><span class="o">=</span><span class="n">server_settings</span><span class="p">,</span>
+            <span class="n">webhook_url_validator</span><span class="o">=</span><span class="n">_noop_url_validator</span> <span class="k">if</span> <span class="n">enable_webhooks</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_server</span> <span class="o">=</span> <span class="n">ThreadedServer</span><span class="p">(</span>
             <span class="n">uvicorn</span><span class="o">.</span><span class="n">Config</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">port</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="s2">&quot;asyncio&quot;</span><span class="p">,</span> <span class="n">log_config</span><span class="o">=</span><span class="n">log_config</span><span class="p">)</span>
@@ -1053,6 +1073,7 @@ window.runMermaid = runMermaid;</script>
         <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="o">=</span> <span class="n">directory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">storage</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">SQLStorage</span><span class="p">,</span> <span class="n">get_storage</span><span class="p">(</span><span class="n">storage_uri</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">webhook_secret_key</span> <span class="o">=</span> <span class="n">webhook_secret_key</span>  <span class="c1"># None if webhooks not enabled</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/api/v1?api_key=</span><span class="si">{</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">api_key</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">web_ui_link</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_url</span><span class="si">}</span><span class="s2">?api_key=</span><span class="si">{</span><span class="n">quote_plus</span><span class="p">(</span><span class="n">api_key</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span></div>
 

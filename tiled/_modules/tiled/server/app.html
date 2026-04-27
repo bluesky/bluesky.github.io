@@ -919,6 +919,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.router</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_metrics_router</span><span class="p">,</span> <span class="n">get_router</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">Settings</span><span class="p">,</span> <span class="n">get_settings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span> <span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span> <span class="n">get_root_url</span><span class="p">,</span> <span class="n">record_timing</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.webhook_router</span><span class="w"> </span><span class="kn">import</span> <span class="n">UrlValidator</span><span class="p">,</span> <span class="n">get_webhook_router</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_zarr_router_v2</span><span class="p">,</span> <span class="n">get_zarr_router_v3</span>
 
 <span class="n">SAFE_METHODS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="s2">&quot;HEAD&quot;</span><span class="p">,</span> <span class="s2">&quot;OPTIONS&quot;</span><span class="p">,</span> <span class="s2">&quot;TRACE&quot;</span><span class="p">}</span>
@@ -984,6 +985,7 @@ window.runMermaid = runMermaid;</script>
     <span class="n">scalable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
     <span class="n">access_policy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AccessPolicy</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">include_routers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">APIRouter</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">webhook_url_validator</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UrlValidator</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Serve a Tree</span>
@@ -997,6 +999,13 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">        Dict of other server configuration.</span>
 <span class="sd">    access_policy: AccessPolicy, optional</span>
 <span class="sd">        AccessPolicy object encoding rules for which users can see which entries.</span>
+<span class="sd">    webhook_url_validator : callable, optional</span>
+<span class="sd">        An async callable ``(WebhookRegistrationRequest) -&gt; None`` invoked when</span>
+<span class="sd">        a webhook is registered.  Raise ``HTTPException`` to reject the request.</span>
+<span class="sd">        When ``None`` (default), a validator is built from ``WebhooksConfig``</span>
+<span class="sd">        (enforces HTTPS and blocks SSRF targets unless ``allow_http`` or</span>
+<span class="sd">        ``allow_private_addresses`` are set).  Pass ``_noop_url_validator`` to</span>
+<span class="sd">        skip all checks, e.g. for ``SimpleTiledServer``.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">authentication</span> <span class="o">=</span> <span class="n">authentication</span> <span class="ow">or</span> <span class="n">Authentication</span><span class="p">()</span>
     <span class="n">authenticators</span> <span class="o">=</span> <span class="n">authentication</span><span class="o">.</span><span class="n">authenticators</span>
@@ -1249,6 +1258,12 @@ window.runMermaid = runMermaid;</script>
         <span class="n">authenticators</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api/v1&quot;</span><span class="p">)</span>
+    <span class="n">webhooks_cfg</span> <span class="o">=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;webhooks&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">webhooks_cfg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">webhook_url_validator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;webhook_url_validator&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">webhook_url_validator</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">get_webhook_router</span><span class="p">(</span><span class="n">webhooks_cfg</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api/v1&quot;</span><span class="p">)</span>
 
     <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">get_zarr_router_v2</span><span class="p">(),</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/zarr/v2&quot;</span><span class="p">)</span>
     <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">get_zarr_router_v3</span><span class="p">(),</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/zarr/v3&quot;</span><span class="p">)</span>
@@ -1401,6 +1416,19 @@ window.runMermaid = runMermaid;</script>
                     <span class="p">)</span>
                     <span class="o">+</span> <span class="n">API_KEY_MSG</span>
                 <span class="p">)</span>
+
+        <span class="c1"># Inject webhook_secret_keys into catalog contexts before startup tasks</span>
+        <span class="c1"># run. When a &#39;webhooks:&#39; config section is present, pass its</span>
+        <span class="c1"># secret_keys (not the JWT auth keys). A non-None value enables the</span>
+        <span class="c1"># dispatcher; None keeps it disabled.</span>
+        <span class="n">webhooks_config</span> <span class="o">=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;webhooks&quot;</span><span class="p">)</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;webhook_secret_keys&quot;</span><span class="p">):</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">webhook_secret_keys</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">list</span><span class="p">(</span><span class="n">webhooks_config</span><span class="o">.</span><span class="n">secret_keys</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">webhooks_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
 
         <span class="c1"># Run startup tasks collected from trees (adapters).</span>
         <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">[</span><span class="s2">&quot;startup&quot;</span><span class="p">]:</span>
