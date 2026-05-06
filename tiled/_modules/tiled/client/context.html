@@ -1961,7 +1961,8 @@ window.runMermaid = runMermaid;</script>
 
 <span class="si">{</span><span class="n">verification</span><span class="p">[</span><span class="s1">&#39;user_code&#39;</span><span class="p">]</span><span class="si">}</span>
 
-<span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span>
+        <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">webbrowser</span>
 
@@ -2002,11 +2003,22 @@ window.runMermaid = runMermaid;</script>
                     <span class="p">)</span>
                     <span class="k">if</span> <span class="n">access_response_error</span> <span class="o">==</span> <span class="s2">&quot;authorization_pending&quot;</span><span class="p">:</span>
                         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">])</span>
-                        <span class="n">access_response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+                        <span class="c1"># Don&#39;t raise -- this is expected during polling.</span>
+                        <span class="c1"># Just break out of the retry context and let the</span>
+                        <span class="c1"># outer while loop sleep and try again.</span>
+                        <span class="k">break</span>
+                    <span class="c1"># Other 400 errors are genuine failures.</span>
+                    <span class="n">access_response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
                 <span class="n">handle_error</span><span class="p">(</span><span class="n">access_response</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-        <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># The for/else means we exhausted retries without break.</span>
+            <span class="c1"># This happens when handle_error(access_response) succeeds,</span>
+            <span class="c1"># meaning we got a successful response.</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">break</span>
+        <span class="c1"># We broke out of the for loop due to authorization_pending.</span>
+        <span class="c1"># Continue the outer while loop to poll again.</span>
+        <span class="k">continue</span>
     <span class="n">tokens</span> <span class="o">=</span> <span class="n">access_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">tokens</span>
 </pre></div>
