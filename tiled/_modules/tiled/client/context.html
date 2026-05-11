@@ -993,8 +993,15 @@ window.runMermaid = runMermaid;</script>
     <span class="k">elif</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;external&quot;</span><span class="p">:</span>
         <span class="c1"># Display link and access code, and try to open web browser.</span>
         <span class="c1"># Block while polling the server awaiting confirmation of authorization.</span>
+        <span class="n">scopes</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="nb">sorted</span><span class="p">({</span><span class="s2">&quot;openid&quot;</span><span class="p">,</span> <span class="s2">&quot;offline_access&quot;</span><span class="p">}</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">extra_scopes</span> <span class="ow">or</span> <span class="p">[]))</span>
+        <span class="p">)</span>
         <span class="n">tokens</span> <span class="o">=</span> <span class="n">device_code_grant</span><span class="p">(</span>
-            <span class="n">http_client</span><span class="p">,</span> <span class="n">auth_endpoint</span><span class="p">,</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">token_endpoint</span>
+            <span class="n">http_client</span><span class="p">,</span>
+            <span class="n">auth_endpoint</span><span class="p">,</span>
+            <span class="n">client_id</span><span class="p">,</span>
+            <span class="n">token_endpoint</span><span class="p">,</span>
+            <span class="n">scopes</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Server has unknown authentication mechanism </span><span class="si">{</span><span class="n">mode</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -1937,25 +1944,45 @@ window.runMermaid = runMermaid;</script>
     <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
         <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">client_id</span> <span class="ow">and</span> <span class="n">token_endpoint</span><span class="p">:</span>
+                <span class="c1"># The device code will be given to the external OIDC provider.</span>
                 <span class="n">oauth2_spec</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="n">uri</span> <span class="o">=</span> <span class="s2">&quot;verification_uri_complete&quot;</span>
                 <span class="n">verification_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
                     <span class="n">auth_endpoint</span><span class="p">,</span>
                     <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="n">client_id</span><span class="p">,</span> <span class="s2">&quot;scope&quot;</span><span class="p">:</span> <span class="n">scopes</span><span class="p">},</span>
                 <span class="p">)</span>
+                <span class="n">handle_error</span><span class="p">(</span><span class="n">verification_response</span><span class="p">)</span>
+                <span class="n">verification</span> <span class="o">=</span> <span class="n">verification_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+                <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="s2">&quot;verification_uri_complete&quot;</span><span class="p">,</span>  <span class="c1"># includes code</span>
+                    <span class="s2">&quot;verification_uri&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;verification_url&quot;</span><span class="p">,</span>  <span class="c1"># non-standard Entra</span>
+                <span class="p">]</span>
+                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+                    <span class="n">verification_uri</span> <span class="o">=</span> <span class="n">verification</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">verification_uri</span><span class="p">:</span>
+                        <span class="k">break</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                        <span class="s2">&quot;Verification response is missing expected keys. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Expected one of </span><span class="si">{</span><span class="n">keys</span><span class="si">}</span><span class="s2">. Got: </span><span class="si">{</span><span class="n">verification</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
 
             <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># The device code will be given to Tiled&#39;s own implementation</span>
+                <span class="c1"># of device code flow. Tiled will do authorization code from with the</span>
+                <span class="c1"># external providers. (This handles cases that ORCID and Globus that do</span>
+                <span class="c1"># not support device code flow.)</span>
                 <span class="n">oauth2_spec</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="n">uri</span> <span class="o">=</span> <span class="s2">&quot;authorization_uri&quot;</span>
                 <span class="n">verification_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">auth_endpoint</span><span class="p">)</span>
-            <span class="n">handle_error</span><span class="p">(</span><span class="n">verification_response</span><span class="p">)</span>
-    <span class="n">verification</span> <span class="o">=</span> <span class="n">verification_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-    <span class="n">authorization_uri</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="n">uri</span><span class="p">]</span>
+                <span class="n">handle_error</span><span class="p">(</span><span class="n">verification_response</span><span class="p">)</span>
+                <span class="n">verification</span> <span class="o">=</span> <span class="n">verification_response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+                <span class="n">token_endpoint</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;authorization_uri&quot;</span><span class="p">]</span>
+                <span class="n">verification_uri</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">]</span>
     <span class="nb">print</span><span class="p">(</span>
         <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">You have </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s1">&#39;expires_in&#39;</span><span class="p">])</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="mi">60</span><span class="si">}</span><span class="s2"> minutes to visit this URL</span>
 
-<span class="si">{</span><span class="n">authorization_uri</span><span class="si">}</span>
+<span class="si">{</span><span class="n">verification_uri</span><span class="si">}</span>
 
 <span class="s2">and enter the code:</span>
 
@@ -1966,11 +1993,11 @@ window.runMermaid = runMermaid;</script>
     <span class="p">)</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">webbrowser</span>
 
-    <span class="n">webbrowser</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">authorization_uri</span><span class="p">)</span>
-    <span class="n">deadline</span> <span class="o">=</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;expires_in&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+    <span class="n">webbrowser</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">verification_uri</span><span class="p">)</span>
+    <span class="n">deadline</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;expires_in&quot;</span><span class="p">])</span> <span class="o">+</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Waiting...&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">])</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;interval&quot;</span><span class="p">]))</span>
         <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">deadline</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Deadline expired.&quot;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">polling_retry_context</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">verification</span><span class="p">[</span><span class="s2">&quot;expires_in&quot;</span><span class="p">]):</span>
@@ -1988,7 +2015,7 @@ window.runMermaid = runMermaid;</script>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">access_response</span> <span class="o">=</span> <span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                        <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;verification_uri&quot;</span><span class="p">],</span>
+                        <span class="n">token_endpoint</span><span class="p">,</span>
                         <span class="n">json</span><span class="o">=</span><span class="p">{</span>
                             <span class="s2">&quot;device_code&quot;</span><span class="p">:</span> <span class="n">verification</span><span class="p">[</span><span class="s2">&quot;device_code&quot;</span><span class="p">],</span>
                             <span class="s2">&quot;grant_type&quot;</span><span class="p">:</span> <span class="s2">&quot;urn:ietf:params:oauth:grant-type:device_code&quot;</span><span class="p">,</span>
