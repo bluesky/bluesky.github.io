@@ -1156,6 +1156,17 @@ window.runMermaid = runMermaid;</script>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">providers</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
             <span class="k">else</span> <span class="kc">None</span>
         <span class="p">)</span>
+        <span class="n">provider</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">providers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">providers</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">extra_scopes</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">provider</span><span class="p">,</span> <span class="s2">&quot;extra_scopes&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scopes</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">({</span><span class="s2">&quot;openid&quot;</span><span class="p">,</span> <span class="s2">&quot;offline_access&quot;</span><span class="p">}</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">extra_scopes</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="n">extra_scopes</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
         <span class="c1"># To determine httpx.Auth used by Tiled client is TiledAuth(internal) or external Auth</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">has_external_auth</span> <span class="o">=</span> <span class="kc">False</span></div>
 
@@ -1585,7 +1596,9 @@ window.runMermaid = runMermaid;</script>
             <span class="n">temp_auth</span><span class="o">.</span><span class="n">sync_clear_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
             <span class="c1"># Store tokens in memory only, with no syncing to disk.</span>
             <span class="n">token_directory</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span><span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">)</span>
+        <span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span>
+            <span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">scopes</span>
+        <span class="p">)</span>
         <span class="n">auth</span><span class="o">.</span><span class="n">sync_tokens</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">auth</span>
 
@@ -1646,7 +1659,11 @@ window.runMermaid = runMermaid;</script>
         <span class="c1"># We have to make an HTTP request to let the server validate whether we</span>
         <span class="c1"># have a valid session.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span> <span class="o">=</span> <span class="n">TiledAuth</span><span class="p">(</span>
-            <span class="n">refresh_url</span><span class="p">,</span> <span class="n">csrf_token</span><span class="p">,</span> <span class="n">token_directory</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span>
+            <span class="n">refresh_url</span><span class="p">,</span>
+            <span class="n">csrf_token</span><span class="p">,</span>
+            <span class="n">token_directory</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scopes</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="c1"># This will either:</span>
         <span class="c1"># * Use an access_token and succeed.</span>
@@ -1687,6 +1704,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">refresh_token</span><span class="p">,</span>
             <span class="n">csrf_token</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">scopes</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
