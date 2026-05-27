@@ -984,31 +984,32 @@ window.runMermaid = runMermaid;</script>
         <span class="n">url_length_for_get_request</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">URL_PATH</span><span class="p">)</span> <span class="o">+</span> <span class="nb">sum</span><span class="p">(</span>
             <span class="n">_EXTRA_CHARS_PER_ITEM</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">column</span><span class="p">)</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="p">(</span><span class="n">columns</span> <span class="ow">or</span> <span class="p">())</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="n">url_length_for_get_request</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">URL_CHARACTER_LIMIT</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
-                <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
-                    <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                            <span class="n">URL_PATH</span><span class="p">,</span>
-                            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">},</span>
-                            <span class="n">json</span><span class="o">=</span><span class="n">columns</span><span class="p">,</span>
-                            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                        <span class="p">)</span>
-                    <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">columns</span><span class="p">:</span>
-                <span class="c1"># Note: The singular/plural inconsistency here is because</span>
-                <span class="c1"># [&quot;A&quot;, &quot;B&quot;] will be encoded in the URL as column=A&amp;column=B</span>
-                <span class="n">params</span><span class="p">[</span><span class="s2">&quot;column&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">columns</span>
-            <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
-                <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
-                    <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                            <span class="n">URL_PATH</span><span class="p">,</span>
-                            <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">},</span>
-                            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                        <span class="p">)</span>
-                    <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">url_length_for_get_request</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">URL_CHARACTER_LIMIT</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                    <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                                <span class="n">URL_PATH</span><span class="p">,</span>
+                                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">},</span>
+                                <span class="n">json</span><span class="o">=</span><span class="n">columns</span><span class="p">,</span>
+                                <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">columns</span><span class="p">:</span>
+                    <span class="c1"># Note: The singular/plural inconsistency here is because</span>
+                    <span class="c1"># [&quot;A&quot;, &quot;B&quot;] will be encoded in the URL as column=A&amp;column=B</span>
+                    <span class="n">params</span><span class="p">[</span><span class="s2">&quot;column&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">columns</span>
+                <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                    <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
+                        <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                                <span class="n">URL_PATH</span><span class="p">,</span>
+                                <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="n">APACHE_ARROW_FILE_MIME_TYPE</span><span class="p">},</span>
+                                <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">read_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">partition</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>

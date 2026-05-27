@@ -867,6 +867,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">urllib.parse</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
@@ -895,6 +896,10 @@ window.runMermaid = runMermaid;</script>
 
 <span class="n">USER_AGENT</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;python-tiled/</span><span class="si">{</span><span class="n">tiled_version</span><span class="si">}</span><span class="s2">&quot;</span>
 <span class="n">API_KEY_AUTH_HEADER_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^Apikey (\w+)$&quot;</span><span class="p">)</span>
+<span class="c1"># Default cap on simultaneous outgoing HTTP connections and in-flight</span>
+<span class="c1"># data-fetch requests.  Keeps spike loads on the server bounded while</span>
+<span class="c1"># still allowing reasonable parallelism from dask&#39;s threaded scheduler.</span>
+<span class="n">MAX_CONCURRENT_CONNECTIONS</span> <span class="o">=</span> <span class="mi">16</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">raise_if_cannot_prompt</span><span class="p">():</span>
@@ -1042,6 +1047,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">max_connections</span><span class="o">=</span><span class="n">MAX_CONCURRENT_CONNECTIONS</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="c1"># The uri is expected to reach the root API route.</span>
         <span class="n">uri</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
@@ -1093,9 +1099,13 @@ window.runMermaid = runMermaid;</script>
             <span class="n">timeout</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Timeout</span><span class="p">(</span><span class="o">**</span><span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">:</span>
             <span class="n">cache</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">limits</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Limits</span><span class="p">(</span>
+            <span class="n">max_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
+            <span class="n">max_keepalive_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
-                <span class="n">transport</span><span class="o">=</span><span class="n">Transport</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">),</span>
+                <span class="n">transport</span><span class="o">=</span><span class="n">Transport</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span> <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">),</span>
                 <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
                 <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
                 <span class="n">follow_redirects</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -1104,9 +1114,17 @@ window.runMermaid = runMermaid;</script>
             <span class="n">client</span><span class="o">.</span><span class="n">headers</span> <span class="o">=</span> <span class="n">headers</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Set up an ASGI client.</span>
-            <span class="c1"># Because we have been handed an app, we can infer that</span>
-            <span class="c1"># starlette is available.</span>
+            <span class="c1"># Because we have been handed an app, we can infer that starlette is available.</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">starlette.testclient</span><span class="w"> </span><span class="kn">import</span> <span class="n">TestClient</span>
+
+            <span class="c1"># Note: neither `timeout` nor `limits` (max_connections) are</span>
+            <span class="c1"># enforced in ASGI mode.  Starlette&#39;s _TestClientTransport</span>
+            <span class="c1"># dispatches requests in-process via anyio and bypasses the real</span>
+            <span class="c1"># HTTP stack entirely, so there is no I/O wait for timeouts to</span>
+            <span class="c1"># fire and no TCP connections for the pool limit to count.</span>
+            <span class="c1"># The semaphore (_concurrent_request_semaphore) is still</span>
+            <span class="c1"># effective because it is enforced in Python before the request</span>
+            <span class="c1"># is dispatched, regardless of transport.</span>
 
             <span class="n">base_uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">uri</span><span class="o">.</span><span class="n">scheme</span><span class="si">}</span><span class="s2">://</span><span class="si">{</span><span class="n">uri</span><span class="o">.</span><span class="n">netloc</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="c1"># verify parameter is dropped, as there is no SSL in ASGI mode</span>
@@ -1126,8 +1144,6 @@ window.runMermaid = runMermaid;</script>
             <span class="c1"># We are abusing it slightly to enable interactive use of the</span>
             <span class="c1"># TestClient.</span>
 
-            <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
-
             <span class="c1"># The threading module has its own (internal) atexit</span>
             <span class="c1"># mechanism that runs at thread shutdown, prior to the atexit</span>
             <span class="c1"># mechanism that runs at interpreter shutdown.</span>
@@ -1139,6 +1155,11 @@ window.runMermaid = runMermaid;</script>
         <span class="bp">self</span><span class="o">.</span><span class="n">_verify</span> <span class="o">=</span> <span class="n">verify</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">TILED_CACHE_DIR</span> <span class="o">/</span> <span class="s2">&quot;tokens&quot;</span><span class="p">)</span>
+        <span class="c1"># Semaphore that caps the number of concurrent data-fetch requests</span>
+        <span class="c1"># (array blocks, dataframe partitions, etc.) issued by dask workers.</span>
+        <span class="c1"># This is intentionally separate from the HTTP connection pool limit so</span>
+        <span class="c1"># that it can be tuned independently; by default it mirrors the pool size.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="n">max_connections</span><span class="p">)</span>
 
         <span class="c1"># Make an initial &quot;safe&quot; request to:</span>
         <span class="c1"># (1) Get the server_info.</span>
@@ -1231,6 +1252,7 @@ window.runMermaid = runMermaid;</script>
             <span class="bp">self</span><span class="o">.</span><span class="n">_token_cache</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span><span class="o">.</span><span class="n">_value</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
@@ -1245,6 +1267,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">token_cache</span><span class="p">,</span>
             <span class="n">server_info</span><span class="p">,</span>
             <span class="n">cache</span><span class="p">,</span>
+            <span class="n">max_connections</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">=</span> <span class="n">state</span>
         <span class="k">if</span> <span class="n">state_tiled_version</span> <span class="o">!=</span> <span class="n">tiled_version</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
@@ -1258,9 +1281,13 @@ window.runMermaid = runMermaid;</script>
             <span class="n">cookies</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
                 <span class="n">cookie</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">cookie</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">domain</span><span class="o">=</span><span class="n">cookie</span><span class="o">.</span><span class="n">domain</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="n">cookie</span><span class="o">.</span><span class="n">path</span>
             <span class="p">)</span>
+        <span class="n">limits</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Limits</span><span class="p">(</span>
+            <span class="n">max_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
+            <span class="n">max_keepalive_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
             <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
-            <span class="n">transport</span><span class="o">=</span><span class="n">Transport</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">),</span>
+            <span class="n">transport</span><span class="o">=</span><span class="n">Transport</span><span class="p">(</span><span class="n">cache</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span> <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">),</span>
             <span class="n">cookies</span><span class="o">=</span><span class="n">cookies</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
@@ -1271,6 +1298,7 @@ window.runMermaid = runMermaid;</script>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_verify</span> <span class="o">=</span> <span class="n">verify</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="n">server_info</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="n">max_connections</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Context.from_any_uri">
 <a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.from_any_uri.html#tiled.client.context.Context.from_any_uri">[docs]</a>
@@ -1285,6 +1313,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_connections</span><span class="o">=</span><span class="n">MAX_CONCURRENT_CONNECTIONS</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Accept a URI to a specific node.</span>
@@ -1338,6 +1367,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
             <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
+            <span class="n">max_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">context</span><span class="p">,</span> <span class="n">node_path_parts</span></div>
 
@@ -1355,6 +1385,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">api_key</span><span class="o">=</span><span class="n">UNSET</span><span class="p">,</span>
         <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">uri</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">max_connections</span><span class="o">=</span><span class="n">MAX_CONCURRENT_CONNECTIONS</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Construct a Context around a FastAPI app. Primarily for testing.</span>
@@ -1367,6 +1398,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
             <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
             <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="n">raise_server_exceptions</span><span class="p">,</span>
+            <span class="n">max_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">api_key</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">providers</span><span class="p">:</span>
