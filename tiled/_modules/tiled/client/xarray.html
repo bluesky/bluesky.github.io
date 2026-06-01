@@ -863,7 +863,8 @@ window.runMermaid = runMermaid;</script>
                 <article class="bd-article">
                   
   <h1>Source code for tiled.client.xarray</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_qs</span><span class="p">,</span> <span class="n">urlparse</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask</span>
@@ -902,6 +903,11 @@ window.runMermaid = runMermaid;</script>
     <span class="k">def</span><span class="w"> </span><span class="nf">_build_arrays</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="p">):</span>
         <span class="n">data_vars</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># Track which variables use direct fetch (not wide-table optimization).</span>
+        <span class="c1"># These are the ones whose dask arrays will advance the progress bar.</span>
+        <span class="c1"># Returned as a value (not stored on self) to avoid shared-state issues</span>
+        <span class="c1"># if two threads call read() on the same client concurrently.</span>
+        <span class="n">direct_fetch_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="c1"># Optimization: Download scalar columns in batch as DataFrame.</span>
         <span class="c1"># on first access.</span>
         <span class="n">coords_fetcher</span> <span class="o">=</span> <span class="n">_WideTableFetcher</span><span class="p">(</span>
@@ -958,6 +964,7 @@ window.runMermaid = runMermaid;</script>
                         <span class="s2">&quot;&#39;xarray_coord&#39; or &#39;xarray_data_var&#39;.&quot;</span>
                     <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
+                <span class="n">direct_fetch_names</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
                 <span class="k">if</span> <span class="s2">&quot;xarray_coord&quot;</span> <span class="ow">in</span> <span class="n">spec_names</span><span class="p">:</span>
                     <span class="n">coords</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                         <span class="n">array_client</span><span class="o">.</span><span class="n">dims</span><span class="p">,</span>
@@ -975,12 +982,12 @@ window.runMermaid = runMermaid;</script>
                         <span class="s2">&quot;Child nodes of xarray_dataset should include spec &quot;</span>
                         <span class="s2">&quot;&#39;xarray_coord&#39; or &#39;xarray_data_var&#39;.&quot;</span>
                     <span class="p">)</span>
-        <span class="k">return</span> <span class="n">data_vars</span><span class="p">,</span> <span class="n">coords</span>
+        <span class="k">return</span> <span class="n">data_vars</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">direct_fetch_names</span>
 
 <div class="viewcode-block" id="DaskDatasetClient.read">
 <a class="viewcode-back" href="../../../reference/generated/tiled.client.xarray.DaskDatasetClient.read.html#tiled.client.xarray.DaskDatasetClient.read">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="n">data_vars</span><span class="p">,</span> <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_arrays</span><span class="p">(</span><span class="n">variables</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="p">)</span>
+        <span class="n">data_vars</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_arrays</span><span class="p">(</span><span class="n">variables</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">xarray</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span>
             <span class="n">data_vars</span><span class="o">=</span><span class="n">data_vars</span><span class="p">,</span> <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span> <span class="n">attrs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;attrs&quot;</span><span class="p">]</span>
         <span class="p">)</span></div>
@@ -994,11 +1001,20 @@ window.runMermaid = runMermaid;</script>
 <div class="viewcode-block" id="DatasetClient.read">
 <a class="viewcode-back" href="../../../reference/generated/tiled.client.xarray.DatasetClient.read.html#tiled.client.xarray.DatasetClient.read">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variables</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="nb">super</span><span class="p">()</span>
-            <span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">variables</span><span class="o">=</span><span class="n">variables</span><span class="p">,</span> <span class="n">optimize_wide_table</span><span class="o">=</span><span class="n">optimize_wide_table</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">load</span><span class="p">()</span>
-        <span class="p">)</span></div>
+        <span class="n">data_vars</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">direct_fetch_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_arrays</span><span class="p">(</span>
+            <span class="n">variables</span><span class="p">,</span> <span class="n">optimize_wide_table</span>
+        <span class="p">)</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">xarray</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span>
+            <span class="n">data_vars</span><span class="o">=</span><span class="n">data_vars</span><span class="p">,</span> <span class="n">coords</span><span class="o">=</span><span class="n">coords</span><span class="p">,</span> <span class="n">attrs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;attrs&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="c1"># Count fetch tasks only for direct-fetch variables (not wide-table).</span>
+        <span class="c1"># Wide-table variables use dask.delayed and don&#39;t advance the bar.</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">var</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">data_vars</span><span class="o">.</span><span class="n">items</span><span class="p">())</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">direct_fetch_names</span> <span class="ow">and</span> <span class="n">dask</span><span class="o">.</span><span class="n">is_dask_collection</span><span class="p">(</span><span class="n">var</span><span class="o">.</span><span class="n">data</span><span class="p">):</span>
+                <span class="n">total</span> <span class="o">+=</span> <span class="n">math</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">var</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chunks</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">tracking_progress</span><span class="p">(</span><span class="n">total</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ds</span><span class="o">.</span><span class="n">load</span><span class="p">()</span></div>
 </div>
 
 

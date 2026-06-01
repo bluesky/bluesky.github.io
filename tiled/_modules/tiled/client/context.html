@@ -871,6 +871,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">urllib.parse</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_qs</span><span class="p">,</span> <span class="n">urlparse</span>
@@ -889,6 +890,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DEFAULT_TIMEOUT_PARAMS</span><span class="p">,</span>
     <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
+    <span class="n">StandaloneRetryIndicator</span><span class="p">,</span>
     <span class="n">handle_error</span><span class="p">,</span>
     <span class="n">polling_retry_context</span><span class="p">,</span>
     <span class="n">retry_context</span><span class="p">,</span>
@@ -1048,6 +1050,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">max_connections</span><span class="o">=</span><span class="n">MAX_CONCURRENT_CONNECTIONS</span><span class="p">,</span>
+        <span class="n">show_progress</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="c1"># The uri is expected to reach the root API route.</span>
         <span class="n">uri</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
@@ -1159,14 +1162,29 @@ window.runMermaid = runMermaid;</script>
         <span class="c1"># (array blocks, dataframe partitions, etc.) issued by dask workers.</span>
         <span class="c1"># This is intentionally separate from the HTTP connection pool limit so</span>
         <span class="c1"># that it can be tuned independently; by default it mirrors the pool size.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_connections</span> <span class="o">=</span> <span class="n">max_connections</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="n">max_connections</span><span class="p">)</span>
+        <span class="c1"># Slot used by tracking_progress(). Set to a ProgressState instance</span>
+        <span class="c1"># while a tracked .compute() is running; None at all other times.</span>
+        <span class="c1"># Assignment of a Python reference is atomic, so dask worker threads</span>
+        <span class="c1"># can safely read this without a lock.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Whether to show a rich progress bar during multi-chunk fetches.</span>
+        <span class="c1"># None means use the TILED_SHOW_PROGRESS env var (default True).</span>
+        <span class="k">if</span> <span class="n">show_progress</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">show_progress</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
+                <span class="s2">&quot;TILED_SHOW_PROGRESS&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="s2">&quot;false&quot;</span><span class="p">,</span> <span class="s2">&quot;no&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">show_progress</span> <span class="o">=</span> <span class="n">show_progress</span>
+        <span class="c1"># Lazy-initialized StandaloneRetryIndicator (set by signal_retry)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="c1"># Make an initial &quot;safe&quot; request to:</span>
         <span class="c1"># (1) Get the server_info.</span>
         <span class="c1"># (2) Let the server set the CSRF cookie.</span>
         <span class="c1"># No authentication has been set up yet, so these requests will be unauthenticated.</span>
         <span class="c1"># https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#double-submit-cookie</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="n">server_info</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
@@ -1298,7 +1316,237 @@ window.runMermaid = runMermaid;</script>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="n">cache</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_verify</span> <span class="o">=</span> <span class="n">verify</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span> <span class="o">=</span> <span class="n">server_info</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_connections</span> <span class="o">=</span> <span class="n">max_connections</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span><span class="n">max_connections</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Intentionally False: unpickled contexts run in dask workers which</span>
+        <span class="c1"># are not interactive and should never render progress bars.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">show_progress</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">progress_state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read-only access to the active progress state, or None.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span>
+
+    <span class="nd">@contextmanager</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tracking_progress</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">total</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager that displays a rich progress bar during a multi-chunk fetch.</span>
+
+<span class="sd">        While the context is active, :attr:`progress_state` is set to a</span>
+<span class="sd">        ``ProgressState`` instance so that fetch methods</span>
+<span class="sd">        (``_get_slice``, ``_get_block``, ``_get_partition``) can advance the bar</span>
+<span class="sd">        and show a retry indicator.  The slot is reset to ``None`` on exit.</span>
+
+<span class="sd">        A bar is shown only when :attr:`show_progress` is True *and*</span>
+<span class="sd">        ``total &gt; 1`` *and* the session is interactive.  Otherwise this is a</span>
+<span class="sd">        no-op context manager.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        total : int</span>
+<span class="sd">            Number of fetch tasks (chunks / partitions) expected.</span>
+
+<span class="sd">        Example</span>
+<span class="sd">        -------</span>
+<span class="sd">        &gt;&gt;&gt; dask_arr = client.read()          # returns dask array, no fetch yet</span>
+<span class="sd">        &gt;&gt;&gt; n = math.prod(len(c) for c in dask_arr.chunks)</span>
+<span class="sd">        &gt;&gt;&gt; with context.tracking_progress(total=n):</span>
+<span class="sd">        ...     result = dask_arr.compute()</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_interactive</span><span class="p">,</span> <span class="n">is_jupyter</span>
+
+        <span class="k">if</span> <span class="n">total</span> <span class="o">&lt;=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">show_progress</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">is_interactive</span><span class="p">():</span>
+            <span class="k">yield</span>
+            <span class="k">return</span>
+
+        <span class="c1"># If an outer progress bar is already active, defer to it (no nested bars).</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">yield</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">is_jupyter</span><span class="p">():</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tracking_progress_jupyter</span><span class="p">(</span><span class="n">total</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tracking_progress_terminal</span><span class="p">(</span><span class="n">total</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_tracking_progress_jupyter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">total</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Progress bar for Jupyter notebooks using ipywidgets.IntProgress.</span>
+
+<span class="sd">        Avoids Rich&#39;s Live/Console entirely in Jupyter to prevent the blank-line</span>
+<span class="sd">        and ZMQ socket issues that arise from Rich&#39;s ipython_display() path.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">ipywidgets</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">widgets</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="c1"># ipywidgets not available — fall back to terminal path</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tracking_progress_terminal</span><span class="p">(</span><span class="n">total</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">bar</span> <span class="o">=</span> <span class="n">widgets</span><span class="o">.</span><span class="n">IntProgress</span><span class="p">(</span>
+            <span class="n">value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="nb">max</span><span class="o">=</span><span class="n">total</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Fetching:&quot;</span><span class="p">,</span>
+            <span class="n">style</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;description_width&quot;</span><span class="p">:</span> <span class="s2">&quot;initial&quot;</span><span class="p">},</span>
+            <span class="n">layout</span><span class="o">=</span><span class="n">widgets</span><span class="o">.</span><span class="n">Layout</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="s2">&quot;300px&quot;</span><span class="p">,</span> <span class="n">height</span><span class="o">=</span><span class="s2">&quot;16px&quot;</span><span class="p">,</span> <span class="n">flex</span><span class="o">=</span><span class="s2">&quot;0 0 auto&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">widgets</span><span class="o">.</span><span class="n">HTML</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;span style=&#39;font-size:var(--jp-widgets-font-size)&#39;&gt;0/</span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2"> -:--:--&lt;/span&gt;&quot;</span><span class="p">,</span>
+            <span class="n">layout</span><span class="o">=</span><span class="n">widgets</span><span class="o">.</span><span class="n">Layout</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="s2">&quot;180px&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">box</span> <span class="o">=</span> <span class="n">widgets</span><span class="o">.</span><span class="n">HBox</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">bar</span><span class="p">,</span> <span class="n">label</span><span class="p">],</span>
+            <span class="n">layout</span><span class="o">=</span><span class="n">widgets</span><span class="o">.</span><span class="n">Layout</span><span class="p">(</span><span class="n">align_items</span><span class="o">=</span><span class="s2">&quot;center&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">display</span><span class="p">(</span><span class="n">box</span><span class="p">)</span>
+
+        <span class="c1"># Minimal ProgressState-compatible shim backed by the ipywidget</span>
+        <span class="k">class</span><span class="w"> </span><span class="nc">_JupyterProgressState</span><span class="p">:</span>
+            <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;_bar&quot;</span><span class="p">,</span> <span class="s2">&quot;_label&quot;</span><span class="p">,</span> <span class="s2">&quot;_total&quot;</span><span class="p">,</span> <span class="s2">&quot;_completed&quot;</span><span class="p">,</span> <span class="s2">&quot;_start&quot;</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bar</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">total</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_bar</span> <span class="o">=</span> <span class="n">bar</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_label</span> <span class="o">=</span> <span class="n">label</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">=</span> <span class="n">total</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_completed</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_start</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">_fmt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
+                <span class="n">count</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_completed</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_total</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_completed</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">eta</span> <span class="o">=</span> <span class="s2">&quot;-:--:--&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start</span>
+                    <span class="n">rate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_completed</span> <span class="o">/</span> <span class="n">elapsed</span>
+                    <span class="n">remaining_secs</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_completed</span><span class="p">)</span> <span class="o">/</span> <span class="n">rate</span>
+                    <span class="n">h</span><span class="p">,</span> <span class="n">rem</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">remaining_secs</span><span class="p">),</span> <span class="mi">3600</span><span class="p">)</span>
+                    <span class="n">m</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">rem</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>
+                    <span class="n">eta</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">h</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">m</span><span class="si">:</span><span class="s2">02d</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">s</span><span class="si">:</span><span class="s2">02d</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">h</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;0:</span><span class="si">{</span><span class="n">m</span><span class="si">:</span><span class="s2">02d</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">s</span><span class="si">:</span><span class="s2">02d</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">text</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">eta</span><span class="si">}{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">return</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;&lt;span style=&#39;font-size:var(--jp-widgets-font-size)&#39;&gt;</span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&lt;/span&gt;&quot;</span>
+                <span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">advance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+                <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">monotonic</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_completed</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_bar</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_completed</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_label</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fmt</span><span class="p">()</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">show_retrying</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_label</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fmt</span><span class="p">(</span><span class="s2">&quot; Retrying…&quot;</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">hide_retrying</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_label</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fmt</span><span class="p">()</span>
+
+        <span class="n">state</span> <span class="o">=</span> <span class="n">_JupyterProgressState</span><span class="p">(</span><span class="n">bar</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">total</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span> <span class="o">=</span> <span class="n">state</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">state</span>
+            <span class="c1"># Top up in case dask.distributed workers dropped advance() calls</span>
+            <span class="n">remaining</span> <span class="o">=</span> <span class="n">total</span> <span class="o">-</span> <span class="n">state</span><span class="o">.</span><span class="n">_completed</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">remaining</span><span class="p">):</span>
+                <span class="n">state</span><span class="o">.</span><span class="n">advance</span><span class="p">()</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">box</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_tracking_progress_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">total</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Progress bar for terminal / IPython terminal using Rich Live.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">rich.console</span><span class="w"> </span><span class="kn">import</span> <span class="n">Console</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">rich.live</span><span class="w"> </span><span class="kn">import</span> <span class="n">Live</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">rich.progress</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">BarColumn</span><span class="p">,</span>
+            <span class="n">MofNCompleteColumn</span><span class="p">,</span>
+            <span class="n">Progress</span><span class="p">,</span>
+            <span class="n">TimeRemainingColumn</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">rich.spinner</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spinner</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProgressState</span>
+
+        <span class="c1"># force_terminal so the bar renders even though IPython replaces</span>
+        <span class="c1"># stderr with a non-TTY stream in the terminal.</span>
+        <span class="n">console</span> <span class="o">=</span> <span class="n">Console</span><span class="p">(</span><span class="n">stderr</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">force_terminal</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">progress</span> <span class="o">=</span> <span class="n">Progress</span><span class="p">(</span>
+            <span class="s2">&quot;[progress.description]</span><span class="si">{task.description}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">BarColumn</span><span class="p">(),</span>
+            <span class="n">MofNCompleteColumn</span><span class="p">(),</span>
+            <span class="n">TimeRemainingColumn</span><span class="p">(),</span>
+            <span class="n">console</span><span class="o">=</span><span class="n">console</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">task_id</span> <span class="o">=</span> <span class="n">progress</span><span class="o">.</span><span class="n">add_task</span><span class="p">(</span><span class="s2">&quot;Fetching data…&quot;</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="n">total</span><span class="p">)</span>
+        <span class="n">spinner</span> <span class="o">=</span> <span class="n">Spinner</span><span class="p">(</span><span class="s2">&quot;dots&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s2">&quot;[yellow]Retrying…[/yellow]&quot;</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">ProgressState</span><span class="p">(</span><span class="n">progress</span><span class="p">,</span> <span class="n">task_id</span><span class="p">,</span> <span class="n">spinner</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">Live</span><span class="p">(</span><span class="n">progress</span><span class="p">,</span> <span class="n">transient</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">console</span><span class="o">=</span><span class="n">console</span><span class="p">)</span> <span class="k">as</span> <span class="n">live</span><span class="p">:</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">_live</span> <span class="o">=</span> <span class="n">live</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span> <span class="o">=</span> <span class="n">state</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">state</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="c1"># Top up in case dask.distributed workers dropped advance() calls</span>
+                <span class="n">completed</span> <span class="o">=</span> <span class="n">progress</span><span class="o">.</span><span class="n">tasks</span><span class="p">[</span><span class="n">task_id</span><span class="p">]</span><span class="o">.</span><span class="n">completed</span>
+                <span class="n">remaining</span> <span class="o">=</span> <span class="n">total</span> <span class="o">-</span> <span class="n">completed</span>
+                <span class="k">if</span> <span class="n">remaining</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">progress</span><span class="o">.</span><span class="n">advance</span><span class="p">(</span><span class="n">task_id</span><span class="p">,</span> <span class="n">remaining</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">retry_indicator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read-only access to the active standalone retry indicator, or None.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">signal_retry</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Signal that a retry is in progress.</span>
+
+<span class="sd">        Shows a retry indicator: a spinner below the active progress bar if one</span>
+<span class="sd">        is running, or a standalone animated spinner otherwise.  Always called</span>
+<span class="sd">        from the main thread (enforced internally).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">ps</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ps</span><span class="o">.</span><span class="n">show_retrying</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Always show retry notice regardless of show_progress / is_interactive().</span>
+            <span class="c1"># Silently retrying without any feedback is confusing in every context.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span> <span class="o">=</span> <span class="n">StandaloneRetryIndicator</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">signal_retry_resolved</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Signal that retries have resolved — hide any retry indicator.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">ps</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_progress_state</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ps</span><span class="o">.</span><span class="n">hide_retrying</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_retry_indicator</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">throttle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager that throttles concurrent data-fetch requests.</span>
+
+<span class="sd">        Acquires the internal connection semaphore on entry and releases it on</span>
+<span class="sd">        exit.  Fetch methods (``_get_block``, ``_get_slice``,</span>
+<span class="sd">        ``_get_partition``) use this to cap the number of simultaneous</span>
+<span class="sd">        outgoing HTTP requests to the limit set by ``max_connections``.</span>
+
+<span class="sd">        Example</span>
+<span class="sd">        -------</span>
+<span class="sd">        &gt;&gt;&gt; with self.context.throttle():</span>
+<span class="sd">        ...     response = self.context.http_client.get(url)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">max_connections</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Maximum number of concurrent data-fetch requests.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_connections</span>
 
 <div class="viewcode-block" id="Context.from_any_uri">
 <a class="viewcode-back" href="../../../reference/generated/tiled.client.context.Context.from_any_uri.html#tiled.client.context.Context.from_any_uri">[docs]</a>
@@ -1314,6 +1562,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">verify</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">app</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">max_connections</span><span class="o">=</span><span class="n">MAX_CONCURRENT_CONNECTIONS</span><span class="p">,</span>
+        <span class="n">show_progress</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Accept a URI to a specific node.</span>
@@ -1368,6 +1617,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">verify</span><span class="o">=</span><span class="n">verify</span><span class="p">,</span>
             <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
             <span class="n">max_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
+            <span class="n">show_progress</span><span class="o">=</span><span class="n">show_progress</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">context</span><span class="p">,</span> <span class="n">node_path_parts</span></div>
 
@@ -1386,6 +1636,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">uri</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">max_connections</span><span class="o">=</span><span class="n">MAX_CONCURRENT_CONNECTIONS</span><span class="p">,</span>
+        <span class="n">show_progress</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Construct a Context around a FastAPI app. Primarily for testing.</span>
@@ -1399,6 +1650,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
             <span class="n">raise_server_exceptions</span><span class="o">=</span><span class="n">raise_server_exceptions</span><span class="p">,</span>
             <span class="n">max_connections</span><span class="o">=</span><span class="n">max_connections</span><span class="p">,</span>
+            <span class="n">show_progress</span><span class="o">=</span><span class="n">show_progress</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">api_key</span> <span class="ow">is</span> <span class="n">UNSET</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">context</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">providers</span><span class="p">:</span>
@@ -1452,7 +1704,7 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Not API key is configured for the client.&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
@@ -1495,7 +1747,7 @@ window.runMermaid = runMermaid;</script>
                 <span class="s2">&quot;support generating additional API keys.&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
@@ -1525,7 +1777,7 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">            (Any additional characters passed will be truncated.)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_info</span><span class="o">.</span><span class="n">authentication</span><span class="o">.</span><span class="n">links</span><span class="o">.</span><span class="n">apikey</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
@@ -1748,7 +2000,7 @@ window.runMermaid = runMermaid;</script>
             <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">scopes</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="n">token_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">refresh_request</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">token_response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="n">httpx</span><span class="o">.</span><span class="n">codes</span><span class="o">.</span><span class="n">UNAUTHORIZED</span><span class="p">:</span>
@@ -1763,7 +2015,7 @@ window.runMermaid = runMermaid;</script>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">whoami</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Return information about the currently-authenticated user or service.&quot;</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
@@ -1785,7 +2037,7 @@ window.runMermaid = runMermaid;</script>
 
         <span class="c1"># Revoke the current session.</span>
         <span class="n">refresh_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_get_token</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">:</span>
                     <span class="n">id_token</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">auth</span><span class="o">.</span><span class="n">sync_get_token</span><span class="p">(</span><span class="s2">&quot;id_token&quot;</span><span class="p">)</span>
@@ -1826,7 +2078,7 @@ window.runMermaid = runMermaid;</script>
 
 <span class="sd">        This may be done to ensure that a possibly-leaked refresh token cannot be used.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>
@@ -1854,7 +2106,7 @@ window.runMermaid = runMermaid;</script>
             <span class="s2">&quot;offset&quot;</span><span class="p">:</span> <span class="n">offset</span><span class="p">,</span>
             <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">limit</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url_path</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">)</span>
@@ -1862,7 +2114,7 @@ window.runMermaid = runMermaid;</script>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">show_principal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uuid</span><span class="p">):</span>
         <span class="s2">&quot;Show one Principal (user or service) in the authentication database.&quot;</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
@@ -1893,7 +2145,7 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">            Restrict the access available to the API key by listing specific tags.</span>
 <span class="sd">            By default, this will have no limits on access tags.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
@@ -1921,7 +2173,7 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">            Specify the role (e.g. user or admin)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal&quot;</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
@@ -1946,7 +2198,7 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">            (Any additional characters passed will be truncated.)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">url_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/auth/principal/</span><span class="si">{</span><span class="n">uuid</span><span class="si">}</span><span class="s2">/apikey&quot;</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span>

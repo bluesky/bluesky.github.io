@@ -984,9 +984,9 @@ window.runMermaid = runMermaid;</script>
         <span class="n">url_length_for_get_request</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">URL_PATH</span><span class="p">)</span> <span class="o">+</span> <span class="nb">sum</span><span class="p">(</span>
             <span class="n">_EXTRA_CHARS_PER_ITEM</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">column</span><span class="p">)</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="p">(</span><span class="n">columns</span> <span class="ow">or</span> <span class="p">())</span>
         <span class="p">)</span>
-        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">_concurrent_request_semaphore</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">throttle</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">url_length_for_get_request</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">URL_CHARACTER_LIMIT</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">):</span>
                     <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                         <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
@@ -1001,7 +1001,7 @@ window.runMermaid = runMermaid;</script>
                     <span class="c1"># Note: The singular/plural inconsistency here is because</span>
                     <span class="c1"># [&quot;A&quot;, &quot;B&quot;] will be encoded in the URL as column=A&amp;column=B</span>
                     <span class="n">params</span><span class="p">[</span><span class="s2">&quot;column&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">columns</span>
-                <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">):</span>
                     <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                         <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
@@ -1010,6 +1010,8 @@ window.runMermaid = runMermaid;</script>
                                 <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
                             <span class="p">)</span>
                         <span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">ps</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">progress_state</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ps</span><span class="o">.</span><span class="n">advance</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">deserialize_arrow</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">read_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">partition</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -1206,7 +1208,9 @@ window.runMermaid = runMermaid;</script>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="s2">&quot;Alias to client.read().compute()&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span></div>
+        <span class="n">ddf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">tracking_progress</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="n">ddf</span><span class="o">.</span><span class="n">npartitions</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ddf</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span></div>
 
 
 
@@ -1230,7 +1234,9 @@ window.runMermaid = runMermaid;</script>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Access the entire DataFrame. Optionally select a subset of the columns.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">columns</span><span class="p">)</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span></div>
+        <span class="n">ddf</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">columns</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">tracking_progress</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="n">ddf</span><span class="o">.</span><span class="n">npartitions</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">ddf</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span></div>
 </div>
 
 </pre></div>
