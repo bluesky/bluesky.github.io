@@ -185,12 +185,12 @@ software, and you can skip the rest of this section.  Go to
 <a class="reference external" href="https://try.nsls2.bnl.gov">https://try.nsls2.bnl.gov</a>.</p>
 </div>
 <ul>
-<li><p>You will need Python 3.8 or newer. From a shell (“Terminal” on OSX,
+<li><p>You will need Python 3.10 or newer. From a shell (“Terminal” on OSX,
 “Command Prompt” on Windows), check your current Python version.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>--version
 </pre></div>
 </div>
-<p>If that version is less than 3.8, you must update it.</p>
+<p>If that version is less than 3.10, you must update it.</p>
 <p>We recommend install bluesky into a “virtual environment” so this
 installation will not interfere with any existing Python software:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>~/bluesky-tutorial
@@ -200,22 +200,22 @@ installation will not interfere with any existing Python software:</p>
 <p>Alternatively, if you are a
 <a class="reference external" href="https://conda.io/docs/user-guide/install/download.html">conda</a> user,
 you can create a conda environment:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>bluesky-tutorial<span class="w"> </span><span class="s2">&quot;python&gt;=3.8&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>bluesky-tutorial<span class="w"> </span><span class="s2">&quot;python&gt;=3.10&quot;</span>
 conda<span class="w"> </span>activate<span class="w"> </span>bluesky-tutorial
 </pre></div>
 </div>
 </li>
-<li><p>Install the latest versions of bluesky and ophyd. Also install the databroker
-unless you plan to skip the sections about accessing saved data. If you want
-to follow along with the visualization examples, install matplotlib and
-PyQt5. Finally, install IPython (a Python interpreter designed by scientists
-for scientists).</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>bluesky<span class="w"> </span>ophyd<span class="w"> </span>databroker<span class="w"> </span>matplotlib<span class="w"> </span>pyqt5<span class="w"> </span>ipython<span class="w"> </span>pyepics
+<li><p>Install the latest versions of bluesky and ophyd. Also install Tiled and
+bluesky-tiled-plugins unless you plan to skip the sections about accessing
+saved data. If you want to follow along with the visualization examples,
+install matplotlib and PyQt5. Finally, install IPython (a Python interpreter
+designed by scientists for scientists).</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>bluesky<span class="w"> </span>ophyd<span class="w"> </span><span class="s2">&quot;tiled[server]&quot;</span><span class="w"> </span>bluesky-tiled-plugins<span class="w"> </span>matplotlib<span class="w"> </span>pyqt5<span class="w"> </span>ipython<span class="w"> </span>pyepics
 </pre></div>
 </div>
 <p>Alternatively, if you are a conda user and you prefer conda packages, you can
 use:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>nsls2forge<span class="w"> </span>bluesky<span class="w"> </span>ophyd<span class="w"> </span>databroker<span class="w"> </span>matplotlib<span class="w"> </span><span class="nv">pyqt</span><span class="o">=</span><span class="m">5</span><span class="w"> </span>ipython
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>bluesky<span class="w"> </span>ophyd<span class="w"> </span>tiled<span class="w"> </span>bluesky-tiled-plugins<span class="w"> </span>matplotlib<span class="w"> </span><span class="nv">pyqt</span><span class="o">=</span><span class="m">5</span><span class="w"> </span>ipython
 </pre></div>
 </div>
 </li>
@@ -307,23 +307,28 @@ experiment. But for this tutorial and for many real experiments, the
 </section>
 <section id="prepare-data-storage">
 <h3>Prepare Data Storage<a class="headerlink" href="#prepare-data-storage" title="Permalink to this heading">¶</a></h3>
-<p id="databroker-setup">The <a class="reference external" href="https://nsls-ii.github.io">databroker</a>, a library developed in tandem
-with bluesky, is an interface to searchable storage for metadata and data
-generated by bluesky. For this tutorial, we will spin up a databroker backed by
-temporary files.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">databroker</span> <span class="kn">import</span> <span class="n">Broker</span>
-<span class="n">db</span> <span class="o">=</span> <span class="n">Broker</span><span class="o">.</span><span class="n">named</span><span class="p">(</span><span class="s1">&#39;temp&#39;</span><span class="p">)</span>
+<p id="tiled-setup"><a class="reference external" href="https://blueskyproject.io/tiled/">Tiled</a> is a service for searchable access
+to metadata and data generated by bluesky. The
+<a class="reference external" href="https://github.com/bluesky/bluesky-tiled-plugins">bluesky-tiled-plugins</a>
+package provides the callback that writes bluesky runs into Tiled. For this
+tutorial, we will spin up a local Tiled server backed by temporary storage.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">bluesky_tiled_plugins.writing.tiled_writer</span> <span class="kn">import</span> <span class="n">TiledWriter</span>
+<span class="kn">from</span> <span class="nn">tiled.client</span> <span class="kn">import</span> <span class="n">from_uri</span>
+<span class="kn">from</span> <span class="nn">tiled.server</span> <span class="kn">import</span> <span class="n">SimpleTiledServer</span>
+
+<span class="n">tiled_server</span> <span class="o">=</span> <span class="n">SimpleTiledServer</span><span class="p">()</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="n">tiled_server</span><span class="o">.</span><span class="n">uri</span><span class="p">)</span>
 
 <span class="c1"># Insert all metadata/data captured into db.</span>
-<span class="n">RE</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">insert</span><span class="p">)</span>
+<span class="n">RE</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">TiledWriter</span><span class="p">(</span><span class="n">db</span><span class="p">))</span>
 </pre></div>
 </div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p><strong>This example makes a temporary database. Do not use it for important
+<p><strong>This example makes temporary storage. Do not use it for important
 data.</strong> The data will become difficult to access once Python exits or the
-variable <code class="docutils literal notranslate"><span class="pre">db</span></code> is deleted. Running <code class="docutils literal notranslate"><span class="pre">Broker.named('temp')</span></code> a second time
-creates a fresh, separate temporary database.</p>
+local Tiled server is stopped. Creating a new <code class="docutils literal notranslate"><span class="pre">SimpleTiledServer</span></code> without
+a persistent directory creates fresh, separate temporary storage.</p>
 </div>
 </section>
 <section id="add-a-progress-bar">
@@ -755,11 +760,10 @@ From the point of view of <em>bluesky</em>, that’s really not bluesky’s conc
 it’s a reasonable question, so we’ll address a typical scenario.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This section presumes that you are using the databroker. (We configured
-one in <a class="reference internal" href="#databroker-setup"><span class="std std-ref">an earlier section of this tutorial</span></a>.)
-You don’t have to use the databroker to use bluesky; it’s just
-one convenient way to capture the metadata and data generated by the
-RunEngine.</p>
+<p>This section presumes that you are using Tiled. (We configured a local
+server and client in <a class="reference internal" href="#tiled-setup"><span class="std std-ref">an earlier section of this tutorial</span></a>.)
+You don’t have to use Tiled to use bluesky; it’s just one convenient way to
+capture the metadata and data generated by the RunEngine.</p>
 </div>
 <p>Very briefly, you can access saved data by referring to a dataset (a “run”) by
 its unique ID, which is returned by the RunEngine at collection time.</p>
@@ -785,11 +789,11 @@ its unique ID, which is returned by the RunEngine at collection time.</p>
 
 
 
-<span class="gp">In [13]: </span><span class="n">header</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span>
+<span class="gp">In [13]: </span><span class="n">run</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span>
 </pre></div>
 </div>
 <p>Alternatively, perhaps more conveniently, you can access it by recency:</p>
-<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [14]: </span><span class="n">header</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># meaning &#39;1 run ago&#39;, i.e. the most recent run</span>
+<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [14]: </span><span class="n">run</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">values</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># meaning &#39;1 run ago&#39;, i.e. the most recent run</span>
 </pre></div>
 </div>
 <div class="admonition note">
@@ -797,14 +801,14 @@ its unique ID, which is returned by the RunEngine at collection time.</p>
 <p>We assumed above that the plan generated one “run” (dataset), which is
 typical for simple plans like <a class="reference internal" href="generated/bluesky.plans.count.html#bluesky.plans.count" title="bluesky.plans.count"><code class="xref py py-func docutils literal notranslate"><span class="pre">count()</span></code></a>. In the
 <em>general</em> case, a plan can generate multiple runs, returning multiple uids,
-which in turn causes <code class="docutils literal notranslate"><span class="pre">db</span></code> to return a list of headers, not just one.</p>
+which in turn lets you look up multiple runs.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">uids</span> <span class="o">=</span> <span class="n">RE</span><span class="p">(</span><span class="n">some_plan</span><span class="p">(</span><span class="o">...</span><span class="p">))</span>
-<span class="n">headers</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="n">uids</span><span class="p">]</span>  <span class="c1"># list of Headers</span>
+<span class="n">runs</span> <span class="o">=</span> <span class="p">[</span><span class="n">db</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span> <span class="k">for</span> <span class="n">uid</span> <span class="ow">in</span> <span class="n">uids</span><span class="p">]</span>
 </pre></div>
 </div>
 </div>
 <p>Most of the useful metadata is in this dictionary:</p>
-<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [15]: </span><span class="n">header</span><span class="o">.</span><span class="n">start</span>
+<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [15]: </span><span class="n">run</span><span class="o">.</span><span class="n">start</span>
 <span class="gh">Out[15]: </span>
 <span class="go">{&#39;uid&#39;: &#39;6410b639-0f0c-41fe-abb8-4adbacfd9cac&#39;,</span>
 <span class="go"> &#39;time&#39;: 1706815872.3220024,</span>
@@ -822,17 +826,11 @@ which in turn causes <code class="docutils literal notranslate"><span class="pre
 </pre></div>
 </div>
 <p>And the (“primary”) stream of data is accessible like so:</p>
-<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [16]: </span><span class="n">header</span><span class="o">.</span><span class="n">table</span><span class="p">()</span>  <span class="c1"># return a table (a pandas.DataFrame)</span>
-<span class="gh">Out[16]: </span>
-<span class="go">                                 time       det</span>
-<span class="go">seq_num                                        </span>
-<span class="go">1       2024-02-01 19:31:12.347160101  0.606531</span>
-<span class="go">2       2024-02-01 19:31:12.443207979  0.606531</span>
-<span class="go">3       2024-02-01 19:31:12.513976336  0.606531</span>
+<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [16]: </span><span class="n">run</span><span class="p">[</span><span class="s1">&#39;primary&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>From here we refer to the
-<a class="reference external" href="https://nsls-ii.github.io/databroker/tutorial.html">databroker tutorial</a>.</p>
+<a class="reference external" href="https://blueskyproject.io/tiled/">Tiled documentation</a>.</p>
 </section>
 <section id="simple-customization">
 <span id="tutorial-simple-customization"></span><h2>Simple Customization<a class="headerlink" href="#simple-customization" title="Permalink to this heading">¶</a></h2>
@@ -1064,17 +1062,9 @@ individually.</p>
 <h3>Access Baseline Data<a class="headerlink" href="#access-baseline-data" title="Permalink to this heading">¶</a></h3>
 <p>If you access the data from our baseline scan, you might think that the
 baseline data is missing!</p>
-<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [25]: </span><span class="n">header</span> <span class="o">=</span> <span class="n">db</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [25]: </span><span class="n">run</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">values</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
-<span class="gp">In [26]: </span><span class="n">header</span><span class="o">.</span><span class="n">table</span><span class="p">()</span>
-<span class="gh">Out[26]: </span>
-<span class="go">                                 time  motor  motor_setpoint       det</span>
-<span class="go">seq_num                                                               </span>
-<span class="go">1       2024-02-01 19:31:12.833046198   -1.0            -1.0  0.606531</span>
-<span class="go">2       2024-02-01 19:31:12.929533720   -0.5            -0.5  0.882497</span>
-<span class="go">3       2024-02-01 19:31:13.003097773    0.0             0.0  1.000000</span>
-<span class="go">4       2024-02-01 19:31:13.056276321    0.5             0.5  0.882497</span>
-<span class="go">5       2024-02-01 19:31:13.116478443    1.0             1.0  0.606531</span>
+<span class="gp">In [26]: </span><span class="n">run</span><span class="p">[</span><span class="s1">&#39;primary&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>Looking again at the output when we executed this scan, notice these lines:</p>
@@ -1083,32 +1073,17 @@ baseline data is missing!</p>
 New stream: &#39;primary&#39;
 </pre></div>
 </div>
-<p>By default, <code class="docutils literal notranslate"><span class="pre">header.table()</span></code> gives us the “primary” data stream:</p>
-<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [27]: </span><span class="n">header</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="s1">&#39;primary&#39;</span><span class="p">)</span>  <span class="c1"># same result as header.table()</span>
-<span class="gh">Out[27]: </span>
-<span class="go">                                 time  motor  motor_setpoint       det</span>
-<span class="go">seq_num                                                               </span>
-<span class="go">1       2024-02-01 19:31:12.833046198   -1.0            -1.0  0.606531</span>
-<span class="go">2       2024-02-01 19:31:12.929533720   -0.5            -0.5  0.882497</span>
-<span class="go">3       2024-02-01 19:31:13.003097773    0.0             0.0  1.000000</span>
-<span class="go">4       2024-02-01 19:31:13.056276321    0.5             0.5  0.882497</span>
-<span class="go">5       2024-02-01 19:31:13.116478443    1.0             1.0  0.606531</span>
+<p>The “primary” stream contains the event data from the main body of the scan:</p>
+<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [27]: </span><span class="n">run</span><span class="p">[</span><span class="s1">&#39;primary&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>We can access other streams by name.</p>
-<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [28]: </span><span class="n">header</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="s1">&#39;baseline&#39;</span><span class="p">)</span>
-<span class="gh">Out[28]: </span>
-<span class="go">                                 time      det2  ...  motor2  motor2_setpoint</span>
-<span class="go">seq_num                                          ...                         </span>
-<span class="go">1       2024-02-01 19:31:12.812844276  0.000671  ...     9.0                9</span>
-<span class="go">2       2024-02-01 19:31:13.168513298  0.000671  ...     9.0                9</span>
-
-<span class="go">[2 rows x 8 columns]</span>
+<div class="highlight-ipython notranslate"><div class="highlight"><pre><span></span><span class="gp">In [28]: </span><span class="n">run</span><span class="p">[</span><span class="s1">&#39;baseline&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>A list of the stream names in a given run is available as
-<code class="docutils literal notranslate"><span class="pre">header.stream_names</span></code>. From here we refer to the
-<a class="reference external" href="https://nsls-ii.github.io/databroker/tutorial.html">databroker tutorial</a>.</p>
+<code class="docutils literal notranslate"><span class="pre">list(run)</span></code>. From here we refer to the
+<a class="reference external" href="https://blueskyproject.io/tiled/">Tiled documentation</a>.</p>
 </section>
 <section id="other-supplemental-data">
 <h3>Other Supplemental Data<a class="headerlink" href="#other-supplemental-data" title="Permalink to this heading">¶</a></h3>
