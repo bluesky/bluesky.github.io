@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Use Profiles to streamline Python client setup &#8212; tiled main documentation</title>
+    <title>Working with bytes nodes &#8212; tiled main documentation</title>
   
   
   
@@ -51,12 +51,12 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/profiles';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/bytes';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Use Performance and Debug Logging" href="client-logger.html" />
-    <link rel="prev" title="Python Client Authentication" href="authentication.html" />
+    <link rel="next" title="Explanations" href="../explanations/index.html" />
+    <link rel="prev" title="Webhooks" href="webhooks.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="main" />
@@ -397,7 +397,7 @@
 </ul>
 </details></li>
 <li class="toctree-l1"><a class="reference internal" href="authentication.html">Python Client Authentication</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Use Profiles to streamline Python client setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="profiles.html">Use Profiles to streamline Python client setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="client-logger.html">Use Performance and Debug Logging</a></li>
 <li class="toctree-l1"><a class="reference internal" href="docker.html">Run Tiled Server in a Container</a></li>
 <li class="toctree-l1"><a class="reference internal" href="helm.html">Run Tiled Server from the Helm chart</a></li>
@@ -412,7 +412,7 @@
 <li class="toctree-l1"><a class="reference internal" href="register.html">Register Content in Tiled</a></li>
 <li class="toctree-l1"><a class="reference internal" href="retries.html">Control Retries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="webhooks.html">Webhooks</a></li>
-<li class="toctree-l1"><a class="reference internal" href="bytes.html">Working with <code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Working with <code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes</a></li>
 </ul>
 </div>
 </nav></div>
@@ -456,7 +456,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Use Profiles to streamline Python client setup</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Working with <code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes</span></li>
   </ul>
 </nav>
 </div>
@@ -473,176 +473,98 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="use-profiles-to-streamline-python-client-setup">
-<h1>Use Profiles to streamline Python client setup<a class="headerlink" href="#use-profiles-to-streamline-python-client-setup" title="Link to this heading">#</a></h1>
-<section id="what-problem-do-profiles-solve">
-<h2>What problem do profiles solve?<a class="headerlink" href="#what-problem-do-profiles-solve" title="Link to this heading">#</a></h2>
-<p>Profiles provide a shorthand for constructing clients. A profile stores client
-parameters in a file and gives them an alias, so that something like this:</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tiled.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_uri</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.client.cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">Cache</span>
-
-<span class="n">client</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="s2">&quot;https://tiled-demo.nsls2.bnl.gov&quot;</span><span class="p">)</span>
+  <section id="working-with-bytes-nodes">
+<h1>Working with <code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes<a class="headerlink" href="#working-with-bytes-nodes" title="Link to this heading">#</a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">bytes</span></code> structure family lets Tiled catalog opaque binary files – PDFs,
+firmware blobs, proprietary binary formats, raw detector dumps – without
+asking Tiled to interpret them. See
+<a class="reference internal" href="../explanations/structures.html#bytes-structure-family"><span class="std std-ref">Bytes</span></a> for an explanation of the family
+itself; this how-to focuses on the practical operations: registering bytes
+content, downloading it with the Python client and from the HTTP API, and
+handling multi-asset nodes.</p>
+<section id="auto-registration-with-tiled-register">
+<h2>Auto-registration with <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">register</span></code><a class="headerlink" href="#auto-registration-with-tiled-register" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">register</span></code> infers a MIME type per file from its extension and looks up
+the adapter in the registration map. Out of the box, the extensions that are
+classified as <code class="docutils literal notranslate"><span class="pre">application/octet-stream</span></code> (<code class="docutils literal notranslate"><span class="pre">.bin</span></code>, <code class="docutils literal notranslate"><span class="pre">.so</span></code>, <code class="docutils literal notranslate"><span class="pre">.a</span></code>, <code class="docutils literal notranslate"><span class="pre">.o</span></code>, <code class="docutils literal notranslate"><span class="pre">.dump</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.pkg</span></code>, …) are registered as <code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes.</p>
+<p>Files with extensions that the server doesn’t recognise are skipped. To opt
+into a true catch-all, supply a <code class="docutils literal notranslate"><span class="pre">mimetype_detection_hook</span></code> that falls back to
+<code class="docutils literal notranslate"><span class="pre">application/octet-stream</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">detect</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mimetype</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">mimetype</span> <span class="ow">or</span> <span class="s2">&quot;application/octet-stream&quot;</span>
 </pre></div>
 </div>
-<p>can be replaced with the more memorable and succinct</p>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tiled.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_profile</span>
-
-<span class="n">client</span> <span class="o">=</span> <span class="n">from_profile</span><span class="p">(</span><span class="s2">&quot;demo&quot;</span><span class="p">)</span>
+<p>The <code class="docutils literal notranslate"><span class="pre">bytes</span></code> family is also the fallback adapter for any unknown structure
+family. Mapping a custom MIME type (e.g. <code class="docutils literal notranslate"><span class="pre">application/pdf</span></code>) to <code class="docutils literal notranslate"><span class="pre">BytesAdapter</span></code>
+in <code class="docutils literal notranslate"><span class="pre">adapters_by_mimetype</span></code> is enough to register matching files as bytes nodes.</p>
+</section>
+<section id="downloading-with-the-python-client">
+<h2>Downloading with the Python client<a class="headerlink" href="#downloading-with-the-python-client" title="Link to this heading">#</a></h2>
+<p>The high-level entry point is <code class="docutils literal notranslate"><span class="pre">BaseClient.raw_export(...)</span></code>, the same API used
+for downloading the raw files backing arrays, tables, and other structures.
+For <code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes it is the <em>primary</em> way to retrieve content, because the
+family has no <code class="docutils literal notranslate"><span class="pre">read()</span></code> method.</p>
+<section id="to-a-directory-on-disk">
+<h3>To a directory on disk<a class="headerlink" href="#to-a-directory-on-disk" title="Link to this heading">#</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">paths</span> <span class="o">=</span> <span class="n">c</span><span class="p">[</span><span class="s2">&quot;my_blob&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">raw_export</span><span class="p">(</span><span class="s2">&quot;downloads/&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Downloads happen in parallel. A single-asset node produces one file in the
+destination directory, named from the server-supplied filename. A multi-asset
+node produces <code class="docutils literal notranslate"><span class="pre">&lt;destination&gt;/&lt;asset_id&gt;/&lt;filename&gt;</span></code> per asset.</p>
+</section>
+<section id="into-memory">
+<h3>Into memory<a class="headerlink" href="#into-memory" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">raw_export</span></code> also accepts any
+<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping"><code class="docutils literal notranslate"><span class="pre">MutableMapping</span></code></a>
+(for example a plain <code class="docutils literal notranslate"><span class="pre">dict</span></code>) as the destination. Each asset is streamed into
+an <a class="reference external" href="https://docs.python.org/3/library/io.html#io.BytesIO"><code class="docutils literal notranslate"><span class="pre">io.BytesIO</span></code></a>
+buffer; no filesystem I/O is performed:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">buffers</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="n">c</span><span class="p">[</span><span class="s2">&quot;my_blob&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">raw_export</span><span class="p">(</span><span class="n">buffers</span><span class="p">)</span>
+<span class="n">payload</span> <span class="o">=</span> <span class="n">buffers</span><span class="p">[</span><span class="n">keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>   <span class="c1"># single-asset node</span>
+</pre></div>
+</div>
+<p>For a multi-asset node, the keys are <code class="docutils literal notranslate"><span class="pre">&lt;asset_id&gt;/&lt;filename&gt;</span></code> and the assets
+arrive in arbitrary (parallel-download) order. Each underlying asset carries
+a server-side ordering hint (<code class="docutils literal notranslate"><span class="pre">Asset.num</span></code>); reassemble the payload by ordering
+the keys by <code class="docutils literal notranslate"><span class="pre">num</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ds</span> <span class="o">=</span> <span class="n">c</span><span class="p">[</span><span class="s2">&quot;my_blob&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">()</span><span class="o">.</span><span class="n">data_sources</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">num_by_id</span> <span class="o">=</span> <span class="p">{</span><span class="n">a</span><span class="o">.</span><span class="n">id</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">num</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">ds</span><span class="o">.</span><span class="n">assets</span><span class="p">}</span>
+<span class="n">ordered</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="n">num_by_id</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])])</span>
+<span class="n">payload</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">buffers</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">read</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">ordered</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="create-a-profile">
-<h2>Create a profile<a class="headerlink" href="#create-a-profile" title="Link to this heading">#</a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tiled profile create --name demo https://tiled-demo.nsls2.bnl.gov
-</pre></div>
-</div>
 </section>
-<section id="review-and-edit-profiles">
-<h2>Review and edit profiles<a class="headerlink" href="#review-and-edit-profiles" title="Link to this heading">#</a></h2>
-<p>To list the names of the profiles on your system, along with the path to the
-file where each one is defined…</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tiled profile list
-</pre></div>
-</div>
-<p>To show the contents of a profile…</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tiled profile show PROFILE_NAME
-</pre></div>
-</div>
-<p>To open a profile in your default plain text editor…</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tiled profile edit PROFILE_NAME
-</pre></div>
-</div>
-<p>See <code class="docutils literal notranslate"><span class="pre">$</span> <span class="pre">tiled</span> <span class="pre">profile</span> <span class="pre">--help</span></code> for more commands.</p>
+<section id="downloading-from-the-http-api">
+<h2>Downloading from the HTTP API<a class="headerlink" href="#downloading-from-the-http-api" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes do not have a dedicated content endpoint. Each underlying asset
+is downloaded individually through the generic
+<code class="docutils literal notranslate"><span class="pre">/api/v1/asset/bytes/{path}?id=N</span></code> endpoint, where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the asset’s <code class="docutils literal notranslate"><span class="pre">id</span></code>
+discovered from the node’s metadata (<code class="docutils literal notranslate"><span class="pre">data_sources[0].assets[i].id</span></code>). For
+multi-asset nodes, issue one request per asset and concatenate the responses
+in <code class="docutils literal notranslate"><span class="pre">num</span></code> order.</p>
+<p>The endpoint honors the HTTP <code class="docutils literal notranslate"><span class="pre">Range:</span></code> header and returns <code class="docutils literal notranslate"><span class="pre">206</span> <span class="pre">Partial</span> <span class="pre">Content</span></code> for ranged requests, so large assets are usable with <code class="docutils literal notranslate"><span class="pre">curl</span> <span class="pre">-r</span></code>,
+<code class="docutils literal notranslate"><span class="pre">aria2c</span> <span class="pre">-x16</span></code>, browsers, and other resumable-download tools without any
+Tiled-specific client code.</p>
 </section>
-<section id="advanced-options">
-<h2>Advanced Options<a class="headerlink" href="#advanced-options" title="Link to this heading">#</a></h2>
-<p>You can edit the profile in a text editor to apply more advanced options.
-See <a class="reference internal" href="../reference/client-profiles.html"><span class="doc">Client Profiles Reference</span></a> for a comprehensive reference.</p>
+<section id="disabling-raw-asset-downloads">
+<h2>Disabling raw asset downloads<a class="headerlink" href="#disabling-raw-asset-downloads" title="Link to this heading">#</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">/asset/bytes</span></code> endpoint is gated by <code class="docutils literal notranslate"><span class="pre">settings.expose_raw_assets</span></code>, which
+defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>. Administrators can disable raw asset downloads by setting
+<code class="docutils literal notranslate"><span class="pre">expose_raw_assets:</span> <span class="pre">False</span></code> in the server configuration. With the endpoint
+disabled, <code class="docutils literal notranslate"><span class="pre">bytes</span></code> nodes can still be registered and listed but their content
+cannot be downloaded.</p>
 </section>
-<section id="where-are-profiles-stored">
-<h2>Where are profiles stored?<a class="headerlink" href="#where-are-profiles-stored" title="Link to this heading">#</a></h2>
-<p>Profiles are specified in YAML files located in any of several locations,
-including:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">etc</span><span class="o">/</span><span class="n">tiled</span><span class="o">/</span><span class="n">profiles</span>
-<span class="o">~/.</span><span class="n">config</span><span class="o">/</span><span class="n">tiled</span><span class="o">/</span><span class="n">profiles</span>
-</pre></div>
-</div>
-<p>Tiled will also look for profiles in locations specific to the
-operating system and the software environment,
-<a class="reference external" href="https://pypi.org/project/platformdirs/">in accordance</a> with
-<a class="reference external" href="https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html">standards</a>.
-To see the full list on your system:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ tiled profile paths
-</pre></div>
-</div>
-<p>Within these directories, you may have:</p>
-<ul class="simple">
-<li><p>Any number of configuration files</p></li>
-<li><p>Named whatever you want</p></li>
-<li><p>With one or more profiles per configuration file</p></li>
-</ul>
-<p>That is, you can keep one file with all your profiles or organize them
-by grouping them into several separate files, named whatever you want.</p>
-<p>The paths later in the list—“closer to the user”—take precedence in the
-event of name collisions. See the section on Merging Rules below for details.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Tiled always looks in three places for profiles:</p>
-<ol class="arabic simple">
-<li><p>A system-wide directory. This is used by <em>administrators</em> to
-distribute profiles that all users can see.</p></li>
-<li><p>A directory in the currently active Python software environment
-(for example, the conda environment). This is used by
-<em>software packages</em> to distribute profiles that support their
-software.</p></li>
-<li><p>A user-controlled directory (a subdirectory of <code class="docutils literal notranslate"><span class="pre">$HOME</span></code>). This is
-for users’ personal productivity.</p></li>
-</ol>
-<p>The default locations for (1) and (3) can be overridden by setting the
-environment variables <code class="docutils literal notranslate"><span class="pre">TILED_SITE_PROFILES</span></code> and <code class="docutils literal notranslate"><span class="pre">TILED_PROFILES</span></code>, respectively,
-to the desired path.</p>
-</div>
-</section>
-<section id="merging-rules">
-<h2>Merging rules<a class="headerlink" href="#merging-rules" title="Link to this heading">#</a></h2>
-<p>Situation #1: In the event of a name collision <em>within one file</em> like:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">my_profile</span><span class="p">:</span>
-<span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">...</span>
-<span class="nt">my_proifile</span><span class="p">:</span><span class="w">  </span><span class="c1"># oops, reused the same name</span>
-<span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">...</span>
-</pre></div>
-</div>
-<p>the second one will win. (This is just how YAML works. We wish we could
-issue a warning or something to let you know that something looks off,
-but we have no way to do that without going to great lengths.)</p>
-<p>Situation #2: In the event of a name collision between files in different
-directories, the one in the directory “closer to the user”—later in the list
-of paths—will take precedence. No warning will be issued. This the normal way
-for users to override a default system- or environment-level configuration with
-their own preferences.</p>
-<p>Situation #3: In the event of a name collision between two files in the same directory:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># some/directory/some_profiles.yaml</span>
-<span class="nt">my_profile</span><span class="p">:</span>
-<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">...</span>
-</pre></div>
-</div>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># some/directory/yet_more_profiles.yaml</span>
-<span class="nt">my_profile</span><span class="p">:</span>
-<span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">...</span>
-</pre></div>
-</div>
-<p>Tiled has no way of guessing which is “right” so it refuses to load either one,
-and it issues a warning indicating that this profile will be skipped until
-the issue is resolved.</p>
-<p>If the collision occurs in the system or software environment directory and you
-do not have the access necessary to edit those configurations and resolve the
-issue, you can override the problematic name by defining a new profile with that
-name in your user configuration directory. As described in Situation #2, the version
-in the user configuration directory will take precedence.  The collision will
-therefore become irrelevant and will be ignored.</p>
-<p>If the collision occurs in the user directory, then you (of course) have
-the access necessary to fix it, and you should.</p>
-</section>
-<section id="advanced-direct-profiles">
-<h2>Advanced: “Direct” Profiles<a class="headerlink" href="#advanced-direct-profiles" title="Link to this heading">#</a></h2>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Return to this section after reading  <a class="reference internal" href="direct-client.html"><span class="doc">Use Tiled in Python without an HTTP server</span></a>.</p>
-</div>
-<p>For development and debugging, it can be convenient to place service and client
-configuration together in a profile. To do this, include the special key
-<code class="docutils literal notranslate"><span class="pre">direct:</span></code> with the <em>service-side</em> configuration nested inside of it.</p>
-<p>Here is a complete example.</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># profiles.yml</span>
-<span class="nt">my_profile</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">direct</span><span class="p">:</span>
-<span class="w">     </span><span class="nt">trees</span><span class="p">:</span>
-<span class="w">       </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/</span>
-<span class="w">         </span><span class="nt">tree</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tiled.catalog:from_uri</span>
-<span class="w">         </span><span class="nt">args</span><span class="p">:</span>
-<span class="w">           </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/catalog.db&quot;</span>
-</pre></div>
-</div>
-<p>This takes the place of the <code class="docutils literal notranslate"><span class="pre">uri:</span></code> parameter. A profile must contain
-<em>either</em> <code class="docutils literal notranslate"><span class="pre">uri:</span></code> or <code class="docutils literal notranslate"><span class="pre">direct:</span></code> but not both. It can sit alongside other
-usual client-side configuration, such as</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># profiles.yml</span>
-<span class="nt">my_profile</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">direct</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">trees</span><span class="p">:</span>
-<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/</span>
-<span class="w">        </span><span class="nt">tree</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tiled.catalog:from_uri</span>
-<span class="w">        </span><span class="nt">args</span><span class="p">:</span>
-<span class="w">          </span><span class="nt">directory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/path/to/catalog.db&quot;</span>
-<span class="w">  </span><span class="nt">cache</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">capacity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2_000_000_000</span><span class="w"> </span><span class="c1"># 2 GB</span>
-</pre></div>
-</div>
-</section>
-<section id="reference">
-<h2>Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h2>
-<p>See <a class="reference internal" href="../reference/client-profiles.html"><span class="doc">Client Profiles Reference</span></a> for a comprehensive reference.</p>
+<section id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading">#</a></h2>
+<p>Currently only <code class="docutils literal notranslate"><span class="pre">file://</span></code> assets are downloadable through the <code class="docutils literal notranslate"><span class="pre">/asset/bytes</span></code>
+endpoint. Object-store (<code class="docutils literal notranslate"><span class="pre">s3://</span></code>, <code class="docutils literal notranslate"><span class="pre">az://</span></code>, <code class="docutils literal notranslate"><span class="pre">gs://</span></code>) bytes assets are recorded
+in the catalog (and their <code class="docutils literal notranslate"><span class="pre">Asset.size</span></code> can be populated via
+<code class="docutils literal notranslate"><span class="pre">tiled.storage.size_from_uri</span></code>), but their content cannot yet be served via
+the API; this restriction will be lifted in a future release.</p>
 </section>
 </section>
 
@@ -657,20 +579,20 @@ usual client-side configuration, such as</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="authentication.html"
+       href="webhooks.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Python Client Authentication</p>
+        <p class="prev-next-title">Webhooks</p>
       </div>
     </a>
     <a class="right-next"
-       href="client-logger.html"
+       href="../explanations/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Use Performance and Debug Logging</p>
+        <p class="prev-next-title">Explanations</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -693,21 +615,22 @@ usual client-side configuration, such as</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-problem-do-profiles-solve">What problem do profiles solve?</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#create-a-profile">Create a profile</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#review-and-edit-profiles">Review and edit profiles</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-options">Advanced Options</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-are-profiles-stored">Where are profiles stored?</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#merging-rules">Merging rules</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#advanced-direct-profiles">Advanced: “Direct” Profiles</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reference">Reference</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#auto-registration-with-tiled-register">Auto-registration with <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">register</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#downloading-with-the-python-client">Downloading with the Python client</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#to-a-directory-on-disk">To a directory on disk</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#into-memory">Into memory</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#downloading-from-the-http-api">Downloading from the HTTP API</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#disabling-raw-asset-downloads">Disabling raw asset downloads</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#limitations">Limitations</a></li>
 </ul>
   </nav></div>
 
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../_sources/user-guide/profiles.md.txt">
+    <a href="../_sources/user-guide/bytes.md.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>

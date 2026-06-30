@@ -864,6 +864,7 @@ window.runMermaid = runMermaid;</script>
                   
   <h1>Source code for tiled.client.base</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">MutableMapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">asdict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -1260,34 +1261,59 @@ window.runMermaid = runMermaid;</script>
                 <span class="n">manifests</span><span class="p">[</span><span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">manifest</span>
         <span class="k">return</span> <span class="n">manifests</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">raw_export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">destination_directory</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Download the raw assets backing this node.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">raw_export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Download the raw assets backing this node.</span>
 
 <span class="sd">        This may produce a single file or a directory.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        destination_directory : Path, optional</span>
-<span class="sd">            Destination for downloaded assets. Default is current working directory</span>
+<span class="sd">        destination : Path or MutableMapping, optional</span>
+<span class="sd">            Destination for downloaded assets. If a `MutableMapping` (e.g. a</span>
+<span class="sd">            `dict`) is provided, each asset is stored in-memory as an</span>
+<span class="sd">            `io.BytesIO` under a key mirroring the on-disk layout</span>
+<span class="sd">            (`&lt;filename&gt;` for a single asset; `&lt;asset_id&gt;/&lt;filename&gt;` or</span>
+<span class="sd">            `&lt;asset_id&gt;/&lt;relative_path&gt;` when multiple assets back the node).</span>
+<span class="sd">            Otherwise the value is treated as a filesystem path; defaults to</span>
+<span class="sd">            the current working directory.</span>
 <span class="sd">        max_workers : int, optional</span>
 <span class="sd">            Number of parallel workers downloading data. Default is 4.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        paths : List[Path]</span>
-<span class="sd">            Filepaths of exported files</span>
+<span class="sd">        paths_or_keys : List[Path] or List[str]</span>
+<span class="sd">            Filepaths of exported files, or keys written to the mapping.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">destination_directory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">destination_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">destination_directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination_directory</span><span class="p">)</span>
+        <span class="c1"># Back-compat: accept the old keyword name with a deprecation warning.</span>
+        <span class="k">if</span> <span class="s2">&quot;destination_directory&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+            <span class="k">if</span> <span class="n">destination</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">&quot;raw_export() got both &#39;destination&#39; and the deprecated &quot;</span>
+                    <span class="s2">&quot;&#39;destination_directory&#39;; pass only &#39;destination&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;destination_directory&#39; keyword to raw_export() is &quot;</span>
+                <span class="s2">&quot;deprecated; use &#39;destination&#39; instead.&quot;</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">destination</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;destination_directory&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;raw_export() got unexpected keyword arguments: &quot;</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">in_memory</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">MutableMapping</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">in_memory</span><span class="p">:</span>
+            <span class="n">destination</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination</span> <span class="ow">or</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">())</span>
 
         <span class="c1"># Import here to defer the import of rich (for progress bar).</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.download</span><span class="w"> </span><span class="kn">import</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">,</span> <span class="n">download</span>
 
         <span class="n">urls</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">paths</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">targets</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Paths or posix-style string keys.</span>
         <span class="n">data_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">()</span><span class="o">.</span><span class="n">data_sources</span><span class="p">()</span>
         <span class="n">asset_manifest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">asset_manifest</span><span class="p">(</span><span class="n">data_sources</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_sources</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
@@ -1301,11 +1327,12 @@ window.runMermaid = runMermaid;</script>
             <span class="k">for</span> <span class="n">asset</span> <span class="ow">in</span> <span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="p">:</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
                     <span class="c1"># Only one asset: keep the name simple.</span>
-                    <span class="n">base_path</span> <span class="o">=</span> <span class="n">destination_directory</span>
+                    <span class="n">base</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span> <span class="k">if</span> <span class="n">in_memory</span> <span class="k">else</span> <span class="n">destination</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="c1"># Multiple assets: Add a subdirectory named for the asset</span>
-                    <span class="c1"># id to namespace each asset.</span>
-                    <span class="n">base_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination_directory</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">))</span>
+                    <span class="c1"># Multiple assets: namespace each asset by id.</span>
+                    <span class="n">base</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">in_memory</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">))</span>
+                    <span class="p">)</span>
                 <span class="k">if</span> <span class="n">asset</span><span class="o">.</span><span class="n">is_directory</span><span class="p">:</span>
                     <span class="n">relative_paths</span> <span class="o">=</span> <span class="n">asset_manifest</span><span class="p">[</span><span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
                     <span class="n">urls</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
@@ -1321,12 +1348,12 @@ window.runMermaid = runMermaid;</script>
                             <span class="k">for</span> <span class="n">relative_path</span> <span class="ow">in</span> <span class="n">relative_paths</span>
                         <span class="p">]</span>
                     <span class="p">)</span>
-                    <span class="n">paths</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
-                        <span class="p">[</span>
-                            <span class="n">Path</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">relative_path</span><span class="p">)</span>
-                            <span class="k">for</span> <span class="n">relative_path</span> <span class="ow">in</span> <span class="n">relative_paths</span>
-                        <span class="p">]</span>
-                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">in_memory</span><span class="p">:</span>
+                        <span class="n">targets</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                            <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">rp</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">base</span> <span class="k">else</span> <span class="n">rp</span> <span class="k">for</span> <span class="n">rp</span> <span class="ow">in</span> <span class="n">relative_paths</span><span class="p">]</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">targets</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">rp</span><span class="p">)</span> <span class="k">for</span> <span class="n">rp</span> <span class="ow">in</span> <span class="n">relative_paths</span><span class="p">])</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                         <span class="n">URL</span><span class="p">(</span>
@@ -1337,8 +1364,25 @@ window.runMermaid = runMermaid;</script>
                             <span class="p">},</span>
                         <span class="p">)</span>
                     <span class="p">)</span>
-                    <span class="n">paths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">base_path</span><span class="p">,</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">download</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span> <span class="n">urls</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">in_memory</span><span class="p">:</span>
+                        <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="k">if</span> <span class="n">base</span>
+                            <span class="k">else</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">in_memory</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">download</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span>
+                <span class="n">urls</span><span class="p">,</span>
+                <span class="n">targets</span><span class="p">,</span>
+                <span class="n">mapping</span><span class="o">=</span><span class="n">destination</span><span class="p">,</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">download</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span> <span class="n">urls</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span>
+        <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">formats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>

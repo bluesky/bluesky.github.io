@@ -1121,24 +1121,38 @@ window.runMermaid = runMermaid;</script>
     <span class="c1"># TODO Make compression settings configurable.</span>
     <span class="c1"># This complex in our case because, as with gzip, we may</span>
     <span class="c1"># want configure differently for different media types.</span>
-    <span class="n">zstd_compressor</span> <span class="o">=</span> <span class="n">zstandard</span><span class="o">.</span><span class="n">ZstdCompressor</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">threads</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">ZSTD_LEVEL</span> <span class="o">=</span> <span class="mi">3</span>
 
     <span class="k">class</span><span class="w"> </span><span class="nc">ZstdBuffer</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Imitate the API provided by gzip.GzipFile and used by tiled.server.compression.</span>
 
-<span class="sd">        It&#39;s not clear to me yet what this buys us, but I think we should follow</span>
-<span class="sd">        the pattern set by starlette until we have a clear reason not to.</span>
+<span class="sd">        Wraps a `zstandard.ZstdCompressor.stream_writer` so that successive</span>
+<span class="sd">        `write()` calls append to a single zstd frame and `close()` flushes</span>
+<span class="sd">        the closing marker. (A naive `compressor.compress(b)` per write would</span>
+<span class="sd">        emit one independent frame per write; decoders such as httpx&#39;s zstd</span>
+<span class="sd">        decoder stop after the first frame, so streaming responses would</span>
+<span class="sd">        appear truncated at the first chunk boundary.)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">):</span>
+            <span class="c1"># A fresh compressor per buffer: zstandard&#39;s stream_writer holds</span>
+            <span class="c1"># state on the parent ZstdCompressor, so a single shared</span>
+            <span class="c1"># compressor cannot drive multiple concurrent stream writers</span>
+            <span class="c1"># (e.g. concurrent requests in a threaded server).</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_compressor</span> <span class="o">=</span> <span class="n">zstandard</span><span class="o">.</span><span class="n">ZstdCompressor</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">ZSTD_LEVEL</span><span class="p">,</span> <span class="n">threads</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="n">file</span>
+            <span class="c1"># `closefd=False` keeps the underlying BytesIO open after we close</span>
+            <span class="c1"># the compressor; CompressionMiddleware needs to call .getvalue()</span>
+            <span class="c1"># on it after the final frame is flushed.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compressor</span><span class="o">.</span><span class="n">stream_writer</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">closefd</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">zstd_compressor</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">b</span><span class="p">)</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="k">pass</span>
+            <span class="c1"># stream_writer.close() flushes the final zstd frame to `file`.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
     <span class="k">for</span> <span class="n">media_type</span> <span class="ow">in</span> <span class="p">[</span>
         <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
