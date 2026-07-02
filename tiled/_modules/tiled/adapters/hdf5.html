@@ -1051,35 +1051,52 @@ window.runMermaid = runMermaid;</script>
         <span class="n">shapes_chunks_dtypes</span> <span class="o">=</span> <span class="p">[</span><span class="n">_get_hdf5_specs</span><span class="p">(</span><span class="n">fpath</span><span class="p">)</span> <span class="k">for</span> <span class="n">fpath</span> <span class="ow">in</span> <span class="n">file_paths</span><span class="p">]</span>
         <span class="n">dtype</span> <span class="o">=</span> <span class="n">shapes_chunks_dtypes</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="n">numpy</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;O&quot;</span><span class="p">):</span>
-            <span class="c1"># TODO: It should be possible to put this in dask.delayed too -- needs to be thoroughly tested</span>
+            <span class="c1"># h5py uses NumPy&#39;s object dtype to represent variable-length</span>
+            <span class="c1"># strings, vlen arrays, and HDF5 references. These are a</span>
+            <span class="c1"># Python-only h5py feature not supported by HDF5 in general.</span>
+            <span class="c1"># See https://docs.h5py.org/en/stable/special.html.</span>
+            <span class="c1">#</span>
+            <span class="c1"># Variable-length strings are repackaged into a fixed-length</span>
+            <span class="c1"># bytes array (which dask can chunk). For any other object</span>
+            <span class="c1"># dtype we serve an empty placeholder preserving the original</span>
+            <span class="c1"># shape, since we cannot generally read it as a numpy array</span>
+            <span class="c1"># (and dask cannot auto-chunk object dtype).</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;The dataset </span><span class="si">{</span><span class="n">dataset</span><span class="si">}</span><span class="s2"> is of object type, using a &quot;</span>
                 <span class="s2">&quot;Python-only feature of h5py that is not supported by &quot;</span>
                 <span class="s2">&quot;HDF5 in general. Read more about that feature at &quot;</span>
                 <span class="s2">&quot;https://docs.h5py.org/en/stable/special.html. &quot;</span>
                 <span class="s2">&quot;Consider using a fixed-length field instead. &quot;</span>
-                <span class="s2">&quot;Tiled will serve an empty placeholder, unless the &quot;</span>
-                <span class="s2">&quot;object is of size 1, where it will attempt to repackage &quot;</span>
-                <span class="s2">&quot;the data into a numpy array.&quot;</span>
+                <span class="s2">&quot;If the data are variable-length strings, Tiled will &quot;</span>
+                <span class="s2">&quot;repackage them as a fixed-length bytes array; &quot;</span>
+                <span class="s2">&quot;otherwise an empty placeholder of the same shape &quot;</span>
+                <span class="s2">&quot;will be served.&quot;</span>
             <span class="p">)</span>
 
-            <span class="n">check_str_dtype</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">check_string_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">check_str_dtype</span><span class="o">.</span><span class="n">length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># TODO: refactor and test</span>
+            <span class="n">is_vlen_string</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">check_string_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">_read_as_bytes</span><span class="p">(</span><span class="n">fpath</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">:</span>
                 <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span>
-                    <span class="n">file_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
-                    <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
-                    <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
-                    <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
-                <span class="p">)</span> <span class="k">as</span> <span class="n">value</span><span class="p">:</span>
-                    <span class="n">dataset_names</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">file</span><span class="p">[</span><span class="n">value</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">dataset</span><span class="p">][</span><span class="o">...</span><span class="p">][()]</span>
-                    <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-                        <span class="n">arr</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dataset_names</span><span class="p">))</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">arr</span> <span class="o">=</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">())</span>
-                <span class="k">return</span> <span class="n">arr</span>
-            <span class="k">return</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">())</span>
+                    <span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+                <span class="p">)</span> <span class="k">as</span> <span class="n">ds</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">is_vlen_string</span><span class="p">:</span>
+                        <span class="c1"># Coerce vlen-string object array to fixed-length bytes</span>
+                        <span class="k">return</span> <span class="n">numpy</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ds</span><span class="p">[()],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bytes</span><span class="p">)</span>
+                    <span class="c1"># Non-string object dtype: serve an empty placeholder</span>
+                    <span class="c1"># of the same shape (zero-length bytes).</span>
+                    <span class="k">return</span> <span class="n">numpy</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;S0&quot;</span><span class="p">)</span>
+
+            <span class="n">arrays</span> <span class="o">=</span> <span class="p">[</span><span class="n">_read_as_bytes</span><span class="p">(</span><span class="n">fp</span><span class="p">)</span> <span class="k">for</span> <span class="n">fp</span> <span class="ow">in</span> <span class="n">file_paths</span><span class="p">]</span>
+            <span class="c1"># Mirror the empty/scalar vs. multi-dim behavior of the</span>
+            <span class="c1"># non-object branch below: stack (adding a leading axis) only</span>
+            <span class="c1"># for true scalars; otherwise concatenate along axis 0.</span>
+            <span class="k">if</span> <span class="n">arrays</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">()</span> <span class="ow">or</span> <span class="mi">0</span> <span class="ow">in</span> <span class="n">arrays</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="n">stacked</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">arrays</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">arrays</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">stacked</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">arrays</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">stacked</span> <span class="o">=</span> <span class="n">arrays</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="n">stacked</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="n">stacked</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">all</span><span class="p">((</span><span class="ow">not</span> <span class="n">shp</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="mi">0</span> <span class="ow">in</span> <span class="n">shp</span><span class="p">)</span> <span class="k">for</span> <span class="n">shp</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">shapes_chunks_dtypes</span><span class="p">):</span>
             <span class="c1"># Treat empty arrays and scalars separately: all shapes are empty or has 0</span>
