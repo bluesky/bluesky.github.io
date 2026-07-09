@@ -704,4 +704,5 @@ API. By default, the API fails if called while the RE Manager is executing a pla
 
       Though a plan can be paused by sending the interrupt once (deferred pause) or twice (immediate pause),
       using :ref:`method_re_pause` API is a preferable way to pause a plan started via RE Manager or directly
-      using Jupyter Console.
+      using Jupyter Console. A short pause (0.1-0.2 s) may be needed between consecutive interrupt requests
+      in order for the kernel to process the requests and immediately pause the plan.
