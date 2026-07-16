@@ -3,7 +3,7 @@ Release History
 ===============
 
 
-v0.0.25 (Unreleased)
+v0.0.25 (2026-07-16)
 ====================
 
 Added
@@ -19,6 +19,14 @@ Added
   metadata keys are allowed to be included in the messages sent by Run Engine callbacks.
   The option can be set using CLI parameter ``--permitted-re-metadata-keys`` or environment variable
   ``QSERVER_PERMITTED_RE_METADATA_KEYS``.
+
+- Support for Python 3.14
+
+Fixed
+-----
+
+- Memory leak while operating in the loop mode.
+
 
 v0.0.24 (2026-01-21)
 ====================
