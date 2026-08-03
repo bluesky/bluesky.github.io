@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Starting and Using the Server &mdash; Bluesky HTTP Server 0.0.14.post4+g54cbd08 documentation</title>
+  <title>Starting and Using the Server &mdash; Bluesky HTTP Server 0.0.14.post35+gd53d171 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=e02ea60e"></script>
+      <script src="_static/documentation_options.js?v=c1ff5e01"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -63,6 +63,11 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#authentication-api-for-users">Authentication API for Users</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#logging-into-the-server-requesting-token">Logging into the Server (Requesting Token)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#logging-in-with-oidc-providers-google-entra-orcid">Logging in with OIDC Providers (Google, Entra, ORCID, …)</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#browser-first-flow">Browser-first flow</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#cli-device-flow">CLI/device flow</a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#generating-api-keys">Generating API Keys</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#verifying-scopes-of-access-tokens-and-api-keys">Verifying Scopes of Access Tokens and API Keys</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#getting-information-on-api-key">Getting Information on API Key</a></li>
@@ -253,6 +258,55 @@ variables is more secure. The environment variable should be set before starting
 </pre></div>
 </div>
 <p>If authentication is successful, then the server returns access and refresh tokens.</p>
+</section>
+<section id="logging-in-with-oidc-providers-google-entra-orcid">
+<h3>Logging in with OIDC Providers (Google, Entra, ORCID, …)<a class="headerlink" href="#logging-in-with-oidc-providers-google-entra-orcid" title="Link to this heading"></a></h3>
+<p>For providers configured with <code class="docutils literal notranslate"><span class="pre">OIDCAuthenticator</span></code>, use provider-specific endpoints
+under <code class="docutils literal notranslate"><span class="pre">/api/auth/provider/&lt;provider-name&gt;/...</span></code>.</p>
+<section id="browser-first-flow">
+<h4>Browser-first flow<a class="headerlink" href="#browser-first-flow" title="Link to this heading"></a></h4>
+<p>If you are already in a browser context, open:</p>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;hostname&gt;/api/auth/provider/&lt;provider-name&gt;/authorize</span></code></p>
+<p>This redirects to the OIDC provider login page and then back to the server callback.</p>
+<p>This can similarly be acheived using <code class="docutils literal notranslate"><span class="pre">httpie</span></code> by opening the URL in a browser after getting
+the authorization URI from the server:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">http</span> <span class="n">POST</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">localhost</span><span class="p">:</span><span class="mi">60610</span><span class="o">/</span><span class="n">api</span><span class="o">/</span><span class="n">auth</span><span class="o">/</span><span class="n">provider</span><span class="o">/</span><span class="n">entra</span><span class="o">/</span><span class="n">authorize</span>
+</pre></div>
+</div>
+<p>Which will return a token back to the bluesky http server after the user logs in to the provider
+in their browser (or automatically if already logged in). The user then gets a token
+for the bluesky HTTP server to use for subsequent API requests. This flow can be used
+even when using the bluesky queueserver api in a terminal so long as that session can
+spawn a browser for the user to log in to the provider.</p>
+</section>
+<section id="cli-device-flow">
+<h4>CLI/device flow<a class="headerlink" href="#cli-device-flow" title="Link to this heading"></a></h4>
+<p>For terminal clients (i.e. no browser possible), start with
+<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/auth/provider/&lt;provider-name&gt;/authorize</span></code>.
+The response includes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">authorization_uri</span></code>: open this URL in a browser</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">verification_uri</span></code>: polling endpoint for the terminal client</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">device_code</span></code> and <code class="docutils literal notranslate"><span class="pre">interval</span></code>: values for polling</p></li>
+</ul>
+<p>Example using <code class="docutils literal notranslate"><span class="pre">httpie</span></code> (provider <code class="docutils literal notranslate"><span class="pre">entra</span></code>):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">http</span> <span class="n">POST</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">localhost</span><span class="p">:</span><span class="mi">60610</span><span class="o">/</span><span class="n">api</span><span class="o">/</span><span class="n">auth</span><span class="o">/</span><span class="n">provider</span><span class="o">/</span><span class="n">entra</span><span class="o">/</span><span class="n">authorize</span>
+</pre></div>
+</div>
+<p>After opening <code class="docutils literal notranslate"><span class="pre">authorization_uri</span></code> in a browser and completing provider login,
+poll <code class="docutils literal notranslate"><span class="pre">verification_uri</span></code> using <code class="docutils literal notranslate"><span class="pre">device_code</span></code> until tokens are issued:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">http</span> <span class="n">POST</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">localhost</span><span class="p">:</span><span class="mi">60610</span><span class="o">/</span><span class="n">api</span><span class="o">/</span><span class="n">auth</span><span class="o">/</span><span class="n">provider</span><span class="o">/</span><span class="n">entra</span><span class="o">/</span><span class="n">token</span> \
+  <span class="n">device_code</span><span class="o">=</span><span class="s1">&#39;&lt;device_code_from_authorize_response&gt;&#39;</span>
+</pre></div>
+</div>
+<p>When authorization is still pending, the endpoint returns <code class="docutils literal notranslate"><span class="pre">authorization_pending</span></code>.
+When complete, it returns access and refresh tokens.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In common same-device flows the callback can complete automatically without manually
+typing the user code. Manual code entry remains available as a fallback path.</p>
+</div>
+</section>
 </section>
 <section id="generating-api-keys">
 <h3>Generating API Keys<a class="headerlink" href="#generating-api-keys" title="Link to this heading"></a></h3>

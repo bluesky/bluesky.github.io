@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Server Configuration &mdash; Bluesky HTTP Server 0.0.14.post4+g54cbd08 documentation</title>
+  <title>Server Configuration &mdash; Bluesky HTTP Server 0.0.14.post35+gd53d171 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=e02ea60e"></script>
+      <script src="_static/documentation_options.js?v=c1ff5e01"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -63,6 +63,8 @@
 <li class="toctree-l4"><a class="reference internal" href="#anonymous-public-access">Anonymous Public Access</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dictionary-authenticator">Dictionary Authenticator</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#ldap-authenticator">LDAP Authenticator</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#oidc-authenticator">OIDC Authenticator</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#entra-authenticator">ENTRA Authenticator</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#expiration-time-for-tokens-and-sessions">Expiration Time for Tokens and Sessions</a></li>
 </ul>
 </li>
@@ -372,7 +374,93 @@ respectively. The configuration does not enable public access.</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator" title="bluesky_httpserver.authenticators.LDAPAuthenticator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">authenticators.LDAPAuthenticator</span></code></a></p></td>
-<td><p>LDAP authenticator.</p></td>
+<td><p>The authenticator code is based on <a class="reference external" href="https://github.com/jupyterhub/ldapauthenticator">https://github.com/jupyterhub/ldapauthenticator</a> The parameter <code class="docutils literal notranslate"><span class="pre">use_tls</span></code> was added for convenience of testing.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="oidc-authenticator">
+<h4>OIDC Authenticator<a class="headerlink" href="#oidc-authenticator" title="Link to this heading"></a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">OIDCAuthenticator</span></code> integrates the server with third-party OpenID Connect providers
+such as Google, Microsoft Entra ID, ORCID and others. The server does not process user
+passwords directly: authentication is delegated to the provider and the server validates
+the returned OIDC token.</p>
+<p>General setup steps:</p>
+<ol class="arabic simple">
+<li><p>Register an application with the OIDC provider.</p></li>
+<li><p>Configure redirect URIs for the provider application. For provider name <code class="docutils literal notranslate"><span class="pre">entra</span></code> and
+host <code class="docutils literal notranslate"><span class="pre">https://your-server.example</span></code> the redirect URIs are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">https://your-server.example/api/auth/provider/entra/code</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">https://your-server.example/api/auth/provider/entra/device_code</span></code></p></li>
+</ul>
+</li>
+<li><p>Store the client secret in environment variable and reference it in config.</p></li>
+<li><p>Use provider’s <code class="docutils literal notranslate"><span class="pre">.well-known/openid-configuration</span></code> URL.</p></li>
+</ol>
+<p>Typical <code class="docutils literal notranslate"><span class="pre">well_known_uri</span></code> values:</p>
+<ul class="simple">
+<li><p>Google: <code class="docutils literal notranslate"><span class="pre">https://accounts.google.com/.well-known/openid-configuration</span></code></p></li>
+<li><p>Microsoft Entra ID: <code class="docutils literal notranslate"><span class="pre">https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0/.well-known/openid-configuration</span></code></p></li>
+<li><p>ORCID: <code class="docutils literal notranslate"><span class="pre">https://orcid.org/.well-known/openid-configuration</span></code></p></li>
+</ul>
+<p>Example configuration (Google):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
+  providers:
+    - provider: google
+      authenticator: bluesky_httpserver.authenticators:OIDCAuthenticator
+      args:
+        audience: &lt;google-client-id&gt;
+        client_id: &lt;google-client-id&gt;
+        client_secret: ${BSKY_GOOGLE_SECRET}
+        well_known_uri: https://accounts.google.com/.well-known/openid-configuration
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The name used in <code class="docutils literal notranslate"><span class="pre">api_access/args/users</span></code> must match the identity string produced by
+the authenticator for your provider configuration. Verify with <code class="docutils literal notranslate"><span class="pre">/api/auth/whoami</span></code> after
+successful login.</p>
+</div>
+<p>See the documentation on <code class="docutils literal notranslate"><span class="pre">OIDCAuthenticator</span></code> for parameter details.</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/bluesky_httpserver.authenticators.OIDCAuthenticator.html#bluesky_httpserver.authenticators.OIDCAuthenticator" title="bluesky_httpserver.authenticators.OIDCAuthenticator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">authenticators.OIDCAuthenticator</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="entra-authenticator">
+<h4>ENTRA Authenticator<a class="headerlink" href="#entra-authenticator" title="Link to this heading"></a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">EntraAuthenticator</span></code> inherits from the <code class="docutils literal notranslate"><span class="pre">ProxiedOIDCAuthenticator</span></code> and provides
+additional ENTRA/MS specific ways to determine the actual username, while still
+using the OIDC workflow. It will by default attempt to extract a human-readable
+username from the claims in the OIDC token. Alternatively a graph parameter
+can be specified, at which point after ENTRA returns a valid login and identity
+a GraphAPI call is made to request the provided parameter, which is then used
+in place of any claim as the username. This later method is the method recommended
+by MS.</p>
+<p>Example configuration (Microsoft Entra ID):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>authentication:
+  providers:
+    - provider: entra
+      authenticator: bluesky_httpserver.authenticators:EntraAuthenticator
+      args:
+        audience: 00000000-0000-0000-0000-000000000000
+        client_id: 00000000-0000-0000-0000-000000000000
+        device_flow_client_id: 00000000-0000-0000-0000-000000000000
+        client_secret: ${BSKY_ENTRA_SECRET}
+        well_known_uri: https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0/.well-known/openid-configuration
+        confirmation_message: &quot;You have logged in successfully.&quot;
+        extra_scopes: &#39;User.Read&#39;
+        graph_username_attribute: &quot;some_graph_param&quot;
+</pre></div>
+</div>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/bluesky_httpserver.authenticators.EntraAuthenticator.html#bluesky_httpserver.authenticators.EntraAuthenticator" title="bluesky_httpserver.authenticators.EntraAuthenticator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">authenticators.EntraAuthenticator</span></code></a></p></td>
+<td><p></p></td>
 </tr>
 </tbody>
 </table>

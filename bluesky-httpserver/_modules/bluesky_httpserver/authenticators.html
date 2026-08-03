@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>bluesky_httpserver.authenticators &mdash; Bluesky HTTP Server 0.0.14.post4+g54cbd08 documentation</title>
+  <title>bluesky_httpserver.authenticators &mdash; Bluesky HTTP Server 0.0.14.post35+gd53d171 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=e02ea60e"></script>
+      <script src="../../_static/documentation_options.js?v=c1ff5e01"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -87,23 +87,35 @@
              
   <h1>Source code for bluesky_httpserver.authenticators</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">base64</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">cast</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cachetools</span><span class="w"> </span><span class="kn">import</span> <span class="n">TTLCache</span><span class="p">,</span> <span class="n">cached</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">Request</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">jose</span><span class="w"> </span><span class="kn">import</span> <span class="n">JWTError</span><span class="p">,</span> <span class="n">jwk</span><span class="p">,</span> <span class="n">jwt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.security</span><span class="w"> </span><span class="kn">import</span> <span class="n">OAuth2</span><span class="p">,</span> <span class="n">OAuth2AuthorizationCodeBearer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">jose</span><span class="w"> </span><span class="kn">import</span> <span class="n">JWTError</span><span class="p">,</span> <span class="n">jwt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pydantic</span><span class="w"> </span><span class="kn">import</span> <span class="n">Secret</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">starlette.responses</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedirectResponse</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">.authentication</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mode</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">modules_available</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.protocols</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExternalAuthenticator</span><span class="p">,</span> <span class="n">InternalAuthenticator</span><span class="p">,</span> <span class="n">UserSessionState</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_root_url</span><span class="p">,</span> <span class="n">modules_available</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">DummyAuthenticator</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AuthCodeExchangeException</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">DummyAuthenticator</span><span class="p">(</span><span class="n">InternalAuthenticator</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    For test and demo purposes only!</span>
 
@@ -111,28 +123,22 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">confirmation_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">confirmation_message</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">username</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserSessionState</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="p">{})</span>
 
 
 <div class="viewcode-block" id="DictionaryAuthenticator">
 <a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">DictionaryAuthenticator</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DictionaryAuthenticator</span><span class="p">(</span><span class="n">InternalAuthenticator</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    For test and demo purposes only!</span>
 
 <span class="sd">    Check passwords from a dictionary of usernames mapped to passwords.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-
-<span class="sd">    users_to_passwords: dict(str, str)</span>
-<span class="sd">        Mapping of usernames to passwords.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
     <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
 <span class="s2">type: object</span>
@@ -140,29 +146,32 @@
 <span class="s2">properties:</span>
 <span class="s2">  users_to_password:</span>
 <span class="s2">    type: object</span>
-<span class="s2">  description: |</span>
-<span class="s2">    Mapping usernames to password. Environment variable expansion should be</span>
-<span class="s2">    used to avoid placing passwords directly in configuration.</span>
+<span class="s2">    description: |</span>
+<span class="s2">      Mapping usernames to password. Environment variable expansion should be</span>
+<span class="s2">      used to avoid placing passwords directly in configuration.</span>
+<span class="s2">  confirmation_message:</span>
+<span class="s2">    type: string</span>
+<span class="s2">    description: May be displayed by client after successful login.</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="DictionaryAuthenticator.__init__">
 <a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.DictionaryAuthenticator.html#bluesky_httpserver.authenticators.DictionaryAuthenticator.__init__">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">users_to_passwords</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_users_to_passwords</span> <span class="o">=</span> <span class="n">users_to_passwords</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">users_to_passwords</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">confirmation_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_users_to_passwords</span> <span class="o">=</span> <span class="n">users_to_passwords</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">confirmation_message</span></div>
 
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UserSessionState</span><span class="p">]:</span>
         <span class="n">true_password</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_users_to_passwords</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">username</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">true_password</span><span class="p">:</span>
             <span class="c1"># Username is not valid.</span>
             <span class="k">return</span>
         <span class="k">if</span> <span class="n">secrets</span><span class="o">.</span><span class="n">compare_digest</span><span class="p">(</span><span class="n">true_password</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">username</span></div>
+            <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="p">{})</span></div>
 
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">PAMAuthenticator</span><span class="p">:</span>
-    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PAMAuthenticator</span><span class="p">(</span><span class="n">InternalAuthenticator</span><span class="p">):</span>
     <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
 <span class="s2">type: object</span>
@@ -171,154 +180,520 @@
 <span class="s2">  service:</span>
 <span class="s2">    type: string</span>
 <span class="s2">    description: PAM service. Default is &#39;login&#39;.</span>
+<span class="s2">  confirmation_message:</span>
+<span class="s2">    type: string</span>
+<span class="s2">    description: May be displayed by client after successful login.</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">service</span><span class="o">=</span><span class="s2">&quot;login&quot;</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">service</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;login&quot;</span><span class="p">,</span> <span class="n">confirmation_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;pamela&quot;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This PAMAuthenticator requires the module &#39;pamela&#39; to be installed.&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">service</span> <span class="o">=</span> <span class="n">service</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">confirmation_message</span>
         <span class="c1"># TODO Try to open a PAM session.</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UserSessionState</span><span class="p">]:</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">pamela</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="n">pamela</span><span class="o">.</span><span class="n">authenticate</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">,</span> <span class="n">service</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">service</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="p">{})</span>
         <span class="k">except</span> <span class="n">pamela</span><span class="o">.</span><span class="n">PAMError</span><span class="p">:</span>
             <span class="c1"># Authentication failed.</span>
             <span class="k">return</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">username</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">OIDCAuthenticator</span><span class="p">:</span>
-    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span>
+<div class="viewcode-block" id="OIDCAuthenticator">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.OIDCAuthenticator.html#bluesky_httpserver.authenticators.OIDCAuthenticator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OIDCAuthenticator</span><span class="p">(</span><span class="n">ExternalAuthenticator</span><span class="p">):</span>
     <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
 <span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
 <span class="s2">type: object</span>
 <span class="s2">additionalProperties: false</span>
 <span class="s2">properties:</span>
+<span class="s2">  audience:</span>
+<span class="s2">    type: string</span>
 <span class="s2">  client_id:</span>
 <span class="s2">    type: string</span>
 <span class="s2">  client_secret:</span>
 <span class="s2">    type: string</span>
-<span class="s2">  redirect_uri:</span>
+<span class="s2">  well_known_uri:</span>
 <span class="s2">    type: string</span>
-<span class="s2">  token_uri:</span>
+<span class="s2">  confirmation_message:</span>
 <span class="s2">    type: string</span>
-<span class="s2">  authorization_endpoint:</span>
+<span class="s2">  redirect_on_success:</span>
 <span class="s2">    type: string</span>
-<span class="s2">  public_keys:</span>
-<span class="s2">    type: array</span>
-<span class="s2">    item:</span>
-<span class="s2">      type: object</span>
-<span class="s2">      properties:</span>
-<span class="s2">        - alg:</span>
-<span class="s2">            type: string</span>
-<span class="s2">        - e</span>
-<span class="s2">            type: string</span>
-<span class="s2">        - kid</span>
-<span class="s2">            type: string</span>
-<span class="s2">        - kty</span>
-<span class="s2">            type: string</span>
-<span class="s2">        - n</span>
-<span class="s2">            type: string</span>
-<span class="s2">        - use</span>
-<span class="s2">            type: string</span>
-<span class="s2">      required:</span>
-<span class="s2">        - alg</span>
-<span class="s2">        - e</span>
-<span class="s2">        - kid</span>
-<span class="s2">        - kty</span>
-<span class="s2">        - n</span>
-<span class="s2">        - use</span>
+<span class="s2">  redirect_on_failure:</span>
+<span class="s2">    type: string</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
+<div class="viewcode-block" id="OIDCAuthenticator.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.OIDCAuthenticator.html#bluesky_httpserver.authenticators.OIDCAuthenticator.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">client_id</span><span class="p">,</span>
-        <span class="n">client_secret</span><span class="p">,</span>
-        <span class="n">redirect_uri</span><span class="p">,</span>
-        <span class="n">public_keys</span><span class="p">,</span>
-        <span class="n">token_uri</span><span class="p">,</span>
-        <span class="n">authorization_endpoint</span><span class="p">,</span>
-        <span class="n">confirmation_message</span><span class="p">,</span>
+        <span class="n">audience</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">client_secret</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">well_known_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">confirmation_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">redirect_on_success</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">redirect_on_failure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span> <span class="o">=</span> <span class="n">client_id</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">client_secret</span> <span class="o">=</span> <span class="n">client_secret</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_audience</span> <span class="o">=</span> <span class="n">audience</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_client_id</span> <span class="o">=</span> <span class="n">client_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_client_secret</span> <span class="o">=</span> <span class="n">Secret</span><span class="p">(</span><span class="n">client_secret</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_well_known_url</span> <span class="o">=</span> <span class="n">well_known_uri</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">confirmation_message</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span> <span class="o">=</span> <span class="n">redirect_uri</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">public_keys</span> <span class="o">=</span> <span class="n">public_keys</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">token_uri</span> <span class="o">=</span> <span class="n">token_uri</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">authorization_endpoint</span> <span class="o">=</span> <span class="n">authorization_endpoint</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">client_id</span><span class="o">=</span><span class="n">client_id</span><span class="p">,</span> <span class="n">redirect_uri</span><span class="o">=</span><span class="n">redirect_uri</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">redirect_on_success</span> <span class="o">=</span> <span class="n">redirect_on_success</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">redirect_on_failure</span> <span class="o">=</span> <span class="n">redirect_on_failure</span></div>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="n">code</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">]</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">exchange_code</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_uri</span><span class="p">,</span> <span class="n">code</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">client_secret</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">redirect_uri</span><span class="p">)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_config_from_oidc_url</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">response</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_well_known_url</span><span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">client_id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client_id</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">id_token_signing_alg_values_supported</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+            <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_config_from_oidc_url</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id_token_signing_alg_values_supported&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issuer</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_from_oidc_url</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;issuer&quot;</span><span class="p">))</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">jwks_uri</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_from_oidc_url</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;jwks_uri&quot;</span><span class="p">))</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">token_endpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_from_oidc_url</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;token_endpoint&quot;</span><span class="p">))</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">authorization_endpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">httpx</span><span class="o">.</span><span class="n">URL</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_from_oidc_url</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;authorization_endpoint&quot;</span><span class="p">)))</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_authorization_endpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_from_oidc_url</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;device_authorization_endpoint&quot;</span><span class="p">))</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">end_session_endpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config_from_oidc_url</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;end_session_endpoint&quot;</span><span class="p">))</span>
+
+    <span class="nd">@cached</span><span class="p">(</span><span class="n">TTLCache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="n">timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()))</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">keys</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">httpx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jwks_uri</span><span class="p">)</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;keys&quot;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">decode_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">id_token</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">access_token</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">jwt</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span>
+            <span class="n">id_token</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span>
+            <span class="n">algorithms</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">id_token_signing_alg_values_supported</span><span class="p">,</span>
+            <span class="n">audience</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_audience</span><span class="p">,</span>
+            <span class="n">issuer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">issuer</span><span class="p">,</span>
+            <span class="n">access_token</span><span class="o">=</span><span class="n">access_token</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UserSessionState</span><span class="p">]:</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;code&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">code</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Authentication failed: No authorization code parameter provided.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="c1"># A proxy in the middle may make the request into something like</span>
+        <span class="c1"># &#39;http://localhost:8000/...&#39; so we fix the first part but keep</span>
+        <span class="c1"># the original URI path.</span>
+        <span class="n">redirect_uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">get_root_url</span><span class="p">(</span><span class="n">request</span><span class="p">)</span><span class="si">}{</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">exchange_code</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">token_endpoint</span><span class="p">,</span>
+            <span class="n">code</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client_secret</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+            <span class="n">redirect_uri</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="n">response_body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">is_error</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Authentication error: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_body</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="n">response_body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
         <span class="n">id_token</span> <span class="o">=</span> <span class="n">response_body</span><span class="p">[</span><span class="s2">&quot;id_token&quot;</span><span class="p">]</span>
         <span class="n">access_token</span> <span class="o">=</span> <span class="n">response_body</span><span class="p">[</span><span class="s2">&quot;access_token&quot;</span><span class="p">]</span>
-        <span class="c1"># Match the kid in id_token to a key in the list of public_keys.</span>
-        <span class="n">key</span> <span class="o">=</span> <span class="n">find_key</span><span class="p">(</span><span class="n">id_token</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">public_keys</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">verified_body</span> <span class="o">=</span> <span class="n">jwt</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">id_token</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">access_token</span><span class="o">=</span><span class="n">access_token</span><span class="p">,</span> <span class="n">audience</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client_id</span><span class="p">)</span>
+            <span class="n">verified_body</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decode_token</span><span class="p">(</span><span class="n">id_token</span><span class="p">,</span> <span class="n">access_token</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">JWTError</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span>
                 <span class="s2">&quot;Authentication error. Unverified token: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
                 <span class="n">jwt</span><span class="o">.</span><span class="n">get_unverified_claims</span><span class="p">(</span><span class="n">id_token</span><span class="p">),</span>
             <span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="n">verified_body</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">verified_body</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">],</span> <span class="p">{})</span></div>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">KeyNotFoundError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-    <span class="k">pass</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ProxiedOIDCAuthenticator</span><span class="p">(</span><span class="n">OIDCAuthenticator</span><span class="p">):</span>
+    <span class="n">configuration_schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">$schema&quot;: http://json-schema.org/draft-07/schema#</span>
+<span class="s2">type: object</span>
+<span class="s2">additionalProperties: false</span>
+<span class="s2">properties:</span>
+<span class="s2">  audience:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  client_id:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  well_known_uri:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  scopes:</span>
+<span class="s2">    type: array</span>
+<span class="s2">    items:</span>
+<span class="s2">      type: string</span>
+<span class="s2">    description: |</span>
+<span class="s2">      Optional list of OAuth2 scopes to request. If provided, authorization</span>
+<span class="s2">      should be enforced by an external policy agent (for example ExternalPolicyDecisionPoint)</span>
+<span class="s2">      rather than by this authenticator.</span>
+<span class="s2">  device_flow_client_id:</span>
+<span class="s2">    type: string</span>
+<span class="s2">  confirmation_message:</span>
+<span class="s2">    type: string</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">audience</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">well_known_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">device_flow_client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">scopes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">confirmation_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">audience</span><span class="o">=</span><span class="n">audience</span><span class="p">,</span>
+            <span class="n">client_id</span><span class="o">=</span><span class="n">client_id</span><span class="p">,</span>
+            <span class="n">client_secret</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">well_known_uri</span><span class="o">=</span><span class="n">well_known_uri</span><span class="p">,</span>
+            <span class="n">confirmation_message</span><span class="o">=</span><span class="n">confirmation_message</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scopes</span> <span class="o">=</span> <span class="n">scopes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device_flow_client_id</span> <span class="o">=</span> <span class="n">device_flow_client_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_oidc_bearer</span> <span class="o">=</span> <span class="n">OAuth2AuthorizationCodeBearer</span><span class="p">(</span>
+            <span class="n">authorizationUrl</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">authorization_endpoint</span><span class="p">),</span>
+            <span class="n">tokenUrl</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">token_endpoint</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">oauth2_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OAuth2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_oidc_bearer</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">find_key</span><span class="p">(</span><span class="n">token</span><span class="p">,</span> <span class="n">keys</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Find a key from the configured keys based on the kid claim of the token</span>
+<div class="viewcode-block" id="EntraAuthenticator">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.EntraAuthenticator.html#bluesky_httpserver.authenticators.EntraAuthenticator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">EntraAuthenticator</span><span class="p">(</span><span class="n">ProxiedOIDCAuthenticator</span><span class="p">):</span>
+<div class="viewcode-block" id="EntraAuthenticator.__init__">
+<a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.EntraAuthenticator.html#bluesky_httpserver.authenticators.EntraAuthenticator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">audience</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">well_known_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">device_flow_client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">extra_scopes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">confirmation_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">scopes_map</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">client_secret</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">redirect_on_success</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">graph_username_attribute</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;A MS Entra specific version of the OIDC authenticator</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    token : token to search for the kid from</span>
-<span class="sd">    keys:  list of keys</span>
+<span class="sd">        It attempts to extract a username from the standard list of claims returned</span>
+<span class="sd">        from the token Entra provides. Alternatively if a graph_username_attribute</span>
+<span class="sd">        is used then a call is made to MSGraphAPI to get the provided user attribute</span>
+<span class="sd">        and use it as the username instead.</span>
 
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    KeyNotFoundError:</span>
-<span class="sd">        returned if the token does not have a kid claim</span>
+<span class="sd">        The graph API call is the recommended way to authenticate with MS products, as all</span>
+<span class="sd">        claims in the token are inconsistent and not guaranteed.</span>
 
-<span class="sd">    Returns</span>
-<span class="sd">    ------</span>
-<span class="sd">    key: found key object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scopes_map</span> <span class="o">=</span> <span class="n">scopes_map</span> <span class="k">if</span> <span class="n">scopes_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">extra_scopes</span> <span class="o">=</span> <span class="n">extra_scopes</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">audience</span><span class="p">,</span>
+            <span class="n">client_id</span><span class="p">,</span>
+            <span class="n">well_known_uri</span><span class="p">,</span>
+            <span class="n">device_flow_client_id</span><span class="p">,</span>
+            <span class="n">scopes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># not used by Entra; enforcement is via scopes_map</span>
+            <span class="n">confirmation_message</span><span class="o">=</span><span class="n">confirmation_message</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Override the empty secret from ProxiedOIDCAuthenticator if provided.</span>
+        <span class="k">if</span> <span class="n">client_secret</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client_secret</span> <span class="o">=</span> <span class="n">Secret</span><span class="p">(</span><span class="n">client_secret</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">redirect_on_success</span> <span class="o">=</span> <span class="n">redirect_on_success</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">graph_username_attribute</span> <span class="o">=</span> <span class="n">graph_username_attribute</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scopes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">mapped</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">tiled_scopes</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scopes_map</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">mapped</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">tiled_scopes</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">mapped</span><span class="p">)</span>
+
+    <span class="nd">@scopes</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scopes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">pass</span>  <span class="c1"># ignored; scopes are derived from scopes_map</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">decode_token</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">id_token</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">access_token</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">claims</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">decode_token</span><span class="p">(</span><span class="n">id_token</span><span class="p">,</span> <span class="n">access_token</span><span class="p">)</span>
+
+        <span class="n">user_claims_list</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">claims</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Claims:</span><span class="se">\n</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">user_claims_list</span><span class="p">))</span>
+        <span class="c1"># sub generated by Entra is an opaque string; generate a stable UUID</span>
+        <span class="c1"># for Tiled based on &quot;iss|sub&quot; for uniqueness across tenants.</span>
+        <span class="c1"># Preserve the original Entra sub separately so it can be used as a</span>
+        <span class="c1"># fallback display name — it is more human-readable than the UUID5 hex.</span>
+        <span class="n">original_sub</span> <span class="o">=</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;sub&quot;</span><span class="p">)</span>
+        <span class="n">issuer</span> <span class="o">=</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;iss&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid5</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">NAMESPACE_URL</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">issuer</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="n">original_sub</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">hex</span>
+        <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;entra_sub&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">original_sub</span>
+
+        <span class="c1"># Derive a human-readable username from the token claims.</span>
+        <span class="c1"># Priority: nameID (explicit app config) → preferred_username (v2 tokens)</span>
+        <span class="c1"># → upn (v1 tokens) → email → original Entra sub (opaque but stable and</span>
+        <span class="c1"># meaningful, unlike the UUID5 hex stored in claims[&quot;sub&quot;]).</span>
+        <span class="c1">#</span>
+        <span class="c1"># Note: preferred_username / upn are often absent from *access* tokens</span>
+        <span class="c1"># unless explicitly added as optional claims in the Entra app registration.</span>
+        <span class="c1"># They are typically present in id_tokens.  If none are found, the</span>
+        <span class="c1"># original_sub is used and a warning is emitted so operators know to add</span>
+        <span class="c1"># the optional claim.</span>
+        <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;entra_username&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;nameID&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;preferred_username&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;upn&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;email&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">user</span> <span class="o">:=</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;entra_username&quot;</span><span class="p">):</span>
+            <span class="n">user</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="s2">&quot;</span><span class="se">\\</span><span class="s2">&quot;</span> <span class="ow">in</span> <span class="n">user</span><span class="p">:</span>
+                <span class="n">user</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\\</span><span class="s2">&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="s2">&quot;@&quot;</span> <span class="ow">in</span> <span class="n">user</span><span class="p">:</span>
+                <span class="n">user</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;@&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No human-readable claim was found.  Fall back to the original</span>
+            <span class="c1"># Entra sub (opaque but at least stable and not a UUID5 hex).</span>
+            <span class="c1"># This produces a workable identity but authz policies that match</span>
+            <span class="c1"># on username will need to use the Entra sub value.</span>
+            <span class="n">user</span> <span class="o">=</span> <span class="n">original_sub</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;EntraAuthenticator: no human-readable username claim found in token &quot;</span>
+                <span class="s2">&quot;(checked nameID, preferred_username, upn, email). &quot;</span>
+                <span class="s2">&quot;Falling back to Entra sub=</span><span class="si">%r</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;To fix: add &#39;preferred_username&#39; as an optional claim in the &quot;</span>
+                <span class="s2">&quot;Entra app registration → Token configuration → Optional claims → Access token.&quot;</span><span class="p">,</span>
+                <span class="n">original_sub</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">user</span>
+
+        <span class="c1"># Translate Entra scopes to tiled scopes.</span>
+        <span class="c1"># The &quot;scp&quot; claim is present in access tokens but may be absent from</span>
+        <span class="c1"># id_tokens (e.g. during the authorization code flow).  When absent,</span>
+        <span class="c1"># assume all mapped scopes were granted (Entra would not have issued</span>
+        <span class="c1"># the tokens if the user lacked the requested scopes).</span>
+        <span class="n">scp_raw</span> <span class="o">=</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;scp&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">tiled_scope_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">scp_raw</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">scope</span> <span class="ow">in</span> <span class="n">scp_raw</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">):</span>
+                <span class="n">mapped_scopes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scopes_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">scope</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">mapped_scopes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unmapped Entra scope in &#39;scp&#39;: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">scope</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="n">tiled_scope_set</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">mapped_scopes</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No scp claim — grant all tiled scopes from the map.</span>
+            <span class="k">for</span> <span class="n">mapped_scopes</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scopes_map</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">tiled_scope_set</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">mapped_scopes</span><span class="p">)</span>
+        <span class="n">claims</span><span class="p">[</span><span class="s2">&quot;scope&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tiled_scope_set</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">claims</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">graph_lookup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">access_token</span><span class="p">,</span> <span class="n">user_param</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Uses the access token provided in the auth flow to lookup a user parameter&quot;&quot;&quot;</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+
+        <span class="k">async</span> <span class="k">with</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">()</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;https://graph.microsoft.com/v1.0/me&quot;</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$select&quot;</span><span class="p">:</span> <span class="n">user_param</span><span class="p">},</span>
+                <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_token_claims</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">verified_body</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;log token claims</span>
+<span class="sd">        Includes logging of the token claims so misconfigurations are easier</span>
+<span class="sd">        to diagnose. Keep at debug level to avoid leaking PII in production logs</span>
+<span class="sd">        by default</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s2">&quot;EntraAuthenticator.authenticate: id_token claims present: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="nb">sorted</span><span class="p">(</span><span class="n">verified_body</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+        <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="s2">&quot;EntraAuthenticator.authenticate: entra_username=</span><span class="si">%r</span><span class="s2"> user=</span><span class="si">%r</span><span class="s2"> entra_sub=</span><span class="si">%r</span><span class="s2"> preferred_username=</span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">verified_body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;entra_username&quot;</span><span class="p">),</span>
+            <span class="n">verified_body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;user&quot;</span><span class="p">),</span>
+            <span class="n">verified_body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;entra_sub&quot;</span><span class="p">),</span>
+            <span class="n">verified_body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;preferred_username&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_username_from_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">access_token</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attempts to get the username from either claims or MSGraphAPI call</span>
+
+<span class="sd">        If no username is found, there are errors in looking up the graphAPI</span>
+<span class="sd">        username, or whatever it returns None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">profile</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">graph_lookup</span><span class="p">(</span><span class="n">access_token</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">graph_username_attribute</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Graph Profile: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">profile</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">httpx</span><span class="o">.</span><span class="n">HTTPStatusError</span><span class="p">,</span> <span class="n">httpx</span><span class="o">.</span><span class="n">RequestError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Graph lookup failed&quot;</span><span class="p">)</span>
+        <span class="n">username</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">profile</span><span class="p">:</span>
+            <span class="n">username</span> <span class="o">=</span> <span class="n">profile</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">graph_username_attribute</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">username</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s2">&quot;Graph lookup succeeded but </span><span class="si">%s</span><span class="s2"> was empty&quot;</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">graph_username_attribute</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">username</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_usersession</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">access_token</span><span class="p">,</span> <span class="n">refresh_token</span><span class="p">,</span> <span class="n">username</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create usersession from tokens and final username</span>
+
+<span class="sd">        Store the Entra access and refresh tokens so that downstream</span>
+<span class="sd">        services that rely on Tiled authentication can perform an OBO exchange</span>
+<span class="sd">        to obtain per-user tokens for other services.  The refresh token</span>
+<span class="sd">        allows silent renewal without requiring the user to re-authenticate.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">access_token</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;entra_access_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">access_token</span>
+        <span class="k">if</span> <span class="n">refresh_token</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;entra_refresh_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">refresh_token</span>
+        <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">auth_code_exchange</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform the authorization code exchange&quot;&quot;&quot;</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;code&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">code</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Authentication failed: No authorization code parameter provided.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">AuthCodeExchangeException</span>
+        <span class="n">redirect_uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">get_root_url</span><span class="p">(</span><span class="n">request</span><span class="p">)</span><span class="si">}{</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">exchange_code</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">token_endpoint</span><span class="p">,</span>
+            <span class="n">code</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client_id</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_client_secret</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+            <span class="n">redirect_uri</span><span class="p">,</span>
+            <span class="n">extra_scopes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">extra_scopes</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">response_body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">is_error</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Authentication error: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_body</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">AuthCodeExchangeException</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Response: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">response_body</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response_body</span>
+
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UserSessionState</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Complete the Entra OIDC authorization-code flow and return a session.</span>
+
+<span class="sd">        After a successful code exchange the Entra ``access_token`` and</span>
+<span class="sd">        ``refresh_token`` are stored in ``UserSessionState.state`` under the</span>
+<span class="sd">        keys ``entra_access_token`` and ``entra_refresh_token`` respectively.</span>
+<span class="sd">        Tiled persists this state in the session DB and embeds it verbatim in</span>
+<span class="sd">        every Tiled HMAC access token, making the tokens available to downstream</span>
+<span class="sd">        services that rely on Tiled authentication via ``get_session_state()``.</span>
+
+<span class="sd">        Security note: the Entra access token is therefore visible inside the</span>
+<span class="sd">        Tiled JWT (base64-encoded, not encrypted).  The Tiled access token is</span>
+<span class="sd">        short-lived (default 15 min) and only transmitted over HTTPS, which</span>
+<span class="sd">        limits the exposure window.</span>
+
+<span class="sd">        The ``refresh_token`` enables silent renewal: when the Entra access</span>
+<span class="sd">        token expires (~1 h), a downstream service can call the Entra token</span>
+<span class="sd">        endpoint with ``grant_type=refresh_token`` to obtain a fresh pair and</span>
+<span class="sd">        write it back to the session DB so subsequent Tiled ``slide_session``</span>
+<span class="sd">        calls propagate the update automatically.</span>
+
+<span class="sd">        When an error occurs, the authenticate function will return None</span>
+<span class="sd">        instead of a UserSessionState</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response_body</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">auth_code_exchange</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">AuthCodeExchangeException</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">id_token</span> <span class="o">=</span> <span class="n">response_body</span><span class="p">[</span><span class="s2">&quot;id_token&quot;</span><span class="p">]</span>
+        <span class="n">access_token</span> <span class="o">=</span> <span class="n">response_body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span>
+        <span class="n">refresh_token</span> <span class="o">=</span> <span class="n">response_body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;refresh_token&quot;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">verified_body</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decode_token</span><span class="p">(</span><span class="n">id_token</span><span class="p">,</span> <span class="n">access_token</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">JWTError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span>
+                <span class="s2">&quot;Authentication error. Unverified token: </span><span class="si">%r</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">jwt</span><span class="o">.</span><span class="n">get_unverified_claims</span><span class="p">(</span><span class="n">id_token</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log_token_claims</span><span class="p">(</span><span class="n">verified_body</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">graph_username_attribute</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_username_from_graph</span><span class="p">(</span><span class="n">access_token</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">username</span> <span class="o">=</span> <span class="n">verified_body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;user&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">verified_body</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">username</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_usersession</span><span class="p">(</span><span class="n">access_token</span><span class="p">,</span> <span class="n">refresh_token</span><span class="p">,</span> <span class="n">username</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">exchange_code</span><span class="p">(</span>
+    <span class="n">token_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">auth_code</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">client_secret</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">redirect_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">extra_scopes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Response</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exchange an authorization code for tokens at the IdP token endpoint.</span>
+
+<span class="sd">    Explicitly requests ``openid offline_access`` scopes in the token POST body</span>
+<span class="sd">    so that the IdP returns a ``refresh_token`` unconditionally.  This is safe</span>
+<span class="sd">    even when ``offline_access`` was already included in the authorization URL</span>
+<span class="sd">    scope — the IdP simply ignores duplicates.  Including it here makes the</span>
+<span class="sd">    refresh token reliable regardless of how the authorization URL was</span>
+<span class="sd">    constructed, which is important for downstream OBO refresh flows.</span>
+
+<span class="sd">    ``extra_scopes`` (e.g. ``[&quot;api://&lt;client-id&gt;/access_as_user&quot;]``) are</span>
+<span class="sd">    appended to the scope string.  Entra only issues an ``access_token`` whose</span>
+<span class="sd">    ``aud`` matches the requested resource scope, so any scope that a downstream</span>
+<span class="sd">    OBO exchange will use as the ``assertion`` audience **must** be included</span>
+<span class="sd">    here — requesting it only on the authorization URL redirect is not</span>
+<span class="sd">    sufficient, because Entra does not carry scopes from the redirect into the</span>
+<span class="sd">    token POST implicitly.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">unverified</span> <span class="o">=</span> <span class="n">jwt</span><span class="o">.</span><span class="n">get_unverified_header</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
-    <span class="n">kid</span> <span class="o">=</span> <span class="n">unverified</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kid&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">kid</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">KeyNotFoundError</span><span class="p">(</span><span class="s2">&quot;No &#39;kid&#39; in token&quot;</span><span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">key</span><span class="p">[</span><span class="s2">&quot;kid&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">kid</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">jwk</span><span class="o">.</span><span class="n">construct</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">KeyNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Token specifies </span><span class="si">{</span><span class="n">kid</span><span class="si">}</span><span class="s2"> but we have </span><span class="si">{</span><span class="p">[</span><span class="n">k</span><span class="p">[</span><span class="s1">&#39;kid&#39;</span><span class="p">]</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">keys</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">exchange_code</span><span class="p">(</span><span class="n">token_uri</span><span class="p">,</span> <span class="n">auth_code</span><span class="p">,</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">client_secret</span><span class="p">,</span> <span class="n">redirect_uri</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Method that talks to an IdP to exchange a code for an access_token and/or id_token</span>
-<span class="sd">    Args:</span>
-<span class="sd">        token_url ([type]): [description]</span>
-<span class="sd">        auth_code ([type]): [description]</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;httpx&quot;</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This authenticator requires &#39;httpx&#39;. (pip install httpx)&quot;</span><span class="p">)</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
-
+    <span class="n">scopes</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;openid&quot;</span><span class="p">,</span> <span class="s2">&quot;offline_access&quot;</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">extra_scopes</span><span class="p">:</span>
+        <span class="n">scopes</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">extra_scopes</span><span class="p">)</span>
+    <span class="n">auth_value</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">client_secret</span><span class="si">}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
     <span class="n">response</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
         <span class="n">url</span><span class="o">=</span><span class="n">token_uri</span><span class="p">,</span>
         <span class="n">data</span><span class="o">=</span><span class="p">{</span>
@@ -327,19 +702,19 @@
             <span class="s2">&quot;redirect_uri&quot;</span><span class="p">:</span> <span class="n">redirect_uri</span><span class="p">,</span>
             <span class="s2">&quot;code&quot;</span><span class="p">:</span> <span class="n">auth_code</span><span class="p">,</span>
             <span class="s2">&quot;client_secret&quot;</span><span class="p">:</span> <span class="n">client_secret</span><span class="p">,</span>
+            <span class="s2">&quot;scope&quot;</span><span class="p">:</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">scopes</span><span class="p">)),</span>
         <span class="p">},</span>
+        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Basic </span><span class="si">{</span><span class="n">auth_value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">},</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">response</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">SAMLAuthenticator</span><span class="p">:</span>
-    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">external</span>
-
+<span class="k">class</span><span class="w"> </span><span class="nc">SAMLAuthenticator</span><span class="p">(</span><span class="n">ExternalAuthenticator</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">saml_settings</span><span class="p">,</span>  <span class="c1"># See EXAMPLE_SAML_SETTINGS below.</span>
-        <span class="n">attribute_name</span><span class="p">,</span>  <span class="c1"># which SAML attribute to use as &#39;id&#39; for Idenity</span>
-        <span class="n">confirmation_message</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">attribute_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>  <span class="c1"># which SAML attribute to use as &#39;id&#39; for Identity</span>
+        <span class="n">confirmation_message</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">saml_settings</span> <span class="o">=</span> <span class="n">saml_settings</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">attribute_name</span> <span class="o">=</span> <span class="n">attribute_name</span>
@@ -357,23 +732,15 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">onelogin.saml2.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
 
         <span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/login&quot;</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">saml_login</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">saml_login</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RedirectResponse</span><span class="p">:</span>
             <span class="n">req</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
             <span class="n">auth</span> <span class="o">=</span> <span class="n">OneLogin_Saml2_Auth</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">saml_settings</span><span class="p">)</span>
-            <span class="c1"># saml_settings = auth.get_settings()</span>
-            <span class="c1"># metadata = saml_settings.get_sp_metadata()</span>
-            <span class="c1"># errors = saml_settings.validate_metadata(metadata)</span>
-            <span class="c1"># if len(errors) == 0:</span>
-            <span class="c1">#   print(metadata)</span>
-            <span class="c1"># else:</span>
-            <span class="c1">#   print(&quot;Error found on Metadata: %s&quot; % (&#39;, &#39;.join(errors)))</span>
             <span class="n">callback_url</span> <span class="o">=</span> <span class="n">auth</span><span class="o">.</span><span class="n">login</span><span class="p">()</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="n">RedirectResponse</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">callback_url</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">response</span>
+            <span class="k">return</span> <span class="n">RedirectResponse</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">callback_url</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">include_routers</span> <span class="o">=</span> <span class="p">[</span><span class="n">router</span><span class="p">]</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UserSessionState</span><span class="p">]:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">modules_available</span><span class="p">(</span><span class="s2">&quot;onelogin&quot;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span><span class="s2">&quot;This SAMLAuthenticator requires the module &#39;oneline&#39; to be installed.&quot;</span><span class="p">)</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">onelogin.saml2.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">OneLogin_Saml2_Auth</span>
@@ -391,12 +758,12 @@
             <span class="n">attribute_as_list</span> <span class="o">=</span> <span class="n">auth</span><span class="o">.</span><span class="n">get_attributes</span><span class="p">()[</span><span class="bp">self</span><span class="o">.</span><span class="n">attribute_name</span><span class="p">]</span>
             <span class="c1"># Confused in what situation this would have more than one item....</span>
             <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">attribute_as_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-            <span class="k">return</span> <span class="n">attribute_as_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">attribute_as_list</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">{})</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
 
 
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">prepare_saml_from_fastapi_request</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
     <span class="n">form_data</span> <span class="o">=</span> <span class="k">await</span> <span class="n">request</span><span class="o">.</span><span class="n">form</span><span class="p">()</span>
     <span class="n">rv</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;http_host&quot;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
@@ -424,9 +791,8 @@
 
 <div class="viewcode-block" id="LDAPAuthenticator">
 <a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">LDAPAuthenticator</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LDAPAuthenticator</span><span class="p">(</span><span class="n">InternalAuthenticator</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    LDAP authenticator.</span>
 <span class="sd">    The authenticator code is based on https://github.com/jupyterhub/ldapauthenticator</span>
 <span class="sd">    The parameter ``use_tls`` was added for convenience of testing.</span>
 
@@ -568,6 +934,8 @@
 
 <span class="sd">        This can be useful in an heterogeneous environment, when supplying a UNIX username</span>
 <span class="sd">        to authenticate against AD.</span>
+<span class="sd">    confirmation_message: str</span>
+<span class="sd">        May be displayed by client after successful login.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -606,8 +974,6 @@
 <span class="sd">                id: user02</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">mode</span> <span class="o">=</span> <span class="n">Mode</span><span class="o">.</span><span class="n">password</span>
-
 <div class="viewcode-block" id="LDAPAuthenticator.__init__">
 <a class="viewcode-back" href="../../generated/bluesky_httpserver.authenticators.LDAPAuthenticator.html#bluesky_httpserver.authenticators.LDAPAuthenticator.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -634,6 +1000,7 @@
         <span class="n">attributes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">auth_state_attributes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">use_lookup_dn_username</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">confirmation_message</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span> <span class="o">=</span> <span class="n">use_ssl</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_tls</span> <span class="o">=</span> <span class="n">use_tls</span>
@@ -668,7 +1035,8 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No servers are specified: &#39;server_address&#39; is an empty list&quot;</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">server_address_list</span> <span class="o">=</span> <span class="n">server_address_list</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span> <span class="o">=</span> <span class="n">server_port</span> <span class="k">if</span> <span class="n">server_port</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_port_default</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span> <span class="o">=</span> <span class="n">server_port</span> <span class="k">if</span> <span class="n">server_port</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_port_default</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">confirmation_message</span> <span class="o">=</span> <span class="n">confirmation_message</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_server_port_default</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -689,7 +1057,7 @@
         <span class="n">is_bound</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">conn</span><span class="o">.</span><span class="n">bind</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_bound</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Failed to connect to LDAP server with search user &#39;</span><span class="si">{search_dn}</span><span class="s2">&#39;&quot;</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">search_dn</span><span class="o">=</span><span class="n">search_dn</span><span class="p">))</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">search_dn</span><span class="o">=</span><span class="n">search_dn</span><span class="p">))</span>
             <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
         <span class="n">search_filter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup_dn_search_filter</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
@@ -754,7 +1122,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">userdn</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ldap3</span>
 
-        <span class="c1"># NOTE: setting &#39;acitve=False&#39; essentially disables exclusion of inactive servers from the pool.</span>
+        <span class="c1"># NOTE: setting &#39;active=False&#39; essentially disables exclusion of inactive servers from the pool.</span>
         <span class="c1"># It probably does not matter if the pool contains only one server, but it could have implications</span>
         <span class="c1"># when there are multiple servers in the pool. It is not clear what those implications are.</span>
         <span class="c1"># But using the default &#39;activate=True&#39; results in the thread being blocked indefinitely</span>
@@ -774,14 +1142,21 @@
                 <span class="n">server_port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">server_port</span>
 
             <span class="n">server</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">Server</span><span class="p">(</span>
-                <span class="n">server_addr</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">server_port</span><span class="p">,</span> <span class="n">use_ssl</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span><span class="p">,</span> <span class="n">connect_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">connect_timeout</span>
+                <span class="n">server_addr</span><span class="p">,</span>
+                <span class="n">port</span><span class="o">=</span><span class="n">server_port</span><span class="p">,</span>
+                <span class="n">use_ssl</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span><span class="p">,</span>
+                <span class="n">connect_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">connect_timeout</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">server_pool</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">server</span><span class="p">)</span>
 
         <span class="n">auto_bind_no_ssl</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">AUTO_BIND_TLS_BEFORE_BIND</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_tls</span> <span class="k">else</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">AUTO_BIND_NO_TLS</span>
         <span class="n">auto_bind</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">AUTO_BIND_NO_TLS</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_ssl</span> <span class="k">else</span> <span class="n">auto_bind_no_ssl</span>
         <span class="n">conn</span> <span class="o">=</span> <span class="n">ldap3</span><span class="o">.</span><span class="n">Connection</span><span class="p">(</span>
-            <span class="n">server_pool</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="n">userdn</span><span class="p">,</span> <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span> <span class="n">auto_bind</span><span class="o">=</span><span class="n">auto_bind</span><span class="p">,</span> <span class="n">receive_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">receive_timeout</span>
+            <span class="n">server_pool</span><span class="p">,</span>
+            <span class="n">user</span><span class="o">=</span><span class="n">userdn</span><span class="p">,</span>
+            <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span>
+            <span class="n">auto_bind</span><span class="o">=</span><span class="n">auto_bind</span><span class="p">,</span>
+            <span class="n">receive_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">receive_timeout</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">conn</span>
 
@@ -789,14 +1164,17 @@
         <span class="n">attrs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">auth_state_attributes</span><span class="p">:</span>
             <span class="n">search_func</span> <span class="o">=</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span>
-                <span class="n">conn</span><span class="o">.</span><span class="n">search</span><span class="p">,</span> <span class="n">userdn</span><span class="p">,</span> <span class="s2">&quot;(objectClass=*)&quot;</span><span class="p">,</span> <span class="n">attributes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auth_state_attributes</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">search</span><span class="p">,</span>
+                <span class="n">userdn</span><span class="p">,</span>
+                <span class="s2">&quot;(objectClass=*)&quot;</span><span class="p">,</span>
+                <span class="n">attributes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">auth_state_attributes</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">found</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">search_func</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">found</span><span class="p">:</span>
                 <span class="n">attrs</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">entries</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">entry_attributes_as_dict</span>
         <span class="k">return</span> <span class="n">attrs</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UserSessionState</span><span class="p">]:</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ldap3</span>
 
         <span class="n">username_saved</span> <span class="o">=</span> <span class="n">username</span>  <span class="c1"># Save the user name passed as a parameter</span>
@@ -925,8 +1303,9 @@
         <span class="n">user_info</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user_attributes</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">userdn</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">user_info</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;username:</span><span class="si">%s</span><span class="s2"> attributes:</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">user_info</span><span class="p">)</span>
-            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s2">&quot;auth_state&quot;</span><span class="p">:</span> <span class="n">user_info</span><span class="p">}</span>
-        <span class="k">return</span> <span class="n">username</span></div>
+            <span class="c1"># this path might never have been worked out...is it ever hit?</span>
+            <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">user_info</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">UserSessionState</span><span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="p">{})</span></div>
 
 </pre></div>
 
