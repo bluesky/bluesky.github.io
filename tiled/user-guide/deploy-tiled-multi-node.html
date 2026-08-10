@@ -485,6 +485,33 @@ horizontally scaled over multiple nodes.</p>
 Another uses Ansible for orchestration of a fleet of VMs.</p>
 <p>We aim to expand this page to share more details, including host resources,
 load balancer configurations, and other recommendations.</p>
+<section id="redis-high-availability-for-streaming">
+<h2>Redis high availability for streaming<a class="headerlink" href="#redis-high-availability-for-streaming" title="Link to this heading">#</a></h2>
+<p>Live data streaming (WebSocket subscriptions) is backed by a shared Redis
+<code class="docutils literal notranslate"><span class="pre">streaming_cache</span></code>, so in a multi-node deployment every Tiled node must point at
+the same Redis. To keep streaming available across a Redis outage, run Redis in
+a high-availability topology (a primary with replicas fronted by Redis
+Sentinel) and configure Tiled with <code class="docutils literal notranslate"><span class="pre">sentinels</span></code> and <code class="docutils literal notranslate"><span class="pre">service_name</span></code> instead of a
+single <code class="docutils literal notranslate"><span class="pre">uri</span></code>; the client then follows Sentinel through a failover and resumes
+subscriptions against the newly promoted primary.</p>
+<p>Live streaming is <strong>best-effort</strong>: it is delivered over Redis Pub/Sub, which is
+at-most-once, and the durable record is the SQL catalog, which is committed
+before the streaming publish. An ordinary connection drop is
+lossless — the client reconnects and resumes from the sequence number after the
+last one it received, and the server replays anything it missed — so a normal
+reconnect neither loses nor duplicates updates.</p>
+<p>The residual risk is a Sentinel failover to a <strong>replica that had not yet caught
+up</strong>. Redis replication is asynchronous and there is no per-write replication
+confirmation, so two things can happen. First, any update the old primary
+accepted but had not yet copied to that replica is gone — subscribers never
+receive it. Second, the promoted replica’s sequence counter is lower than the
+old primary’s, so as new updates arrive it hands out sequence numbers that were
+already used, and subscribers receive those numbers a second time (now labeling
+different data). Setting <code class="docutils literal notranslate"><span class="pre">min-replicas-to-write</span></code> / <code class="docutils literal notranslate"><span class="pre">min-replicas-max-lag</span></code> on the
+Redis primary narrows this window but does not close it. See
+<a class="reference internal" href="../reference/service-configuration.html"><span class="doc">Service Configuration Reference</span></a> for the full <code class="docutils literal notranslate"><span class="pre">streaming_cache</span></code> field
+reference.</p>
+</section>
 </section>
 
 
@@ -525,6 +552,18 @@ load balancer configurations, and other recommendations.</p>
                 <dialog id="pst-secondary-sidebar-modal"></dialog>
                 <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#redis-high-availability-for-streaming">Redis high availability for streaming</a></li>
+</ul>
+  </nav></div>
 
   <div class="sidebar-secondary-item">
 

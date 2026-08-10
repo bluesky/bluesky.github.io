@@ -1013,14 +1013,82 @@ window.runMermaid = runMermaid;</script>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">StreamingCacheConfig</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
-    <span class="n">uri</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1"># A single standalone node: ``redis://`` / ``rediss://`` / ``memory``.</span>
+    <span class="n">uri</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Or a Redis Sentinel cluster: a list of ``&quot;host:port&quot;`` Sentinels plus</span>
+    <span class="c1"># the ``service_name`` of the monitored primary. The client follows</span>
+    <span class="c1"># failover to the current primary.</span>
+    <span class="n">sentinels</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">service_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">password</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># TLS for the Sentinel path (the standalone ``uri`` path uses ``rediss://``</span>
+    <span class="c1"># instead). Applies to both Sentinel discovery and data-node connections;</span>
+    <span class="c1"># verification uses redis-py&#39;s default, matching ``rediss://``.</span>
+    <span class="n">ssl</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">data_ttl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span>  <span class="c1"># 1 hr</span>
     <span class="n">seq_ttl</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2592000</span>  <span class="c1"># 30 days</span>
     <span class="n">socket_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">86400</span>  <span class="c1"># 1 day</span>
     <span class="n">socket_connect_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="c1"># Interval (seconds) between health-check PINGs on idle connections, so</span>
+    <span class="c1"># redis-py detects a stalled connection after a Sentinel failover and</span>
+    <span class="c1"># reconnects instead of blocking on the dead primary. Kept low because</span>
+    <span class="c1"># socket_timeout is long: on a silent primary death (no TCP reset) this</span>
+    <span class="c1"># PING is the client&#39;s main timely signal, so it bounds failover detection.</span>
+    <span class="n">health_check_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
 
     <span class="n">model_config</span> <span class="o">=</span> <span class="n">SettingsConfigDict</span><span class="p">(</span><span class="n">env_prefix</span><span class="o">=</span><span class="s2">&quot;TILED_STREAMING_CACHE_&quot;</span><span class="p">)</span>
     <span class="n">settings_customise_sources</span> <span class="o">=</span> <span class="nb">classmethod</span><span class="p">(</span><span class="n">settings_customise_sources</span><span class="p">)</span>
+
+    <span class="nd">@model_validator</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;after&quot;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_source</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;StreamingCacheConfig&quot;</span><span class="p">:</span>
+        <span class="c1"># &#39;uri&#39; and &#39;sentinels&#39; are mutually exclusive; setting both is</span>
+        <span class="c1"># ambiguous (which one wins?), so reject it rather than silently</span>
+        <span class="c1"># ignoring one.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">uri</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;streaming_cache: set only one of &#39;uri&#39; or &#39;sentinels&#39;, not both.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">service_name</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;streaming_cache: &#39;service_name&#39; is required when &quot;</span>
+                    <span class="s2">&quot;&#39;sentinels&#39; is set.&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># Each Sentinel entry must be &#39;host:port&#39; (parsed the same way as</span>
+            <span class="c1"># the client, via rpartition), else the client fails cryptically at</span>
+            <span class="c1"># connect time on int(&#39;&#39;) / a missing host.</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sentinels</span><span class="p">:</span>
+                <span class="n">host</span><span class="p">,</span> <span class="n">sep</span><span class="p">,</span> <span class="n">port</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">sep</span> <span class="ow">and</span> <span class="n">host</span> <span class="ow">and</span> <span class="n">port</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;streaming_cache: sentinel entry </span><span class="si">{</span><span class="n">entry</span><span class="si">!r}</span><span class="s2"> must be &quot;</span>
+                        <span class="s2">&quot;&#39;host:port&#39;.&quot;</span>
+                    <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="p">:</span>
+            <span class="c1"># &#39;ssl&#39;, &#39;service_name&#39;, and &#39;password&#39; apply only to the Sentinel</span>
+            <span class="c1"># path and are ignored with a &#39;uri&#39;. Reject them so a misconfiguration</span>
+            <span class="c1"># fails loud -- especially &#39;ssl&#39;, where silently ignoring it would</span>
+            <span class="c1"># leave a connection the operator believes is encrypted running in</span>
+            <span class="c1"># plaintext.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ssl</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;streaming_cache: &#39;ssl&#39; applies to the &#39;sentinels&#39; path; for &quot;</span>
+                    <span class="s2">&quot;a single-node &#39;uri&#39; use the rediss:// scheme instead.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">service_name</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;streaming_cache: &#39;service_name&#39; is only used with &#39;sentinels&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">password</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;streaming_cache: &#39;password&#39; is only used with &#39;sentinels&#39;; &quot;</span>
+                    <span class="s2">&quot;for a single-node &#39;uri&#39; include the password in the uri.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;streaming_cache: set either &#39;uri&#39; or &#39;sentinels&#39; + &#39;service_name&#39;.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">WebhooksConfig</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>

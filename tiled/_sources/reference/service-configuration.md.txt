@@ -88,13 +88,82 @@ Example:
 (schema_streaming_cache)=
 ## streaming_cache
 
-Streaming cache database
+Redis-backed cache for live data streaming.
+
+Provide **either** a single-node `uri` **or**, for a highly-available
+deployment fronted by Redis Sentinel, a list of `sentinels` together with
+a `service_name`.
+
+A single, standalone Redis node:
+
+```yaml
+streaming_cache:
+  uri: "redis://:password@redis-host:6379"
+```
+
+A highly-available cluster managed by Redis Sentinel. Tiled connects to
+the Sentinels, discovers the current primary for `service_name`, and
+automatically follows failover when the primary changes:
+
+```yaml
+streaming_cache:
+  sentinels:
+    - "redis-sentinel-1:26379"
+    - "redis-sentinel-2:26379"
+    - "redis-sentinel-3:26379"
+  service_name: "tiled-streaming-cache"
+  password: "password"
+  ssl: true
+```
 
 
 (schema_streaming_cache.uri)=
 ### streaming_cache.uri
 
-Connection string, e.g. `redis://:password@host:port`
+Connection string for a single, standalone Redis node, e.g.
+`redis://:password@host:port`. The username is optional: omit it
+(`redis://:password@host:port`) to authenticate as the default user
+with `requirepass`, or include it (`redis://user:password@host:port`)
+for a Redis 6+ ACL user. Use the `rediss://` scheme for TLS. Mutually
+exclusive with `sentinels`.
+
+
+(schema_streaming_cache.sentinels)=
+### streaming_cache.sentinels
+
+For a highly-available deployment, a list of `"host:port"` Redis
+Sentinel addresses used instead of `uri`. The client discovers the
+current primary through the Sentinels and follows failover
+automatically. Requires `service_name`.
+
+
+(schema_streaming_cache.service_name)=
+### streaming_cache.service_name
+
+The name of the Sentinel-monitored replica set (Redis calls it the
+"master name"): an arbitrary label for the primary-plus-replicas group,
+which stays fixed across a failover and always resolves to the current
+primary. Must match the name the Sentinels are configured with (e.g.
+`tiled-streaming-cache`). Required when `sentinels` is set.
+
+
+(schema_streaming_cache.password)=
+### streaming_cache.password
+
+Password for the Redis data nodes, used with `sentinels`. (For a
+single-node deployment, include the password in `uri` instead.)
+
+
+(schema_streaming_cache.ssl)=
+### streaming_cache.ssl
+
+Enable TLS for the `sentinels` path, securing both the Sentinel
+discovery connections and the data-node (primary/replica) connections
+the client follows failover across. Certificate verification uses the
+same default as the standalone `rediss://` path. Defaults to `false`.
+(For a single-node deployment, use the `rediss://` scheme in `uri`
+instead.)
+
 
 (schema_streaming_cache.data_ttl)=
 ### streaming_cache.data_ttl
@@ -118,6 +187,16 @@ dormant periods.
 ### streaming_cache.socket_connect_timeout
 
 Configure Redis client. The default is 10 (seconds).
+
+
+(schema_streaming_cache.health_check_interval)=
+### streaming_cache.health_check_interval
+
+Interval, in seconds, between health-check PINGs on idle Redis
+connections. Applies to the Sentinel (HA) path only, where it lets the
+client detect a stalled connection after a failover and reconnect
+rather than blocking on the old primary. The default is 10 (seconds);
+it bounds how quickly the client notices a silently-dead primary.
 
 
 (schema_media_types)=

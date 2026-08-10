@@ -703,10 +703,65 @@ callable requires no arguments.</p>
 </section>
 <section id="streaming-cache">
 <span id="schema-streaming-cache"></span><h2>streaming_cache<a class="headerlink" href="#streaming-cache" title="Link to this heading">#</a></h2>
-<p>Streaming cache database</p>
+<p>Redis-backed cache for live data streaming.</p>
+<p>Provide <strong>either</strong> a single-node <code class="docutils literal notranslate"><span class="pre">uri</span></code> <strong>or</strong>, for a highly-available
+deployment fronted by Redis Sentinel, a list of <code class="docutils literal notranslate"><span class="pre">sentinels</span></code> together with
+a <code class="docutils literal notranslate"><span class="pre">service_name</span></code>.</p>
+<p>A single, standalone Redis node:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">streaming_cache</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;redis://:password@redis-host:6379&quot;</span>
+</pre></div>
+</div>
+<p>A highly-available cluster managed by Redis Sentinel. Tiled connects to
+the Sentinels, discovers the current primary for <code class="docutils literal notranslate"><span class="pre">service_name</span></code>, and
+automatically follows failover when the primary changes:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">streaming_cache</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">sentinels</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;redis-sentinel-1:26379&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;redis-sentinel-2:26379&quot;</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;redis-sentinel-3:26379&quot;</span>
+<span class="w">  </span><span class="nt">service_name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tiled-streaming-cache&quot;</span>
+<span class="w">  </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;password&quot;</span>
+<span class="w">  </span><span class="nt">ssl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
 <section id="streaming-cache-uri">
 <span id="schema-streaming-cache-uri"></span><h3>streaming_cache.uri<a class="headerlink" href="#streaming-cache-uri" title="Link to this heading">#</a></h3>
-<p>Connection string, e.g. <code class="docutils literal notranslate"><span class="pre">redis://:password&#64;host:port</span></code></p>
+<p>Connection string for a single, standalone Redis node, e.g.
+<code class="docutils literal notranslate"><span class="pre">redis://:password&#64;host:port</span></code>. The username is optional: omit it
+(<code class="docutils literal notranslate"><span class="pre">redis://:password&#64;host:port</span></code>) to authenticate as the default user
+with <code class="docutils literal notranslate"><span class="pre">requirepass</span></code>, or include it (<code class="docutils literal notranslate"><span class="pre">redis://user:password&#64;host:port</span></code>)
+for a Redis 6+ ACL user. Use the <code class="docutils literal notranslate"><span class="pre">rediss://</span></code> scheme for TLS. Mutually
+exclusive with <code class="docutils literal notranslate"><span class="pre">sentinels</span></code>.</p>
+</section>
+<section id="streaming-cache-sentinels">
+<span id="schema-streaming-cache-sentinels"></span><h3>streaming_cache.sentinels<a class="headerlink" href="#streaming-cache-sentinels" title="Link to this heading">#</a></h3>
+<p>For a highly-available deployment, a list of <code class="docutils literal notranslate"><span class="pre">&quot;host:port&quot;</span></code> Redis
+Sentinel addresses used instead of <code class="docutils literal notranslate"><span class="pre">uri</span></code>. The client discovers the
+current primary through the Sentinels and follows failover
+automatically. Requires <code class="docutils literal notranslate"><span class="pre">service_name</span></code>.</p>
+</section>
+<section id="streaming-cache-service-name">
+<span id="schema-streaming-cache-service-name"></span><h3>streaming_cache.service_name<a class="headerlink" href="#streaming-cache-service-name" title="Link to this heading">#</a></h3>
+<p>The name of the Sentinel-monitored replica set (Redis calls it the
+“master name”): an arbitrary label for the primary-plus-replicas group,
+which stays fixed across a failover and always resolves to the current
+primary. Must match the name the Sentinels are configured with (e.g.
+<code class="docutils literal notranslate"><span class="pre">tiled-streaming-cache</span></code>). Required when <code class="docutils literal notranslate"><span class="pre">sentinels</span></code> is set.</p>
+</section>
+<section id="streaming-cache-password">
+<span id="schema-streaming-cache-password"></span><h3>streaming_cache.password<a class="headerlink" href="#streaming-cache-password" title="Link to this heading">#</a></h3>
+<p>Password for the Redis data nodes, used with <code class="docutils literal notranslate"><span class="pre">sentinels</span></code>. (For a
+single-node deployment, include the password in <code class="docutils literal notranslate"><span class="pre">uri</span></code> instead.)</p>
+</section>
+<section id="streaming-cache-ssl">
+<span id="schema-streaming-cache-ssl"></span><h3>streaming_cache.ssl<a class="headerlink" href="#streaming-cache-ssl" title="Link to this heading">#</a></h3>
+<p>Enable TLS for the <code class="docutils literal notranslate"><span class="pre">sentinels</span></code> path, securing both the Sentinel
+discovery connections and the data-node (primary/replica) connections
+the client follows failover across. Certificate verification uses the
+same default as the standalone <code class="docutils literal notranslate"><span class="pre">rediss://</span></code> path. Defaults to <code class="docutils literal notranslate"><span class="pre">false</span></code>.
+(For a single-node deployment, use the <code class="docutils literal notranslate"><span class="pre">rediss://</span></code> scheme in <code class="docutils literal notranslate"><span class="pre">uri</span></code>
+instead.)</p>
 </section>
 <section id="streaming-cache-data-ttl">
 <span id="schema-streaming-cache-data-ttl"></span><h3>streaming_cache.data_ttl<a class="headerlink" href="#streaming-cache-data-ttl" title="Link to this heading">#</a></h3>
@@ -725,6 +780,14 @@ dormant periods.</p>
 <section id="streaming-cache-socket-connect-timeout">
 <span id="schema-streaming-cache-socket-connect-timeout"></span><h3>streaming_cache.socket_connect_timeout<a class="headerlink" href="#streaming-cache-socket-connect-timeout" title="Link to this heading">#</a></h3>
 <p>Configure Redis client. The default is 10 (seconds).</p>
+</section>
+<section id="streaming-cache-health-check-interval">
+<span id="schema-streaming-cache-health-check-interval"></span><h3>streaming_cache.health_check_interval<a class="headerlink" href="#streaming-cache-health-check-interval" title="Link to this heading">#</a></h3>
+<p>Interval, in seconds, between health-check PINGs on idle Redis
+connections. Applies to the Sentinel (HA) path only, where it lets the
+client detect a stalled connection after a failover and reconnect
+rather than blocking on the old primary. The default is 10 (seconds);
+it bounds how quickly the client notices a silently-dead primary.</p>
 </section>
 </section>
 <section id="media-types">
@@ -1158,10 +1221,15 @@ and the object itself it separated by a colon.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache">streaming_cache</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-uri">streaming_cache.uri</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-sentinels">streaming_cache.sentinels</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-service-name">streaming_cache.service_name</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-password">streaming_cache.password</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-ssl">streaming_cache.ssl</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-data-ttl">streaming_cache.data_ttl</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-seq-ttl">streaming_cache.seq_ttl</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-socket-timeout">streaming_cache.socket_timeout</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-socket-connect-timeout">streaming_cache.socket_connect_timeout</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#streaming-cache-health-check-interval">streaming_cache.health_check_interval</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#media-types">media_types</a><ul class="nav section-nav flex-column">
