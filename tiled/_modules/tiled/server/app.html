@@ -833,6 +833,7 @@ window.runMermaid = runMermaid;</script>
     <span class="n">construct_build_app_kwargs</span><span class="p">,</span>
     <span class="n">parse_configs</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..graph.router</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_router</span> <span class="k">as</span> <span class="n">get_links_router</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..media_type_registration</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CompressionRegistry</span><span class="p">,</span>
     <span class="n">SerializationRegistry</span><span class="p">,</span>
@@ -1215,6 +1216,15 @@ window.runMermaid = runMermaid;</script>
 
     <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">get_zarr_router_v2</span><span class="p">(),</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/zarr/v2&quot;</span><span class="p">)</span>
     <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">get_zarr_router_v3</span><span class="p">(),</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/zarr/v3&quot;</span><span class="p">)</span>
+
+    <span class="c1"># The graph feature stores its tables in the catalog</span>
+    <span class="c1"># database (entities.node_id is a foreign key to the catalog&#39;s nodes</span>
+    <span class="c1"># table), so it is only available when serving a catalog-backed tree.</span>
+    <span class="c1"># Note this is independent of `database:` config, which configures the</span>
+    <span class="c1"># unrelated authn/session database.</span>
+    <span class="n">catalog_context</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">&quot;context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">catalog_context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">get_links_router</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">catalog_context</span><span class="o">.</span><span class="n">database_settings</span><span class="p">))</span>
 
     <span class="c1"># The Tree and Authenticator have the opportunity to add custom routes to</span>
     <span class="c1"># the server here. (Just for example, a Tree of BlueskyRuns uses this</span>
