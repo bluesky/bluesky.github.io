@@ -786,9 +786,11 @@ window.runMermaid = runMermaid;</script>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">builtins</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
@@ -814,6 +816,8 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..type_aliases</span><span class="w"> </span><span class="kn">import</span> <span class="n">JSON</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">BrokenLink</span><span class="p">,</span> <span class="n">Sentinel</span><span class="p">,</span> <span class="n">node_repr</span><span class="p">,</span> <span class="n">path_from_uri</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.array</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayAdapter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.resource_cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">with_resource_cache</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">IO_WORKERS</span><span class="p">,</span> <span class="n">READ_BATCH_BYTES</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">split_chunks</span>
 
 <span class="n">SWMR_DEFAULT</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;TILED_HDF5_SWMR_DEFAULT&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)))</span>
@@ -967,8 +971,16 @@ window.runMermaid = runMermaid;</script>
                 <span class="n">result</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">chunks</span> <span class="ow">or</span> <span class="n">ds</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">dtype</span>
             <span class="k">return</span> <span class="n">result</span>
 
-        <span class="c1"># Need to know shapes/dtypes of constituent arrays to load them lazily</span>
-        <span class="n">shapes_chunks_dtypes</span> <span class="o">=</span> <span class="p">[</span><span class="n">_get_hdf5_specs</span><span class="p">(</span><span class="n">fpath</span><span class="p">)</span> <span class="k">for</span> <span class="n">fpath</span> <span class="ow">in</span> <span class="n">file_paths</span><span class="p">]</span>
+        <span class="c1"># Need to know shapes/dtypes of constituent arrays to load them lazily.</span>
+        <span class="c1"># Reading specs opens every file (twice, for external links), so for</span>
+        <span class="c1"># many-file datasets do this in parallel while preserving order.</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">file_paths</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">IO_WORKERS</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">file_paths</span><span class="p">))</span>
+            <span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+                <span class="n">shapes_chunks_dtypes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_get_hdf5_specs</span><span class="p">,</span> <span class="n">file_paths</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">shapes_chunks_dtypes</span> <span class="o">=</span> <span class="p">[</span><span class="n">_get_hdf5_specs</span><span class="p">(</span><span class="n">fpath</span><span class="p">)</span> <span class="k">for</span> <span class="n">fpath</span> <span class="ow">in</span> <span class="n">file_paths</span><span class="p">]</span>
         <span class="n">dtype</span> <span class="o">=</span> <span class="n">shapes_chunks_dtypes</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="n">numpy</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s2">&quot;O&quot;</span><span class="p">):</span>
             <span class="c1"># h5py uses NumPy&#39;s object dtype to represent variable-length</span>
@@ -1024,18 +1036,41 @@ window.runMermaid = runMermaid;</script>
 
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Use delayed loading to read and conactenate arrays from multiple files</span>
-            <span class="c1"># First, find chunks along the left axis (split per file),</span>
-            <span class="c1"># and chunks in the rest of the dimensions (same for each file)</span>
-            <span class="n">file_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
-                <span class="n">split_chunks</span><span class="p">(</span><span class="n">shp</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">max</span><span class="p">(</span><span class="n">chk</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">MIN_CHUNK_SIZE</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">shp</span><span class="p">,</span> <span class="n">chk</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">shapes_chunks_dtypes</span>
-            <span class="p">)</span>
-            <span class="c1"># Shape of the rest of dimensions</span>
+            <span class="c1"># Determine chunks along the leftmost (concatenation) axis, split</span>
+            <span class="c1"># per file, and chunks in the rest of the dimensions (shared by all</span>
+            <span class="c1"># files). The constituent files&#39; native HDF5 chunks are often tiny</span>
+            <span class="c1"># (e.g. a single frame per chunk, with thousands of frames per</span>
+            <span class="c1"># file), which explodes the number of Dask tasks -- and every task</span>
+            <span class="c1"># re-opens the file. To avoid that, coalesce native chunks into</span>
+            <span class="c1"># blocks of whole rows (full rest dimensions) up to READ_BATCH_BYTES,</span>
+            <span class="c1"># so each file is read in as few tasks as possible.</span>
             <span class="n">rest_shape</span> <span class="o">=</span> <span class="n">shapes_chunks_dtypes</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">:]</span>
-            <span class="n">rest_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
-                <span class="n">split_chunks</span><span class="p">(</span><span class="n">shp</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">chk</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">chk</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">shapes_chunks_dtypes</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">shp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">rest_shape</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="n">rest_row_bytes</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">rest_shape</span><span class="p">)</span> <span class="o">*</span> <span class="n">dtype</span><span class="o">.</span><span class="n">itemsize</span>
+            <span class="n">rest_chunks</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span>
+            <span class="n">read_batch_bytes</span> <span class="o">=</span> <span class="n">READ_BATCH_BYTES</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">rest_shape</span> <span class="ow">or</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">rest_row_bytes</span> <span class="o">&lt;=</span> <span class="n">read_batch_bytes</span><span class="p">:</span>
+                <span class="c1"># Read whole rows (full rest dimensions) in blocks along axis 0,</span>
+                <span class="c1"># sized up to the batch limit but never smaller than the native</span>
+                <span class="c1"># chunk along axis 0.</span>
+                <span class="n">rows_per_block</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">read_batch_bytes</span> <span class="o">//</span> <span class="p">(</span><span class="n">rest_row_bytes</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">))</span>
+                <span class="n">file_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                    <span class="n">split_chunks</span><span class="p">(</span><span class="n">shp</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">max</span><span class="p">(</span><span class="n">chk</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">rows_per_block</span><span class="p">))</span>
+                    <span class="k">for</span> <span class="n">shp</span><span class="p">,</span> <span class="n">chk</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">shapes_chunks_dtypes</span>
+                <span class="p">)</span>
+                <span class="n">rest_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">((</span><span class="n">shp</span><span class="p">,)</span> <span class="k">for</span> <span class="n">shp</span> <span class="ow">in</span> <span class="n">rest_shape</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># A single row already exceeds the batch limit: fall back to the</span>
+                <span class="c1"># files&#39; native tiling in every dimension.</span>
+                <span class="n">file_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                    <span class="n">split_chunks</span><span class="p">(</span><span class="n">shp</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">max</span><span class="p">(</span><span class="n">chk</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">MIN_CHUNK_SIZE</span><span class="p">))</span>
+                    <span class="k">for</span> <span class="n">shp</span><span class="p">,</span> <span class="n">chk</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">shapes_chunks_dtypes</span>
+                <span class="p">)</span>
+                <span class="n">rest_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+                    <span class="n">split_chunks</span><span class="p">(</span>
+                        <span class="n">shp</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">chk</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">chk</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">shapes_chunks_dtypes</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">shp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">rest_shape</span><span class="p">)</span>
+                <span class="p">)</span>
             <span class="n">dim0_chunks</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">size</span> <span class="k">for</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">file_chunks</span> <span class="k">for</span> <span class="n">size</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">)</span>
             <span class="n">chunks_final</span> <span class="o">=</span> <span class="p">(</span><span class="n">dim0_chunks</span><span class="p">,</span> <span class="o">*</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">rest_chunks</span><span class="p">])</span>
 
@@ -1112,8 +1147,26 @@ window.runMermaid = runMermaid;</script>
         <span class="p">]</span> <span class="ow">or</span> <span class="p">[</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data_uri</span><span class="p">]</span>
         <span class="n">file_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span> <span class="k">for</span> <span class="n">uri</span> <span class="ow">in</span> <span class="n">data_uris</span><span class="p">]</span>
 
-        <span class="n">array</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lazy_load_hdf5_array</span><span class="p">(</span>
-            <span class="o">*</span><span class="n">file_paths</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+        <span class="c1"># Building the lazy Dask array opens every constituent file to read its</span>
+        <span class="c1"># specs. Cache the array so repeated reads of the same dataset reuse the</span>
+        <span class="c1"># graph instead of re-opening all files. Slicing the cached array below</span>
+        <span class="c1"># returns a new array, leaving the cached one unmodified.</span>
+        <span class="n">cache_key</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">HDF5ArrayAdapter</span><span class="o">.</span><span class="n">lazy_load_hdf5_array</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="p">,</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="n">file_paths</span><span class="p">),</span>
+            <span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">array</span> <span class="o">=</span> <span class="n">with_resource_cache</span><span class="p">(</span>
+            <span class="n">cache_key</span><span class="p">,</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">lazy_load_hdf5_array</span><span class="p">,</span>
+            <span class="o">*</span><span class="n">file_paths</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">slice</span><span class="p">:</span>
