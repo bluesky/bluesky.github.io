@@ -1184,7 +1184,7 @@ window.runMermaid = runMermaid;</script>
                 <span class="n">manifests</span><span class="p">[</span><span class="n">asset</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">manifest</span>
         <span class="k">return</span> <span class="n">manifests</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">raw_export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">raw_export</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">compression</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Download the raw assets backing this node.</span>
 
 <span class="sd">        This may produce a single file or a directory.</span>
@@ -1201,6 +1201,13 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">            the current working directory.</span>
 <span class="sd">        max_workers : int, optional</span>
 <span class="sd">            Number of parallel workers downloading data. Default is 4.</span>
+<span class="sd">        compression : bool, optional</span>
+<span class="sd">            Whether to let the server compress the response on the fly. Default</span>
+<span class="sd">            is `True`, which streams via zstd/gzip (blosc2 is excluded because</span>
+<span class="sd">            its client decoder cannot stream). Set to `False` to download</span>
+<span class="sd">            uncompressed (`Accept-Encoding: identity`), which avoids wasting CPU</span>
+<span class="sd">            on already-incompressible assets and yields a `Content-Length` (and</span>
+<span class="sd">            thus a determinate progress bar).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1233,10 +1240,15 @@ window.runMermaid = runMermaid;</script>
             <span class="n">destination</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">destination</span> <span class="ow">or</span> <span class="n">Path</span><span class="o">.</span><span class="n">cwd</span><span class="p">())</span>
 
         <span class="c1"># Import here to defer the import of rich (for progress bar).</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">.download</span><span class="w"> </span><span class="kn">import</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">,</span> <span class="n">download</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.download</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">,</span>
+            <span class="n">STREAMING_ACCEPT_ENCODING</span><span class="p">,</span>
+            <span class="n">download</span><span class="p">,</span>
+        <span class="p">)</span>
 
         <span class="n">urls</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">targets</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Paths or posix-style string keys.</span>
+        <span class="n">sizes</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Known content lengths (parallel to urls); None if unknown.</span>
         <span class="n">data_sources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_data_sources</span><span class="p">()</span><span class="o">.</span><span class="n">data_sources</span><span class="p">()</span>
         <span class="n">asset_manifest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">asset_manifest</span><span class="p">(</span><span class="n">data_sources</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_sources</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
@@ -1271,6 +1283,8 @@ window.runMermaid = runMermaid;</script>
                             <span class="k">for</span> <span class="n">relative_path</span> <span class="ow">in</span> <span class="n">relative_paths</span>
                         <span class="p">]</span>
                     <span class="p">)</span>
+                    <span class="c1"># Per-file sizes within a directory asset are not known.</span>
+                    <span class="n">sizes</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">relative_paths</span><span class="p">))</span>
                     <span class="k">if</span> <span class="n">in_memory</span><span class="p">:</span>
                         <span class="n">targets</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
                             <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">rp</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">base</span> <span class="k">else</span> <span class="n">rp</span> <span class="k">for</span> <span class="n">rp</span> <span class="ow">in</span> <span class="n">relative_paths</span><span class="p">]</span>
@@ -1287,6 +1301,7 @@ window.runMermaid = runMermaid;</script>
                             <span class="p">},</span>
                         <span class="p">)</span>
                     <span class="p">)</span>
+                    <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">asset</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">in_memory</span><span class="p">:</span>
                         <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -1295,6 +1310,7 @@ window.runMermaid = runMermaid;</script>
                         <span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">targets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">ATTACHMENT_FILENAME_PLACEHOLDER</span><span class="p">))</span>
+        <span class="n">accept_encoding</span> <span class="o">=</span> <span class="n">STREAMING_ACCEPT_ENCODING</span> <span class="k">if</span> <span class="n">compression</span> <span class="k">else</span> <span class="s2">&quot;identity&quot;</span>
         <span class="k">if</span> <span class="n">in_memory</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">download</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span>
@@ -1302,9 +1318,16 @@ window.runMermaid = runMermaid;</script>
                 <span class="n">targets</span><span class="p">,</span>
                 <span class="n">mapping</span><span class="o">=</span><span class="n">destination</span><span class="p">,</span>
                 <span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">,</span>
+                <span class="n">totals</span><span class="o">=</span><span class="n">sizes</span><span class="p">,</span>
+                <span class="n">accept_encoding</span><span class="o">=</span><span class="n">accept_encoding</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">download</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span> <span class="n">urls</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="p">,</span>
+            <span class="n">urls</span><span class="p">,</span>
+            <span class="n">targets</span><span class="p">,</span>
+            <span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">,</span>
+            <span class="n">totals</span><span class="o">=</span><span class="n">sizes</span><span class="p">,</span>
+            <span class="n">accept_encoding</span><span class="o">=</span><span class="n">accept_encoding</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>
