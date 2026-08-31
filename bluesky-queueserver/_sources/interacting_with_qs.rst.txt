@@ -65,17 +65,46 @@ and starting and then stopping acquisition with ``start()`` and ``stop()`` metho
 Subscribing to Published System Info
 ------------------------------------
 
-In addition to streaming of console output, RE Manager is publishing status information to
-the same 0MQ PUB socket. The status information published using a different topic and can
-be easily separated from console output messages. The messages are published once per
-second or each time status is changed by RE Manager. Periodically published status can be
-used as 'heartbeat' to detect that RE Manager is running properly.
+In addition to streaming of console output, RE Manager is publishing additional information
+for system monitoring on the same 0MQ PUB socket using the topic ``QS_info``. The published
+information currently includes:
+
+- RE Manager status;
+- device progress updates.
+
+Additional information may be added to the stream in the future. Clients are responsible for 
+selecting messages using the key name. System info streaming is disabled by default and must 
+be enabled via the ``--zmq-publish-info`` CLI parameter or the ``network/zmq_publish_info`` 
+config file parameter, which enables streaming of default data such as status. 
+Streaming of optional data can be enabled independently using dedicated parameters.
+
+Status information
+++++++++++++++++++
+
+The information includes complete dictionary returned by ``status`` API. The messages are 
+published once per second or each time status is changed by RE Manager. Periodically published 
+status can be used as 'heartbeat' to detect that RE Manager is running properly.
 
 The message format used for streaming is similar to the message format for console output.
 The ``status`` key indicates that the message contains status information. Messages with
 other information may be added to the stream in the future::
 
   {"time": <timestamp>, "msg": {"status": <status-info>}}
+
+Device progress updates (optional)
+++++++++++++++++++++++++++++++++++
+
+While a plan is running, RE Manager also streams device progress updates (RunEngine
+``waiting_hook`` / watcher updates, e.g. the position of a moving motor) on the same socket
+under the ``device_progress`` key. Each update contains the device name, current/initial/target
+values, engineering units, precision, completion fraction, elapsed/remaining time, and a ``done``
+flag. A message with ``{"completed": true}`` is sent when the RunEngine finishes waiting::
+
+  {"time": <timestamp>, "msg": {"device_progress": <progress-info>}}
+
+Device progress streaming is disabled by default and can be enabled using the
+``--zmq-stream-device-progress`` CLI parameter of ``start-re-manager`` or 
+``network/zmq_stream_device_progress`` parameter in the config file.
 
 
 The ``ReceiveSystemInfo`` class can be used in synchronous or thread-based applications to

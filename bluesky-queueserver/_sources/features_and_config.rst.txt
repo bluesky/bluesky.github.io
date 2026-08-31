@@ -169,6 +169,11 @@ Remote Monitoring of System Info
 --------------------------------
 
 In addition to streaming console output, RE Manager is streaming system information over the
-same 0MQ socket. Currently only RE Manager status is streamed. The convenience classes
-``ReceiveSystemInfo`` and ``ReceiveSystemInfoAsync`` can be used to implement remote monitoring
-features in client applications. See :ref:`subscribing_to_system_info` for more details.
+same 0MQ socket. RE Manager status is streamed under the ``status`` key. When a plan is running,
+device progress updates (RunEngine ``waiting_hook`` / watcher updates, such as motor position
+while moving) are also streamed on the same socket under the ``device_progress`` key. Progress
+streaming is disabled by default and can be enabled using the ``--zmq-stream-device-progress``
+parameter of ``start-re-manager`` or ``network/zmq_stream_device_progress`` parameter in the config
+file. The convenience classes ``ReceiveSystemInfo`` and ``ReceiveSystemInfoAsync`` can be used 
+to implement remote monitoring features in client applications. See :ref:`subscribing_to_system_info` 
+for more details.
