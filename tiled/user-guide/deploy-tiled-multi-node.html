@@ -513,6 +513,30 @@ Redis primary narrows this window but does not close it. See
 <a class="reference internal" href="../reference/service-configuration.html"><span class="doc">Service Configuration Reference</span></a> for the full <code class="docutils literal notranslate"><span class="pre">streaming_cache</span></code> field
 reference.</p>
 </section>
+<section id="postgres-high-availability">
+<h2>Postgres high availability<a class="headerlink" href="#postgres-high-availability" title="Link to this heading">#</a></h2>
+<p>Tiled stores its data in Postgres. To keep Tiled writable across a database
+node outage, run Postgres in a high-availability topology (a primary with
+streaming replicas, managed by a tool such as <a class="reference external" href="https://patroni.readthedocs.io/">Patroni</a> for automatic
+failover) and give Tiled a <strong>multi-host connection URI</strong> listing every cluster
+member, with <code class="docutils literal notranslate"><span class="pre">target_session_attrs=read-write</span></code> so the client connects to
+whichever node is currently the read-write primary. The hosts are specified
+using SQLAlchemy’s
+<a class="reference external" href="https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#multihost-connections">multiple host connection string syntax</a>.</p>
+<p>Tiled uses up to three PostgreSQL databases, and the same multi-host URI
+applies to each: the <strong>authentication</strong> database (<code class="docutils literal notranslate"><span class="pre">database.uri</span></code>), the
+<strong>catalog</strong> (<code class="docutils literal notranslate"><span class="pre">catalog.uri</span></code>), and Postgres <strong>tabular storage</strong> (a
+<code class="docutils literal notranslate"><span class="pre">catalog.writable_storage</span></code> entry). Give each of them the multi-host URI:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">database</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">"postgresql://tiled:${TILED_DATABASE_PASSWORD}@/tiled_authn?host=db1.example:5432&amp;host=db2.example:5432&amp;host=db3.example:5432&amp;target_session_attrs=read-write&amp;ssl=verify-full"</span>
+
+<span class="nt">catalog</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">"postgresql://tiled:${TILED_DATABASE_PASSWORD}@/tiled_catalog?host=db1.example:5432&amp;host=db2.example:5432&amp;host=db3.example:5432&amp;target_session_attrs=read-write&amp;ssl=verify-full"</span>
+<span class="w">  </span><span class="nt">writable_storage</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"postgresql://tiled:${TILED_DATABASE_PASSWORD}@/tiled_storage?host=db1.example:5432&amp;host=db2.example:5432&amp;host=db3.example:5432&amp;target_session_attrs=read-write&amp;ssl=verify-full"</span>
+</pre></div>
+</div>
+</section>
 </section>
 
 
@@ -563,6 +587,7 @@ reference.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#redis-high-availability-for-streaming">Redis high availability for streaming</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#postgres-high-availability">Postgres high availability</a></li>
 </ul>
   </nav></div>
 
