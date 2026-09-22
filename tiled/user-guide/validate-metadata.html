@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Scale Tiled over Multiple Nodes &#8212; tiled main documentation</title>
+    <title>Specs and Metadata Validation &#8212; tiled main documentation</title>
   
   
   
@@ -51,12 +51,12 @@
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/deploy-tiled-multi-node';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/validate-metadata';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Example Server Configuration" href="example-server-config.html" />
-    <link rel="prev" title="Deploy Tiled on a Single Host" href="deploy-tiled-single-node.html" />
+    <link rel="next" title="Create and Use API Keys" href="api-keys.html" />
+    <link rel="prev" title="Add Custom Export Formats" href="custom-export-formats.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="main" />
@@ -390,10 +390,10 @@
      aria-label="Section Navigation">
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="deploy-tiled-server.html">Deploying the Tiled Server</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="deploy-tiled-server.html">Deploying the Tiled Server</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="simple-server.html">Simple (Embedded) Server</a></li>
 <li class="toctree-l2"><a class="reference internal" href="deploy-tiled-single-node.html">Deploy Tiled on a Single Host</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Scale Tiled over Multiple Nodes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deploy-tiled-multi-node.html">Scale Tiled over Multiple Nodes</a></li>
 <li class="toctree-l2"><a class="reference internal" href="example-server-config.html">Example Server Configuration</a></li>
 </ul>
 </details></li>
@@ -405,7 +405,7 @@
 <li class="toctree-l1"><a class="reference internal" href="configuration.html">Serve Data using Configuration Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="read-custom-formats.html">Serve Files with Custom Formats</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom-export-formats.html">Add Custom Export Formats</a></li>
-<li class="toctree-l1"><a class="reference internal" href="validate-metadata.html">Specs and Metadata Validation</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Specs and Metadata Validation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api-keys.html">Create and Use API Keys</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom-clients.html">Custom Python Client Objects</a></li>
 <li class="toctree-l1"><a class="reference internal" href="metrics.html">Prometheus Metrics</a></li>
@@ -459,10 +459,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">User Guide</a></li>
     
-    
-    <li class="breadcrumb-item"><a href="deploy-tiled-server.html" class="nav-link">Deploying the Tiled Server</a></li>
-    
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Scale Tiled over Multiple Nodes</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Specs and Metadata Validation</span></li>
   </ul>
 </nav>
 </div>
@@ -479,64 +476,120 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="scale-tiled-over-multiple-nodes">
-<h1>Scale Tiled over Multiple Nodes<a class="headerlink" href="#scale-tiled-over-multiple-nodes" title="Link to this heading">#</a></h1>
-<p>Several Scientific User Facilities run deployments of Tiled that are
-horizontally scaled over multiple nodes.</p>
-<p>At least one uses Kubernetes with a <a class="reference external" href="https://github.com/bluesky/tiled/pkgs/container/charts%2Ftiled">Helm chart</a> maintained in the Tiled repository.
-Another uses Ansible for orchestration of a fleet of VMs.</p>
-<p>We aim to expand this page to share more details, including host resources,
-load balancer configurations, and other recommendations.</p>
-<section id="redis-high-availability-for-streaming">
-<h2>Redis high availability for streaming<a class="headerlink" href="#redis-high-availability-for-streaming" title="Link to this heading">#</a></h2>
-<p>Live data streaming (WebSocket subscriptions) is backed by a shared Redis
-<code class="docutils literal notranslate"><span class="pre">streaming_cache</span></code>, so in a multi-node deployment every Tiled node must point at
-the same Redis. To keep streaming available across a Redis outage, run Redis in
-a high-availability topology (a primary with replicas fronted by Redis
-Sentinel) and configure Tiled with <code class="docutils literal notranslate"><span class="pre">sentinels</span></code> and <code class="docutils literal notranslate"><span class="pre">service_name</span></code> instead of a
-single <code class="docutils literal notranslate"><span class="pre">uri</span></code>; the client then follows Sentinel through a failover and resumes
-subscriptions against the newly promoted primary.</p>
-<p>Live streaming is <strong>best-effort</strong>: it is delivered over Redis Pub/Sub, which is
-at-most-once, and the durable record is the SQL catalog, which is committed
-before the streaming publish. An ordinary connection drop is
-lossless — the client reconnects and resumes from the sequence number after the
-last one it received, and the server replays anything it missed — so a normal
-reconnect neither loses nor duplicates updates.</p>
-<p>The residual risk is a Sentinel failover to a <strong>replica that had not yet caught
-up</strong>. Redis replication is asynchronous and there is no per-write replication
-confirmation, so two things can happen. First, any update the old primary
-accepted but had not yet copied to that replica is gone — subscribers never
-receive it. Second, the promoted replica’s sequence counter is lower than the
-old primary’s, so as new updates arrive it hands out sequence numbers that were
-already used, and subscribers receive those numbers a second time (now labeling
-different data). Setting <code class="docutils literal notranslate"><span class="pre">min-replicas-to-write</span></code> / <code class="docutils literal notranslate"><span class="pre">min-replicas-max-lag</span></code> on the
-Redis primary narrows this window but does not close it. See
-<a class="reference internal" href="../reference/service-configuration.html"><span class="doc">Service Configuration Reference</span></a> for the full <code class="docutils literal notranslate"><span class="pre">streaming_cache</span></code> field
-reference.</p>
-</section>
-<section id="postgres-high-availability">
-<h2>Postgres high availability<a class="headerlink" href="#postgres-high-availability" title="Link to this heading">#</a></h2>
-<p>Tiled stores its data in Postgres. To keep Tiled writable across a database
-node outage, run Postgres in a high-availability topology (a primary with
-streaming replicas, managed by a tool such as <a class="reference external" href="https://patroni.readthedocs.io/">Patroni</a> for automatic
-failover) and give Tiled a <strong>multi-host connection URI</strong> listing every cluster
-member, with <code class="docutils literal notranslate"><span class="pre">target_session_attrs=read-write</span></code> so the client connects to
-whichever node is currently the read-write primary. The hosts are specified
-using SQLAlchemy’s
-<a class="reference external" href="https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#multihost-connections">multiple host connection string syntax</a>.</p>
-<p>Tiled uses up to three PostgreSQL databases, and the same multi-host URI
-applies to each: the <strong>authentication</strong> database (<code class="docutils literal notranslate"><span class="pre">database.uri</span></code>), the
-<strong>catalog</strong> (<code class="docutils literal notranslate"><span class="pre">catalog.uri</span></code>), and Postgres <strong>tabular storage</strong> (a
-<code class="docutils literal notranslate"><span class="pre">catalog.writable_storage</span></code> entry). Give each of them the multi-host URI:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">database</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">"postgresql://tiled:${TILED_DATABASE_PASSWORD}@/tiled_authn?host=db1.example:5432&amp;host=db2.example:5432&amp;host=db3.example:5432&amp;target_session_attrs=read-write&amp;ssl=verify-full"</span>
+  <section id="specs-and-metadata-validation">
+<span id="validate-metadata"></span><h1>Specs and Metadata Validation<a class="headerlink" href="#specs-and-metadata-validation" title="Link to this heading">#</a></h1>
+<p>A <em>spec</em> is a label, attached to a node, that declares that the node follows some
+convention – for example, that its metadata contains certain fields. See
+<a class="reference internal" href="../explanations/metadata.html"><span class="doc">Metadata and “Specs”</span></a> and <a class="reference internal" href="../explanations/standards.html"><span class="doc">Standards Used by Tiled</span></a> for
+background.</p>
+<p>The Tiled server can <em>validate</em> node’s metadata against a spec when the data is written or
+its metadata is edited. For this, the server configuration can declare which specs
+are accepted and – optionally – a validator function that checks (and, if desired,
+normalizes) the metadata for each of them.</p>
+<section id="write-a-validator-function">
+<h2>Write a validator function<a class="headerlink" href="#write-a-validator-function" title="Link to this heading">#</a></h2>
+<p>A validator is an ordinary Python function with the following interface:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
 
-<span class="nt">catalog</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">"postgresql://tiled:${TILED_DATABASE_PASSWORD}@/tiled_catalog?host=db1.example:5432&amp;host=db2.example:5432&amp;host=db3.example:5432&amp;target_session_attrs=read-write&amp;ssl=verify-full"</span>
-<span class="w">  </span><span class="nt">writable_storage</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"postgresql://tiled:${TILED_DATABASE_PASSWORD}@/tiled_storage?host=db1.example:5432&amp;host=db2.example:5432&amp;host=db3.example:5432&amp;target_session_attrs=read-write&amp;ssl=verify-full"</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.adapters.protocols</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnyAdapter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.validation_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationError</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_my_spec</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">:</span> <span class="n">Spec</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">entry</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AnyAdapter</span><span class="p">],</span>
+    <span class="n">structure_family</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">StructureFamily</span><span class="p">],</span>
+    <span class="n">structure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="o">...</span>
 </pre></div>
 </div>
+<p>The function should either:</p>
+<ul class="simple">
+<li><p><strong>raise</strong> <code class="docutils literal notranslate"><span class="pre">tiled.validation_registration.ValidationError</span></code> to reject the write
+(the server responds with HTTP <code class="docutils literal notranslate"><span class="pre">400</span></code> and the error message), or</p></li>
+<li><p><strong>return</strong> <code class="docutils literal notranslate"><span class="pre">None</span></code> to accept the metadata unchanged, or</p></li>
+<li><p><strong>return</strong> a (possibly modified) metadata <code class="docutils literal notranslate"><span class="pre">dict</span></code> to accept it <em>and</em> replace
+it. The returned metadata is what gets stored and is echoed back to the client
+in the response.</p></li>
+</ul>
+<p>The arguments are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">spec</span></code> – the <code class="docutils literal notranslate"><span class="pre">Spec</span></code> (<code class="docutils literal notranslate"><span class="pre">tiled.structures.core.Spec</span></code>) being validated.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata</span></code> – the metadata dict submitted by the client.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">entry</span></code> – carries the existing node when metadata is being edited, or <code class="docutils literal notranslate"><span class="pre">None</span></code>
+when a new node is being created.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">structure_family</span></code> – e.g. <code class="docutils literal notranslate"><span class="pre">&quot;array&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;table&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;container&quot;</span></code>; may be
+<code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">structure</span></code> – the structure description of the new node; may be <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+</ul>
+<p>The function may be synchronous (as above) or an <code class="docutils literal notranslate"><span class="pre">async</span> <span class="pre">def</span></code>; the server
+supports both.</p>
+<p>Here is a small example that requires a <code class="docutils literal notranslate"><span class="pre">sample_id</span></code> field and, if it exists,
+normalizes it to a string:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># validators.py</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">tiled.validation_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValidationError</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_my_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">structure_family</span><span class="p">,</span> <span class="n">structure</span><span class="p">):</span>
+    <span class="k">if</span> <span class="s2">"sample_id"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">metadata</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ValidationError</span><span class="p">(</span><span class="s2">"The 'my-validated-spec' spec requires a 'sample_id' field."</span><span class="p">)</span>
+
+    <span class="c1"># Optionally normalize and return the modified metadata.</span>
+    <span class="n">normalized</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span>
+    <span class="n">normalized</span><span class="p">[</span><span class="s2">"sample_id"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">"sample_id"</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">normalized</span>
+</pre></div>
+</div>
+<p>Notably, Tiled ships one built-in validator, for the <code class="docutils literal notranslate"><span class="pre">composite</span></code> container spec, in
+<code class="docutils literal notranslate"><span class="pre">tiled/validation_registration.py</span></code>.</p>
+</section>
+<section id="register-spec-validators-in-the-server-configuration">
+<h2>Register spec validators in the server configuration<a class="headerlink" href="#register-spec-validators-in-the-server-configuration" title="Link to this heading">#</a></h2>
+<p>Reference the validator from the server configuration file under <code class="docutils literal notranslate"><span class="pre">specs</span></code>,
+using an importable <code class="docutils literal notranslate"><span class="pre">module:function</span></code> path:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># config.yml</span>
+<span class="nt">specs</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">spec</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-validated-spec</span>
+<span class="w">    </span><span class="nt">validator</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">validators:validate_my_spec</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">spec</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">another-spec</span><span class="w">  </span><span class="c1"># accepted, but not validated (no validator is specified)</span>
+
+<span class="nt">trees</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/</span>
+<span class="w">    </span><span class="nt">tree</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">catalog</span>
+<span class="w">    </span><span class="nt">args</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./catalog.db</span>
+</pre></div>
+</div>
+<p>The directory containing the configuration file is placed on the Python path
+when the config is loaded, so a <code class="docutils literal notranslate"><span class="pre">validators.py</span></code> sitting next to <code class="docutils literal notranslate"><span class="pre">config.yml</span></code>
+is importable as shown. Alternatively, use any importable package, e.g.
+<code class="docutils literal notranslate"><span class="pre">my_package.validators:validate_my_spec</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">validator</span></code> key is optional. Listing a spec with no validator simply
+declares it as accepted. This is useful together with the <code class="docutils literal notranslate"><span class="pre">reject_undeclared_specs</span></code> option:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">specs</span><span class="p">:</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+
+<span class="c1"># Reject any write whose spec is not listed above.</span>
+<span class="nt">reject_undeclared_specs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</pre></div>
+</div>
+<p>With <code class="docutils literal notranslate"><span class="pre">reject_undeclared_specs:</span> <span class="pre">true</span></code>, a client that tries to write a node
+tagged with a spec not present in this list receives an HTTP <code class="docutils literal notranslate"><span class="pre">400</span></code>. By
+default (<code class="docutils literal notranslate"><span class="pre">false</span></code>) unknown specs are allowed through unvalidated. Please
+see <a class="reference internal" href="../reference/service-configuration.html"><span class="doc">Service Configuration Reference</span></a> for more detail.</p>
+</section>
+<section id="when-validation-runs">
+<h2>When validation runs<a class="headerlink" href="#when-validation-runs" title="Link to this heading">#</a></h2>
+<p>Validators run when a node is created and when its metadata is replaced or
+patched. When a node carries multiple specs they are validated starting from
+least specific first (the reverse of the list order), so that a broad spec
+can normalize the metadata before a narrower one inspects it. When declaring multiple
+specs, please ensure that their validators do not make conflicting modifications;
+the server does not currently prevent that.</p>
 </section>
 </section>
 
@@ -551,20 +604,20 @@ applies to each: the <strong>authentication</strong> database (<code class="docu
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="deploy-tiled-single-node.html"
+       href="custom-export-formats.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Deploy Tiled on a Single Host</p>
+        <p class="prev-next-title">Add Custom Export Formats</p>
       </div>
     </a>
     <a class="right-next"
-       href="example-server-config.html"
+       href="api-keys.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Example Server Configuration</p>
+        <p class="prev-next-title">Create and Use API Keys</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -587,15 +640,16 @@ applies to each: the <strong>authentication</strong> database (<code class="docu
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#redis-high-availability-for-streaming">Redis high availability for streaming</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#postgres-high-availability">Postgres high availability</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#write-a-validator-function">Write a validator function</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#register-spec-validators-in-the-server-configuration">Register spec validators in the server configuration</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#when-validation-runs">When validation runs</a></li>
 </ul>
   </nav></div>
 
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="../_sources/user-guide/deploy-tiled-multi-node.md.txt">
+    <a href="../_sources/user-guide/validate-metadata.md.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>
