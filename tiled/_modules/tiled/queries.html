@@ -795,7 +795,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">import</span><span class="w"> </span><span class="nn">enum</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.query_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">register</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">StructureFamily</span> <span class="k">as</span> <span class="n">StructureFamilyEnum</span>
@@ -1344,46 +1344,40 @@ window.runMermaid = runMermaid;</script>
 
 
 
-<span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"access_blob_filter"</span><span class="p">)</span>
+<span class="nd">@register</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"access_tags_filter"</span><span class="p">)</span>
 <span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">AccessBlobFilter</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AccessTagsFilter</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Perform a query against the access_blob with two conditions.</span>
-<span class="sd">    1. Query for a user id (i.e. username) match against the "user" field</span>
-<span class="sd">    2. Query for if any tag in a list of tags is present in the "tags" field</span>
-<span class="sd">    The values for these conditions are independent.</span>
+<span class="sd">    Perform a query against node access tags.</span>
+<span class="sd">    Match nodes that carry at least one tag in the given list of tags.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    user_id : str</span>
-<span class="sd">        e.g. "bill", "amanda"</span>
-<span class="sd">    tags : List[JSONSerializable]</span>
+<span class="sd">    tags : List[str]</span>
 <span class="sd">        e.g. ["tag_for_bill", "amanda_only"]</span>
 
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
 
-<span class="sd">    Search for user "bill", as well as tags in ["tag_for_bill", "useful_data"]</span>
+<span class="sd">    Search for tags in ["tag_for_bill", "useful_data"]</span>
 
-<span class="sd">    &gt;&gt;&gt; c.search(AccessBlobFilter("bill", ["tag_for_bill", "useful_data"]))</span>
+<span class="sd">    &gt;&gt;&gt; c.search(AccessTagsFilter(["tag_for_bill", "useful_data"]))</span>
 <span class="sd">    """</span>
 
-    <span class="n">user_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
     <span class="n">tags</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"tags must be a list not a str"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tags</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">"user_id"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>
-            <span class="s2">"tags"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
-        <span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"tags"</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">)}</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user_id</span><span class="p">,</span> <span class="n">tags</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
-            <span class="n">tags</span><span class="o">=</span><span class="n">tags</span><span class="p">,</span>
-        <span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decode</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">tags</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">tags</span><span class="p">))</span>
 
 
 <div class="viewcode-block" id="StructureFamilyQuery">

@@ -825,6 +825,7 @@ window.runMermaid = runMermaid;</script>
 <span class="p">)</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..access_control.protocols</span><span class="w"> </span><span class="kn">import</span> <span class="n">AccessPolicy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..access_control.scopes</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScopeName</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..authenticators</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProxiedOIDCAuthenticator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..catalog.adapter</span><span class="w"> </span><span class="kn">import</span> <span class="n">WouldDeleteData</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..config</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -903,6 +904,34 @@ window.runMermaid = runMermaid;</script>
     <span class="p">][</span><span class="s2">"refreshUrl"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"token/refresh"</span>
     <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span> <span class="o">=</span> <span class="n">openapi_schema</span>
     <span class="k">return</span> <span class="n">app</span><span class="o">.</span><span class="n">openapi_schema</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_find_catalog_context</span><span class="p">(</span><span class="n">tree</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Find a catalog database context within the served tree.</span>
+
+<span class="sd">    The access tags parser needs the catalog's database settings (the URI) to</span>
+<span class="sd">    read tag definitions. The served tree may be a single catalog adapter, or a</span>
+<span class="sd">    MapAdapter nesting several catalog mounts (e.g. /foo, /bar mounted from the</span>
+<span class="sd">    same catalog database). Walk only the already-materialized, dict-backed</span>
+<span class="sd">    mount structure and return the first catalog context found (any one</span>
+<span class="sd">    suffices: access tags are a single shared namespace written to one catalog</span>
+<span class="sd">    database). In particular, do not use MapAdapter.values(): a MapAdapter may</span>
+<span class="sd">    wrap a lazy mapping whose values are data adapters, and inspecting them</span>
+<span class="sd">    would construct catalog data during application startup.</span>
+
+<span class="sd">    Returns the context, or None if the tree contains no catalog adapter.</span>
+<span class="sd">    """</span>
+    <span class="n">context</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">"context"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">context</span>
+    <span class="n">mapping</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="s2">"_mapping"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mapping</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">mapping</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="n">_find_catalog_context</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">found</span>
+    <span class="k">return</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="build_app">
@@ -1525,7 +1554,78 @@ window.runMermaid = runMermaid;</script>
             <span class="k">if</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">access_policy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>
                 <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span> <span class="s2">"access_tags_parser"</span>
             <span class="p">):</span>
-                <span class="k">await</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">access_policy</span><span class="o">.</span><span class="n">access_tags_parser</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+                <span class="c1"># Access tag definitions live in the catalog database, so the</span>
+                <span class="c1"># parser connects with the catalog's own database settings.</span>
+                <span class="n">access_tags_catalog_context</span> <span class="o">=</span> <span class="n">_find_catalog_context</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">access_tags_catalog_context</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">"This access policy reads access tags from the catalog "</span>
+                        <span class="s2">"database, so it requires a catalog-backed tree."</span>
+                    <span class="p">)</span>
+                <span class="k">await</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">access_policy</span><span class="o">.</span><span class="n">access_tags_parser</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+                    <span class="n">access_tags_catalog_context</span><span class="o">.</span><span class="n">database_settings</span>
+                <span class="p">)</span>
+                <span class="c1"># The scope set the catalog database enforces should match the</span>
+                <span class="c1"># ScopeName enum this server is running. A disagreement here</span>
+                <span class="c1"># points at a schema that was changed outside of a migration.</span>
+                <span class="n">enforced_scopes</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="k">await</span> <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">access_policy</span><span class="o">.</span><span class="n">access_tags_parser</span><span class="o">.</span><span class="n">get_enforced_scopes</span><span class="p">()</span>
+                <span class="p">)</span>
+                <span class="c1"># An empty set means the constraint is missing or could not be</span>
+                <span class="c1"># read. The catalog then stores any value as a scope, so this</span>
+                <span class="c1"># is reported on its own rather than compared: every scope</span>
+                <span class="c1"># would otherwise look like a disagreement.</span>
+                <span class="k">if</span> <span class="n">enforced_scopes</span><span class="p">:</span>
+                    <span class="n">unknown_scopes</span> <span class="o">=</span> <span class="n">enforced_scopes</span> <span class="o">-</span> <span class="p">{</span>
+                        <span class="n">scope</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">scope</span> <span class="ow">in</span> <span class="n">ScopeName</span>
+                    <span class="p">}</span>
+                    <span class="k">if</span> <span class="n">unknown_scopes</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">"The catalog database accepts scopes that this "</span>
+                            <span class="sa">f</span><span class="s2">"version of Tiled does not define: "</span>
+                            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown_scopes</span><span class="p">)</span><span class="si">}</span><span class="s2">. If any access tag "</span>
+                            <span class="sa">f</span><span class="s2">"grants one of these, Tiled cannot read that tag "</span>
+                            <span class="sa">f</span><span class="s2">"at all: every permission the tag grants is lost, "</span>
+                            <span class="sa">f</span><span class="s2">"and requests for data carrying it fail with an "</span>
+                            <span class="sa">f</span><span class="s2">"error rather than being denied. The catalog's "</span>
+                            <span class="sa">f</span><span class="s2">"scope constraint appears to have been altered "</span>
+                            <span class="sa">f</span><span class="s2">"outside of a migration. The catalog schema and "</span>
+                            <span class="sa">f</span><span class="s2">"the running version of Tiled need to be "</span>
+                            <span class="sa">f</span><span class="s2">"reconciled."</span>
+                        <span class="p">)</span>
+                    <span class="c1"># The opposite direction. Only scopes that the policy is</span>
+                    <span class="c1"># actually configured with are reported.</span>
+                    <span class="n">configured_scopes</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="nb">getattr</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">,</span> <span class="n">scope</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">scope</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">access_policy</span><span class="p">,</span> <span class="s2">"scopes"</span><span class="p">,</span> <span class="p">())</span>
+                    <span class="p">}</span>
+                    <span class="n">unstorable_scopes</span> <span class="o">=</span> <span class="n">configured_scopes</span> <span class="o">-</span> <span class="n">enforced_scopes</span>
+                    <span class="k">if</span> <span class="n">unstorable_scopes</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">"The catalog database cannot store scopes that "</span>
+                            <span class="sa">f</span><span class="s2">"this access policy is configured to grant: "</span>
+                            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unstorable_scopes</span><span class="p">)</span><span class="si">}</span><span class="s2">. As a result, no "</span>
+                            <span class="sa">f</span><span class="s2">"access tag can grant them, so every operation "</span>
+                            <span class="sa">f</span><span class="s2">"that requires one is refused, and tag "</span>
+                            <span class="sa">f</span><span class="s2">"definitions may fail to compile. The catalog's "</span>
+                            <span class="sa">f</span><span class="s2">"scope constraint appears to have been altered "</span>
+                            <span class="sa">f</span><span class="s2">"outside of a migration. The catalog schema and "</span>
+                            <span class="sa">f</span><span class="s2">"the running version of Tiled need to be "</span>
+                            <span class="sa">f</span><span class="s2">"reconciled."</span>
+                        <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                        <span class="s2">"Tiled could not read the set of scopes that the "</span>
+                        <span class="s2">"catalog database enforces. The catalog will store "</span>
+                        <span class="s2">"any value as a scope, and an access tag that grants "</span>
+                        <span class="s2">"an unrecognized scope cannot be read at all: every "</span>
+                        <span class="s2">"permission that tag grants is lost, and requests for "</span>
+                        <span class="s2">"data carrying it fail with an error rather than "</span>
+                        <span class="s2">"being denied. The catalog's scope constraint appears "</span>
+                        <span class="s2">"to have been dropped outside of a migration. The "</span>
+                        <span class="s2">"catalog schema and the running version of Tiled need "</span>
+                        <span class="s2">"to be reconciled."</span>
+                    <span class="p">)</span>
 
             <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">purge_expired_sessions_and_api_keys</span><span class="p">():</span>
                 <span class="n">PURGE_INTERVAL</span> <span class="o">=</span> <span class="mi">600</span>  <span class="c1"># seconds</span>
