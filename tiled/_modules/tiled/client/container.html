@@ -793,6 +793,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">asdict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_qs</span><span class="p">,</span> <span class="n">urlparse</span>
 
@@ -804,13 +805,14 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..iterviews</span><span class="w"> </span><span class="kn">import</span> <span class="n">ItemsView</span><span class="p">,</span> <span class="n">KeysView</span><span class="p">,</span> <span class="n">ValuesView</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..queries</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeyLookup</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..query_registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_query_registry</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">StructureFamily</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span><span class="p">,</span> <span class="n">StructureFamily</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSource</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">UNCHANGED</span><span class="p">,</span>
     <span class="n">IndexersMixin</span><span class="p">,</span>
     <span class="n">OneShotCachedMap</span><span class="p">,</span>
     <span class="n">Sentinel</span><span class="p">,</span>
+    <span class="n">ensure_uri</span><span class="p">,</span>
     <span class="n">node_repr</span><span class="p">,</span>
     <span class="n">safe_json_dump</span><span class="p">,</span>
 <span class="p">)</span>
@@ -1282,11 +1284,14 @@ window.runMermaid = runMermaid;</script>
             <span class="k">if</span> <span class="n">direction</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">items</span><span class="p">))</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]:</span>
-                <span class="k">yield</span> <span class="n">key</span><span class="p">,</span> <span class="n">client_for_item</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
-                    <span class="n">item</span><span class="p">,</span>
-                    <span class="n">include_data_sources</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">,</span>
+                <span class="k">yield</span> <span class="p">(</span>
+                    <span class="n">key</span><span class="p">,</span>
+                    <span class="n">client_for_item</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
+                        <span class="n">item</span><span class="p">,</span>
+                        <span class="n">include_data_sources</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">,</span>
+                    <span class="p">),</span>
                 <span class="p">)</span>
             <span class="k">return</span>
         <span class="k">if</span> <span class="n">direction</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -1322,11 +1327,14 @@ window.runMermaid = runMermaid;</script>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">content</span><span class="p">[</span><span class="s2">"data"</span><span class="p">]:</span>
                 <span class="n">key</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span>
-                <span class="k">yield</span> <span class="n">key</span><span class="p">,</span> <span class="n">client_for_item</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
-                    <span class="n">item</span><span class="p">,</span>
-                    <span class="n">include_data_sources</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">,</span>
+                <span class="k">yield</span> <span class="p">(</span>
+                    <span class="n">key</span><span class="p">,</span>
+                    <span class="n">client_for_item</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
+                        <span class="n">item</span><span class="p">,</span>
+                        <span class="n">include_data_sources</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_include_data_sources</span><span class="p">,</span>
+                    <span class="p">),</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">next</span><span class="p">(</span><span class="n">item_counter</span><span class="p">)</span> <span class="o">==</span> <span class="n">stop</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
                     <span class="k">return</span>
@@ -1533,7 +1541,6 @@ window.runMermaid = runMermaid;</script>
         <span class="k">if</span> <span class="n">key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">body</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span> <span class="o">=</span> <span class="n">key</span>
 
-        <span class="c1"># if check:</span>
         <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">data_source</span><span class="o">.</span><span class="n">assets</span> <span class="k">for</span> <span class="n">data_source</span> <span class="ow">in</span> <span class="n">data_sources</span><span class="p">):</span>
             <span class="n">endpoint</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">uri</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"/metadata/"</span><span class="p">,</span> <span class="s2">"/register/"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -2143,6 +2150,173 @@ window.runMermaid = runMermaid;</script>
             <span class="n">executor</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">structure_clients</span><span class="p">,</span>
         <span class="p">)</span>
+
+<div class="viewcode-block" id="Container.register">
+<a class="viewcode-back" href="../../../reference/generated/tiled.client.container.Container.register.html#tiled.client.container.Container.register">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">uris</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">structure</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mimetype</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">parameters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">specs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Spec</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">access_tags</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Register externally-managed file(s) as a single dataset in this Container.</span>
+
+<span class="sd">        This method registers exactly the URIs (or file paths) provided as a</span>
+<span class="sd">        single node (array, table, etc.) -- it does not walk the subdirectories, if</span>
+<span class="sd">        any, and never creates a container of sub-nodes.</span>
+
+<span class="sd">        Multiple URIs are treated as a single dataset assembled from several files</span>
+<span class="sd">        (for example, a stack of TIFF images). A single URI pointing at a</span>
+<span class="sd">        directory (for example, a Zarr store) is registered as one dataset</span>
+<span class="sd">        backed by that directory.</span>
+
+<span class="sd">        It is assumed that the URIs are accessible from both the client (to</span>
+<span class="sd">        infer the structure) and the server (to serve the data).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        *uris : str or Path</span>
+<span class="sd">            One or more URIs or file paths. Multiple files are combined into a</span>
+<span class="sd">            single dataset (e.g. an image stack).</span>
+<span class="sd">        key : str, optional</span>
+<span class="sd">            The key (name) for the new node. If not provided, the server</span>
+<span class="sd">            assigns a random key (consistent with `write_array`,</span>
+<span class="sd">            `write_table`, etc.), avoiding collisions with existing nodes.</span>
+<span class="sd">        structure : optional</span>
+<span class="sd">            Override the structure inferred from the file(s). For example,</span>
+<span class="sd">            provide an `ArrayStructure` with a different shape to have the</span>
+<span class="sd">            server reshape the data when it is served. The override is checked</span>
+<span class="sd">            for compatibility with the file(s) (matching dtype and element</span>
+<span class="sd">            count for arrays; matching column count and dtypes for tables) and</span>
+<span class="sd">            a `ValueError` is raised if it cannot be used.</span>
+<span class="sd">        mimetype : str, optional</span>
+<span class="sd">            Override the mimetype. By default it is inferred from the file extension.</span>
+<span class="sd">        parameters : dict, optional</span>
+<span class="sd">            Extra keyword arguments for opening the file(s), forwarded to the</span>
+<span class="sd">            adapter both when inferring the structure client-side and when the</span>
+<span class="sd">            server re-opens the file(s) to serve the data. For example,</span>
+<span class="sd">            `parameters={"sep": ";"}` for a semicolon-delimited CSV.</span>
+<span class="sd">        metadata : dict, optional</span>
+<span class="sd">            Metadata for the node. Merged on top of any metadata read from the</span>
+<span class="sd">            file(s), with these values taking precedence.</span>
+<span class="sd">        specs : list, optional</span>
+<span class="sd">            Specs to assign to the new node.</span>
+<span class="sd">        access_tags : list, optional</span>
+<span class="sd">            Access tags to apply to the new node.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        The client for the newly-registered node.</span>
+<span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..mimetypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_REGISTRATION_ADAPTERS_BY_MIMETYPE</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">stat_uri</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">Management</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.register</span><span class="w"> </span><span class="kn">import</span> <span class="n">resolve_mimetype_for_uris</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">uris</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Provide at least one URI or file path to register."</span><span class="p">)</span>
+        <span class="n">uris</span> <span class="o">=</span> <span class="p">[</span><span class="n">ensure_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span> <span class="k">for</span> <span class="n">uri</span> <span class="ow">in</span> <span class="n">uris</span><span class="p">]</span>
+
+        <span class="c1"># Resolve the mimetype (extension-based) unless explicitly provided.</span>
+        <span class="n">mimetype</span> <span class="o">=</span> <span class="n">mimetype</span> <span class="ow">or</span> <span class="n">resolve_mimetype_for_uris</span><span class="p">(</span><span class="n">uris</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">adapter_class</span> <span class="o">=</span> <span class="n">DEFAULT_REGISTRATION_ADAPTERS_BY_MIMETYPE</span><span class="p">[</span><span class="n">mimetype</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"No adapter is registered for mimetype </span><span class="si">{</span><span class="n">mimetype</span><span class="si">!r}</span><span class="s2">."</span><span class="p">)</span>
+
+        <span class="c1"># Open the file(s) client-side to infer structure, metadata, and specs.</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="n">parameters</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">adapter</span> <span class="o">=</span> <span class="n">adapter_class</span><span class="o">.</span><span class="n">from_uris</span><span class="p">(</span><span class="o">*</span><span class="n">uris</span><span class="p">,</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span>
+
+        <span class="c1"># Optionally override the inferred structure (e.g. to reshape on read),</span>
+        <span class="c1"># first checking that the provided structure can actually serve the data.</span>
+        <span class="n">properties</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">structure</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">structure</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="n">structure</span> <span class="o">=</span> <span class="n">STRUCTURE_TYPES</span><span class="p">[</span><span class="n">adapter</span><span class="o">.</span><span class="n">structure_family</span><span class="p">]</span><span class="o">.</span><span class="n">from_json</span><span class="p">(</span>
+                    <span class="n">structure</span>
+                <span class="p">)</span>
+            <span class="n">inferred</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">structure</span><span class="o">.</span><span class="n">is_compatible</span><span class="p">(</span><span class="n">inferred</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">"The provided structure is not compatible with the structure "</span>
+                    <span class="sa">f</span><span class="s2">"read from the file(s).</span><span class="se">\n</span><span class="s2">  provided: </span><span class="si">{</span><span class="n">structure</span><span class="si">!r}</span><span class="se">\n</span><span class="s2">  "</span>
+                    <span class="sa">f</span><span class="s2">"inferred: </span><span class="si">{</span><span class="n">inferred</span><span class="si">!r}</span><span class="s2">"</span>
+                <span class="p">)</span>
+            <span class="c1"># When an array is reshaped/rechunked on read, record the original</span>
+            <span class="c1"># on-disk chunking so the server can read the file(s) correctly.</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">adapter</span><span class="o">.</span><span class="n">structure_family</span> <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">array</span>
+                <span class="ow">and</span> <span class="n">structure</span><span class="o">.</span><span class="n">chunks</span> <span class="o">!=</span> <span class="n">inferred</span><span class="o">.</span><span class="n">chunks</span>
+            <span class="p">):</span>
+                <span class="n">properties</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"chunks"</span><span class="p">:</span> <span class="n">inferred</span><span class="o">.</span><span class="n">chunks</span><span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">structure</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span>
+
+        <span class="c1"># Build the single DataSource describing this dataset from a list of Assets.</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">uris</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Multiple files form one stacked dataset: one Asset per file, all</span>
+            <span class="c1"># bound to the plural 'data_uris' parameter and ordered by 'num'.</span>
+            <span class="n">assets</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">uri</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">uris</span><span class="p">):</span>
+                <span class="n">is_directory</span><span class="p">,</span> <span class="n">size</span> <span class="o">=</span> <span class="n">stat_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+                <span class="n">assets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Asset</span><span class="p">(</span>
+                        <span class="n">data_uri</span><span class="o">=</span><span class="n">uri</span><span class="p">,</span>
+                        <span class="n">is_directory</span><span class="o">=</span><span class="n">is_directory</span><span class="p">,</span>
+                        <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span>
+                        <span class="n">parameter</span><span class="o">=</span><span class="s2">"data_uris"</span><span class="p">,</span>
+                        <span class="n">num</span><span class="o">=</span><span class="n">i</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">is_directory</span><span class="p">,</span> <span class="n">size</span> <span class="o">=</span> <span class="n">stat_uri</span><span class="p">(</span><span class="n">uris</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">adapter</span><span class="p">,</span> <span class="s2">"generate_data_sources"</span><span class="p">):</span>
+                <span class="c1"># Let the adapter describe its own DataSource (e.g. CSV, Arrow). Only keep</span>
+                <span class="c1"># assets, because we may need to overwrite the structure.</span>
+                <span class="c1"># TODO: Drop `generate_data_sources` and unify asset parameterization (`data_uri` vs `data_uris`)</span>
+                <span class="n">data_sources</span> <span class="o">=</span> <span class="n">adapter</span><span class="o">.</span><span class="n">generate_data_sources</span><span class="p">(</span>
+                    <span class="n">mimetype</span><span class="p">,</span>
+                    <span class="n">uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="n">is_directory</span><span class="o">=</span><span class="n">is_directory</span><span class="p">,</span>
+                    <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span>
+                    <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">assets</span> <span class="o">=</span> <span class="n">data_sources</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">assets</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">assets</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">Asset</span><span class="p">(</span>
+                        <span class="n">data_uri</span><span class="o">=</span><span class="n">uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                        <span class="n">is_directory</span><span class="o">=</span><span class="n">is_directory</span><span class="p">,</span>
+                        <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span>
+                        <span class="n">parameter</span><span class="o">=</span><span class="s2">"data_uri"</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+        <span class="n">data_source</span> <span class="o">=</span> <span class="n">DataSource</span><span class="p">(</span>
+            <span class="n">structure_family</span><span class="o">=</span><span class="n">adapter</span><span class="o">.</span><span class="n">structure_family</span><span class="p">,</span>
+            <span class="n">mimetype</span><span class="o">=</span><span class="n">mimetype</span><span class="p">,</span>
+            <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
+            <span class="n">properties</span><span class="o">=</span><span class="n">properties</span><span class="p">,</span>
+            <span class="n">management</span><span class="o">=</span><span class="n">Management</span><span class="o">.</span><span class="n">external</span><span class="p">,</span>
+            <span class="n">assets</span><span class="o">=</span><span class="n">assets</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new</span><span class="p">(</span>
+            <span class="n">data_source</span><span class="o">.</span><span class="n">structure_family</span><span class="p">,</span>
+            <span class="p">[</span><span class="n">data_source</span><span class="p">],</span>
+            <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="o">**</span><span class="n">adapter</span><span class="o">.</span><span class="n">metadata</span><span class="p">(),</span> <span class="o">**</span><span class="p">(</span><span class="n">metadata</span> <span class="ow">or</span> <span class="p">{})},</span>
+            <span class="n">specs</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
+            <span class="n">access_tags</span><span class="o">=</span><span class="n">access_tags</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_queries_to_params</span><span class="p">(</span><span class="o">*</span><span class="n">queries</span><span class="p">):</span>

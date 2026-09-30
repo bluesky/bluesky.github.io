@@ -543,7 +543,155 @@ formats, and registers the metadata, structure, and filepaths.</p>
 <h3>Complex cases<a class="headerlink" href="#complex-cases" title="Link to this heading">#</a></h3>
 <p>Sometimes it is necessary to take more manual control of this registration
 process, such as if you want to take advantage of particular knowledge
-about the files to specify particular <code class="docutils literal notranslate"><span class="pre">metadata</span></code> or <code class="docutils literal notranslate"><span class="pre">specs</span></code>.</p>
+about the files to specify particular <code class="docutils literal notranslate"><span class="pre">metadata</span></code> or <code class="docutils literal notranslate"><span class="pre">specs</span></code>, or to register
+just a specific file (or files) rather than walking a whole directory.</p>
+<p>For this, use the Python client method <code class="docutils literal notranslate"><span class="pre">Container.register</span></code>. It registers
+<em>exactly</em> the file(s) you give it as a single dataset. Unlike
+<code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">serve</span> <span class="pre">directory</span> <span class="pre">...</span></code> or <code class="docutils literal notranslate"><span class="pre">tiled</span> <span class="pre">register</span> <span class="pre">...</span></code>, it does <strong>not</strong> walk
+directories and does not create a container of sub-nodes. As in the previous
+example, the files stay where they are, in their original format; Tiled
+just records how to read them in its catalog.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tiled.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_uri</span>
+
+<span class="c1"># For security, prefer setting the API key in the environment variable</span>
+<span class="c1"># TILED_API_KEY, which from_uri(...) detects automatically.</span>
+<span class="n">client</span> <span class="o">=</span> <span class="n">from_uri</span><span class="p">(</span><span class="s2">"http://localhost:8000"</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The files must be reachable from <strong>both</strong> the client (to inspect them and
+infer their structure) and the server (to serve the data), and they must live
+under one of the server’s registered readable directories (the <code class="docutils literal notranslate"><span class="pre">-r</span> <span class="pre">&lt;DIRECTORY&gt;</span></code>
+above).</p>
+<section id="register-a-single-file">
+<h4>Register a single file<a class="headerlink" href="#register-a-single-file" title="Link to this heading">#</a></h4>
+<p>The mimetype – and thus the structure family (array, table, …) – is inferred
+from the file extension.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># A single image file becomes an 'array' node.</span>
+<span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"/data/beamline/scan_001.tiff"</span><span class="p">)</span>
+
+<span class="c1"># A CSV file becomes a 'table' node.</span>
+<span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"/data/beamline/measurements.csv"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>By default the server assigns a random key (the node name), just like
+<code class="docutils literal notranslate"><span class="pre">write_array</span></code>, <code class="docutils literal notranslate"><span class="pre">write_table</span></code>, etc. Pass <code class="docutils literal notranslate"><span class="pre">key=...</span></code> to define it yourself:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"/data/beamline/scan_001.tiff"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"scan_001"</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="register-several-files-as-one-stacked-array">
+<h4>Register several files as one stacked array<a class="headerlink" href="#register-several-files-as-one-stacked-array" title="Link to this heading">#</a></h4>
+<p>Multiple URIs can be combined into a <em>single</em> dataset assembled from homogeneous
+files – for example, a stack of TIFF images forming one 3D array. This creates
+a single node in Tiled, not one node per file.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"/data/beamline/frame_000.tiff"</span><span class="p">,</span>
+    <span class="s2">"/data/beamline/frame_001.tiff"</span><span class="p">,</span>
+    <span class="s2">"/data/beamline/frame_002.tiff"</span><span class="p">,</span>
+    <span class="n">key</span><span class="o">=</span><span class="s2">"scan_stack"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="register-a-directory-based-format">
+<h4>Register a directory-based format<a class="headerlink" href="#register-a-directory-based-format" title="Link to this heading">#</a></h4>
+<p>A single URI pointing at a directory (for example, a Zarr store) is registered
+as one dataset backed by that directory. (The directory is treated as a unit;
+it is not walked.)</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"/data/beamline/image.zarr"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"image"</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="attach-metadata-and-specs">
+<h4>Attach metadata and specs<a class="headerlink" href="#attach-metadata-and-specs" title="Link to this heading">#</a></h4>
+<p>Some formats carry their own metadata, which Tiled reads from the file(s). The
+<code class="docutils literal notranslate"><span class="pre">metadata</span></code> you supply is merged with it, taking precedence on any conflicting
+keys. Any <code class="docutils literal notranslate"><span class="pre">specs</span></code> you supply are attached to the node.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tiled.structures.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">Spec</span>
+
+<span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"/data/beamline/scan_001.tiff"</span><span class="p">,</span>
+    <span class="n">key</span><span class="o">=</span><span class="s2">"scan_001"</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"beamline"</span><span class="p">:</span> <span class="s2">"X"</span><span class="p">,</span> <span class="s2">"sample"</span><span class="p">:</span> <span class="s2">"Fe2O3"</span><span class="p">},</span>
+    <span class="n">specs</span><span class="o">=</span><span class="p">[</span><span class="n">Spec</span><span class="p">(</span><span class="s2">"xrd_scan"</span><span class="p">)],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="pass-options-for-opening-the-file-s">
+<h4>Pass options for opening the file(s)<a class="headerlink" href="#pass-options-for-opening-the-file-s" title="Link to this heading">#</a></h4>
+<p>Some formats need extra options to be read correctly – for example, the
+delimiter of a CSV or a path within a complex hierarchical HDF5 file. Pass these
+as a <code class="docutils literal notranslate"><span class="pre">parameters</span></code> dictionary. Tiled applies them both when it inspects the file(s)
+on the client and when the server later re-opens them to serve the data.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># A semicolon-delimited CSV.</span>
+<span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"/data/beamline/european.csv"</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"sep"</span><span class="p">:</span> <span class="s2">";"</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>For HDF5, <code class="docutils literal notranslate"><span class="pre">parameters={&quot;dataset&quot;:</span> <span class="pre">...}</span></code> selects a specific dataset (which may
+be nested in a group) and registers it as an <code class="docutils literal notranslate"><span class="pre">array</span></code> node, instead of
+registering the whole file as a <code class="docutils literal notranslate"><span class="pre">container</span></code> of its datasets:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># Register the whole HDF5 file as a container exposing its datasets.</span>
+<span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">"/data/beamline/run.h5"</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">"run"</span><span class="p">)</span>
+
+<span class="c1"># Register just one dataset within it as an array.</span>
+<span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"/data/beamline/run.h5"</span><span class="p">,</span>
+    <span class="n">key</span><span class="o">=</span><span class="s2">"intensity"</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"dataset"</span><span class="p">:</span> <span class="s2">"entry/data/intensity"</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="override-the-mimetype">
+<h4>Override the mimetype<a class="headerlink" href="#override-the-mimetype" title="Link to this heading">#</a></h4>
+<p>By default the mimetype is inferred from the file extension. Override it to
+interpret a file differently. For example, a CSV is normally read as a table;
+the mimetype below reads it as an array instead, with <code class="docutils literal notranslate"><span class="pre">skiprows=1</span></code> dropping the
+header row so only the numeric values remain:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"/data/beamline/values.csv"</span><span class="p">,</span>
+    <span class="n">key</span><span class="o">=</span><span class="s2">"values"</span><span class="p">,</span>
+    <span class="n">mimetype</span><span class="o">=</span><span class="s2">"text/csv;header=absent"</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"skiprows"</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>When reading a CSV as an array, its columns should share a single dtype (for
+example, all floats), since an array has one homogeneous dtype.</p>
+</section>
+<section id="override-the-inferred-structure">
+<h4>Override the inferred structure<a class="headerlink" href="#override-the-inferred-structure" title="Link to this heading">#</a></h4>
+<p>Tiled infers the structure from the file(s), but you can supply your own (compatible)
+<code class="docutils literal notranslate"><span class="pre">structure</span></code> to change how the data is presented – for example, to reshape a flat
+array when it is served. The structure you provide must still be able to
+describe the underlying data: arrays must match in dtype and total number of
+elements, and tables in column count and dtypes.</p>
+<p><code class="docutils literal notranslate"><span class="pre">structure</span></code> may be given as a plain dict (the JSON form), so no imports are
+needed:</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="c1"># The file holds 12 uint16 elements; serve them as a (2, 6) array.</span>
+<span class="n">client</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+    <span class="s2">"/data/beamline/scan_001.tiff"</span><span class="p">,</span>
+    <span class="n">key</span><span class="o">=</span><span class="s2">"reshaped"</span><span class="p">,</span>
+    <span class="n">structure</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"data_type"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"endianness"</span><span class="p">:</span> <span class="s2">"little"</span><span class="p">,</span> <span class="s2">"kind"</span><span class="p">:</span> <span class="s2">"u"</span><span class="p">,</span> <span class="s2">"itemsize"</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span>
+        <span class="s2">"shape"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">],</span>
+        <span class="s2">"chunks"</span><span class="p">:</span> <span class="p">[[</span><span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">6</span><span class="p">]],</span>
+        <span class="s2">"dims"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="low-level-registration">
+<h3>Low-level registration<a class="headerlink" href="#low-level-registration" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">Container.register</span></code> is a convenience wrapper over the low-level <code class="docutils literal notranslate"><span class="pre">new</span></code> method,
+which gives you complete manual control over the <code class="docutils literal notranslate"><span class="pre">DataSource</span></code> and <code class="docutils literal notranslate"><span class="pre">Asset</span></code>
+description. Reach for this only when <code class="docutils literal notranslate"><span class="pre">register</span></code> does not expose what you need.</p>
 <p>Use the Python client, as in this example.</p>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tiled.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_uri</span>
@@ -573,8 +721,8 @@ about the files to specify particular <code class="docutils literal notranslate"
             <span class="n">structure_family</span><span class="o">=</span><span class="n">StructureFamily</span><span class="o">.</span><span class="n">array</span><span class="p">,</span>
 	    <span class="n">structure</span><span class="o">=</span><span class="n">structure</span><span class="p">,</span>
             <span class="n">assets</span><span class="o">=</span><span class="p">[</span>
-                <span class="n">Asset</span><span class="p">(</span><span class="n">data_uri</span><span class="o">=</span><span class="s2">"file:///path/to/image1.tiff"</span><span class="p">,</span> <span class="n">is_directory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">parameter</span><span class="o">=</span><span class="s2">"data_uri"</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
-                <span class="n">Asset</span><span class="p">(</span><span class="n">data_uri</span><span class="o">=</span><span class="s2">"file:///path/to/image2.tiff"</span><span class="p">,</span> <span class="n">is_directory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">parameter</span><span class="o">=</span><span class="s2">"data_uri"</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
+                <span class="n">Asset</span><span class="p">(</span><span class="n">data_uri</span><span class="o">=</span><span class="s2">"file:///path/to/image1.tiff"</span><span class="p">,</span> <span class="n">is_directory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">parameter</span><span class="o">=</span><span class="s2">"data_uris"</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+                <span class="n">Asset</span><span class="p">(</span><span class="n">data_uri</span><span class="o">=</span><span class="s2">"file:///path/to/image2.tiff"</span><span class="p">,</span> <span class="n">is_directory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">parameter</span><span class="o">=</span><span class="s2">"data_uris"</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
             <span class="p">],</span>
         <span class="p">),</span>
     <span class="p">],</span>
@@ -640,7 +788,17 @@ about the files to specify particular <code class="docutils literal notranslate"
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#production-scale-approach">Production-Scale Approach</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#simple-cases">Simple cases</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#complex-cases">Complex cases</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#complex-cases">Complex cases</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#register-a-single-file">Register a single file</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#register-several-files-as-one-stacked-array">Register several files as one stacked array</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#register-a-directory-based-format">Register a directory-based format</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#attach-metadata-and-specs">Attach metadata and specs</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#pass-options-for-opening-the-file-s">Pass options for opening the file(s)</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#override-the-mimetype">Override the mimetype</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#override-the-inferred-structure">Override the inferred structure</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#low-level-registration">Low-level registration</a></li>
 </ul>
 </li>
 </ul>
