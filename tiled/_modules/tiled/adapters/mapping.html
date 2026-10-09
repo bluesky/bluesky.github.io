@@ -809,6 +809,7 @@ window.runMermaid = runMermaid;</script>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.merged</span><span class="w"> </span><span class="kn">import</span> <span class="n">MergedDeepSearchAdapter</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Mapping</span>
 
@@ -1099,6 +1100,61 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">                Return a Adapter with a subset of the mapping.</span>
 <span class="sd">        """</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_registry</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">search_deep</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="s2">"MapAdapter[A]"</span><span class="p">,</span> <span class="s2">"MergedDeepSearchAdapter"</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return an adapter over ALL descendants of this node (any depth).</span>
+
+<span class="sd">        The returned adapter's keys are "/"-joined paths relative to this</span>
+<span class="sd">        node, since descendants at different depths may share a local key.</span>
+<span class="sd">        A subsequent `.search(query)` call filters this flattened adapter</span>
+<span class="sd">        exactly as it would filter direct children.</span>
+
+<span class="sd">        Container children that are not themselves `MapAdapter`s (e.g. a</span>
+<span class="sd">        `CatalogNodeAdapter` mounted at a sub-path) but do support</span>
+<span class="sd">        `search_deep` are delegated to and their results merged in,</span>
+<span class="sd">        via `MergedDeepSearchAdapter`, so mounted subtrees are still searched.</span>
+<span class="sd">        """</span>
+        <span class="n">flat</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">A</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">mounts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_walk</span><span class="p">(</span>
+            <span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">A</span><span class="p">],</span> <span class="n">prefix</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">mapping</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="s2">"/"</span> <span class="ow">in</span> <span class="n">key</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Cannot deep-search a key containing '/': </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2">"</span>
+                    <span class="p">)</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">prefix</span> <span class="o">+</span> <span class="p">(</span><span class="n">key</span><span class="p">,)</span>
+                <span class="n">flat</span><span class="p">[</span><span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">)]</span> <span class="o">=</span> <span class="n">value</span>
+                <span class="k">if</span> <span class="n">max_depth</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&gt;=</span> <span class="n">max_depth</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">MapAdapter</span><span class="p">):</span>
+                    <span class="n">_walk</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">_mapping</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"search_deep"</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span>
+                    <span class="nb">getattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"structure_family"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="o">==</span> <span class="n">StructureFamily</span><span class="o">.</span><span class="n">container</span>
+                <span class="p">):</span>
+                    <span class="n">remaining_depth</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="kc">None</span> <span class="k">if</span> <span class="n">max_depth</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">max_depth</span> <span class="o">-</span> <span class="p">(</span><span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">mounts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="s2">"/"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">),</span>
+                            <span class="n">value</span><span class="o">.</span><span class="n">search_deep</span><span class="p">(</span><span class="n">max_depth</span><span class="o">=</span><span class="n">remaining_depth</span><span class="p">),</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+
+        <span class="n">_walk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mapping</span><span class="p">,</span> <span class="p">(),</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">mounts</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">new_variation</span><span class="p">(</span><span class="n">mapping</span><span class="o">=</span><span class="n">flat</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.merged</span><span class="w"> </span><span class="kn">import</span> <span class="n">MergedDeepSearchAdapter</span>
+
+        <span class="k">return</span> <span class="n">MergedDeepSearchAdapter</span><span class="p">(</span>
+            <span class="n">flat</span><span class="p">,</span> <span class="n">mounts</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span><span class="p">,</span> <span class="n">specs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">specs</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_distinct</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
