@@ -805,6 +805,7 @@ window.runMermaid = runMermaid;</script>
     <span class="n">export_util</span><span class="p">,</span>
     <span class="n">handle_error</span><span class="p">,</span>
     <span class="n">retry_context</span><span class="p">,</span>
+    <span class="n">should_retry_if_unprocessed</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
@@ -1062,7 +1063,12 @@ window.runMermaid = runMermaid;</script>
 
         <span class="k">if</span> <span class="n">partition</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">npartitions</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Table has </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">npartitions</span><span class="si">}</span><span class="s2"> partitions"</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="c1"># Appending rows is not idempotent: if the server processed the request</span>
+        <span class="c1"># but the response was lost (e.g. a read timeout or a 5xx from a proxy),</span>
+        <span class="c1"># retrying would append the same rows a second time. Only retry errors</span>
+        <span class="c1"># that guarantee the request was never processed; raise the rest to the</span>
+        <span class="c1"># caller, who can inspect the table before deciding to re-append.</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">(</span><span class="n">on</span><span class="o">=</span><span class="n">should_retry_if_unprocessed</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
