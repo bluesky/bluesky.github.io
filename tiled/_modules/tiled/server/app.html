@@ -1630,23 +1630,39 @@ window.runMermaid = runMermaid;</script>
             <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">purge_expired_sessions_and_api_keys</span><span class="p">():</span>
                 <span class="n">PURGE_INTERVAL</span> <span class="o">=</span> <span class="mi">600</span>  <span class="c1"># seconds</span>
                 <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-                    <span class="k">async</span> <span class="k">with</span> <span class="n">AsyncSession</span><span class="p">(</span>
-                        <span class="n">engine</span><span class="p">,</span> <span class="n">autoflush</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span>
-                    <span class="p">)</span> <span class="k">as</span> <span class="n">db_session</span><span class="p">:</span>
-                        <span class="n">num_expired_sessions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">purge_expired</span><span class="p">(</span>
-                            <span class="n">db_session</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">Session</span>
-                        <span class="p">)</span>
-                        <span class="k">if</span> <span class="n">num_expired_sessions</span><span class="p">:</span>
-                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">"Purged </span><span class="si">{</span><span class="n">num_expired_sessions</span><span class="si">}</span><span class="s2"> expired Sessions from the database."</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="k">async</span> <span class="k">with</span> <span class="n">AsyncSession</span><span class="p">(</span>
+                            <span class="n">engine</span><span class="p">,</span> <span class="n">autoflush</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span>
+                        <span class="p">)</span> <span class="k">as</span> <span class="n">db_session</span><span class="p">:</span>
+                            <span class="c1"># Purge pending sessions first: they reference sessions,</span>
+                            <span class="c1"># so clearing expired ones first lets the sessions they point to be deleted in turn.</span>
+                            <span class="n">num_expired_pending_sessions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">purge_expired</span><span class="p">(</span>
+                                <span class="n">db_session</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">PendingSession</span>
                             <span class="p">)</span>
-                        <span class="n">num_expired_api_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">purge_expired</span><span class="p">(</span>
-                            <span class="n">db_session</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">APIKey</span>
-                        <span class="p">)</span>
-                        <span class="k">if</span> <span class="n">num_expired_api_keys</span><span class="p">:</span>
-                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">"Purged </span><span class="si">{</span><span class="n">num_expired_api_keys</span><span class="si">}</span><span class="s2"> expired API keys from the database."</span>
+                            <span class="k">if</span> <span class="n">num_expired_pending_sessions</span><span class="p">:</span>
+                                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                                    <span class="sa">f</span><span class="s2">"Purged </span><span class="si">{</span><span class="n">num_expired_pending_sessions</span><span class="si">}</span><span class="s2"> "</span>
+                                    <span class="s2">"expired PendingSessions from the database."</span>
+                                <span class="p">)</span>
+                            <span class="n">num_expired_sessions</span> <span class="o">=</span> <span class="k">await</span> <span class="n">purge_expired</span><span class="p">(</span>
+                                <span class="n">db_session</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">Session</span>
                             <span class="p">)</span>
+                            <span class="k">if</span> <span class="n">num_expired_sessions</span><span class="p">:</span>
+                                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                                    <span class="sa">f</span><span class="s2">"Purged </span><span class="si">{</span><span class="n">num_expired_sessions</span><span class="si">}</span><span class="s2"> expired Sessions from the database."</span>
+                                <span class="p">)</span>
+                            <span class="n">num_expired_api_keys</span> <span class="o">=</span> <span class="k">await</span> <span class="n">purge_expired</span><span class="p">(</span>
+                                <span class="n">db_session</span><span class="p">,</span> <span class="n">orm</span><span class="o">.</span><span class="n">APIKey</span>
+                            <span class="p">)</span>
+                            <span class="k">if</span> <span class="n">num_expired_api_keys</span><span class="p">:</span>
+                                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                                    <span class="sa">f</span><span class="s2">"Purged </span><span class="si">{</span><span class="n">num_expired_api_keys</span><span class="si">}</span><span class="s2"> expired API keys from the database."</span>
+                                <span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                            <span class="s2">"Failed to purge expired Sessions and API keys from the database."</span><span class="p">,</span>
+                            <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="p">)</span>
                     <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">PURGE_INTERVAL</span><span class="p">)</span>
 
             <span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">tasks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
@@ -1658,13 +1674,21 @@ window.runMermaid = runMermaid;</script>
         <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">[</span><span class="s2">"shutdown"</span><span class="p">]:</span>
             <span class="k">await</span> <span class="n">task</span><span class="p">()</span>
 
+        <span class="c1"># Stop background tasks, and wait for them to finish, before closing the</span>
+        <span class="c1"># connection pool they may be using. If the pool were closed first, a task</span>
+        <span class="c1"># cancelled mid-query could fail while cleaning up its session, and that</span>
+        <span class="c1"># failure (raised in place of the CancelledError) could be caught by the</span>
+        <span class="c1"># task's error handling, leaving it running and blocking shutdown.</span>
+        <span class="n">running_tasks</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="p">,</span> <span class="s2">"tasks"</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">running_tasks</span><span class="p">:</span>
+            <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">running_tasks</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
         <span class="n">settings</span><span class="p">:</span> <span class="n">Settings</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dependency_overrides</span><span class="p">[</span><span class="n">get_settings</span><span class="p">]()</span>
         <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_settings</span><span class="o">.</span><span class="n">uri</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="kn">from</span><span class="w"> </span><span class="nn">.connection_pool</span><span class="w"> </span><span class="kn">import</span> <span class="n">close_database_connection_pool</span>
 
             <span class="k">await</span> <span class="n">close_database_connection_pool</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">database_settings</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">state</span><span class="p">,</span> <span class="s2">"tasks"</span><span class="p">,</span> <span class="p">[]):</span>
-            <span class="n">task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
 
     <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
         <span class="n">CompressionMiddleware</span><span class="p">,</span>
