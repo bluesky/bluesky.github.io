@@ -1479,6 +1479,7 @@ window.runMermaid = runMermaid;</script>
             <span class="kn">from</span><span class="w"> </span><span class="nn">..authn_database.core</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
                 <span class="n">ALL_REVISIONS</span><span class="p">,</span>
                 <span class="n">REQUIRED_REVISION</span><span class="p">,</span>
+                <span class="n">initialize_authn_database</span><span class="p">,</span>
                 <span class="n">initialize_database</span><span class="p">,</span>
                 <span class="n">make_admin_by_identity</span><span class="p">,</span>
                 <span class="n">purge_expired</span><span class="p">,</span>
@@ -1500,24 +1501,13 @@ window.runMermaid = runMermaid;</script>
                     <span class="k">await</span> <span class="n">check_database</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="n">REQUIRED_REVISION</span><span class="p">,</span> <span class="n">ALL_REVISIONS</span><span class="p">)</span>
                 <span class="k">except</span> <span class="n">UninitializedDatabase</span><span class="p">:</span>
                     <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">database_init_if_not_exists</span><span class="p">:</span>
-                        <span class="c1"># The alembic stamping can only be does synchronously.</span>
-                        <span class="c1"># The cleanest option available is to start a subprocess</span>
-                        <span class="c1"># because SQLite is allergic to threads.</span>
-                        <span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
-
-                        <span class="c1"># TODO Check if catalog exists.</span>
-                        <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-                            <span class="p">[</span>
-                                <span class="n">sys</span><span class="o">.</span><span class="n">executable</span><span class="p">,</span>
-                                <span class="s2">"-m"</span><span class="p">,</span>
-                                <span class="s2">"tiled"</span><span class="p">,</span>
-                                <span class="s2">"admin"</span><span class="p">,</span>
-                                <span class="s2">"initialize-database"</span><span class="p">,</span>
-                                <span class="nb">str</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">url</span><span class="p">),</span>
-                            <span class="p">],</span>
-                            <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                            <span class="n">check</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="c1"># This is a blocking call (alembic drives its own event</span>
+                        <span class="c1"># loop), so keep it off the event loop thread.</span>
+                        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">to_thread</span><span class="p">(</span>
+                            <span class="n">initialize_authn_database</span><span class="p">,</span>
+                            <span class="n">engine</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">render_as_string</span><span class="p">(</span><span class="n">hide_password</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
                         <span class="p">)</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Initialized new database at </span><span class="si">{</span><span class="n">redacted_url</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="nb">print</span><span class="p">(</span>
                             <span class="n">dedent</span><span class="p">(</span>
