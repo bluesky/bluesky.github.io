@@ -796,6 +796,7 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">asynccontextmanager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache</span><span class="p">,</span> <span class="n">partial</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">html</span><span class="w"> </span><span class="kn">import</span> <span class="n">escape</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">textwrap</span><span class="w"> </span><span class="kn">import</span> <span class="n">dedent</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
@@ -861,7 +862,13 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.protocols</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExternalAuthenticator</span><span class="p">,</span> <span class="n">InternalAuthenticator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.router</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_metrics_router</span><span class="p">,</span> <span class="n">get_router</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">Settings</span><span class="p">,</span> <span class="n">get_settings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span> <span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span> <span class="n">get_root_url</span><span class="p">,</span> <span class="n">record_timing</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">API_KEY_COOKIE_NAME</span><span class="p">,</span>
+    <span class="n">CSRF_COOKIE_NAME</span><span class="p">,</span>
+    <span class="n">get_root_url</span><span class="p">,</span>
+    <span class="n">normalize_root_path</span><span class="p">,</span>
+    <span class="n">record_timing</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.webhook_router</span><span class="w"> </span><span class="kn">import</span> <span class="n">UrlValidator</span><span class="p">,</span> <span class="n">get_webhook_router</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.zarr</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_zarr_router_v2</span><span class="p">,</span> <span class="n">get_zarr_router_v3</span>
 
@@ -884,6 +891,15 @@ window.runMermaid = runMermaid;</script>
 
 <span class="c1"># This is used to pass the currently-authenticated principal into the logger.</span>
 <span class="n">current_principal</span> <span class="o">=</span> <span class="n">contextvars</span><span class="o">.</span><span class="n">ContextVar</span><span class="p">(</span><span class="s2">"current_principal"</span><span class="p">)</span>
+
+
+<span class="c1"># Emitted by web-frontend's build; the prefix is unknown until runtime.</span>
+<span class="n">UI_BASE_TAG</span> <span class="o">=</span> <span class="s1">'&lt;base href="/ui/" /&gt;'</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">render_ui_index</span><span class="p">(</span><span class="n">index_html</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">root_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Point the UI's &lt;base&gt; at the prefix this server is served under."""</span>
+    <span class="k">return</span> <span class="n">index_html</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">UI_BASE_TAG</span><span class="p">,</span> <span class="sa">f</span><span class="s1">'&lt;base href="</span><span class="si">{</span><span class="n">escape</span><span class="p">(</span><span class="n">root_path</span><span class="p">)</span><span class="si">}</span><span class="s1">/ui/"&gt;'</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">custom_openapi</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
@@ -1093,6 +1109,16 @@ window.runMermaid = runMermaid;</script>
     <span class="k">if</span> <span class="n">SHARE_TILED_PATH</span><span class="p">:</span>
         <span class="c1"># If the distribution includes static assets, serve UI routes.</span>
 
+        <span class="n">index_html_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">"ui"</span><span class="p">,</span> <span class="s2">"index.html"</span><span class="p">)</span>
+        <span class="n">index_html</span> <span class="o">=</span> <span class="n">index_html_path</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span> <span class="k">if</span> <span class="n">index_html_path</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="c1"># Without the tag the UI only works unmounted; a vendored UI is fine.</span>
+        <span class="k">if</span> <span class="n">index_html</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">UI_BASE_TAG</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">index_html</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">%s</span><span class="s2"> lacks </span><span class="si">%s</span><span class="s2">; serving it unmodified, so it works only at /."</span><span class="p">,</span>
+                <span class="n">index_html_path</span><span class="p">,</span>
+                <span class="n">UI_BASE_TAG</span><span class="p">,</span>
+            <span class="p">)</span>
+
         <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/favicon.ico"</span><span class="p">,</span> <span class="n">include_in_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">favicon</span><span class="p">():</span>
             <span class="n">icon_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">"ui"</span><span class="p">,</span> <span class="s2">"tiled-icon.ico"</span><span class="p">)</span>
@@ -1102,15 +1128,26 @@ window.runMermaid = runMermaid;</script>
 
         <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/ui/{path:path}"</span><span class="p">)</span>
         <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">ui</span><span class="p">(</span>
+            <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span>
             <span class="n">path</span><span class="p">,</span>
             <span class="n">_</span><span class="o">=</span><span class="n">Depends</span><span class="p">(</span><span class="n">move_api_key</span><span class="p">),</span>
         <span class="p">):</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lookup_file</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lookup_file</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">response</span>
 
-        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">lookup_file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">lookup_file</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="p">:</span>
                 <span class="n">path</span> <span class="o">=</span> <span class="s2">"index.html"</span>
+            <span class="k">if</span> <span class="n">path</span> <span class="o">==</span> <span class="s2">"index.html"</span> <span class="ow">and</span> <span class="n">index_html</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">Response</span><span class="p">(</span>
+                    <span class="n">content</span><span class="o">=</span><span class="n">render_ui_index</span><span class="p">(</span>
+                        <span class="n">index_html</span><span class="p">,</span> <span class="n">normalize_root_path</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">scope</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"root_path"</span><span class="p">))</span>
+                    <span class="p">),</span>
+                    <span class="n">media_type</span><span class="o">=</span><span class="s2">"text/html"</span><span class="p">,</span>
+                    <span class="c1"># A stale index references asset filenames that an upgrade</span>
+                    <span class="c1"># has already removed.</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">"Cache-Control"</span><span class="p">:</span> <span class="s2">"no-store"</span><span class="p">},</span>
+                <span class="p">)</span>
             <span class="n">full_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">SHARE_TILED_PATH</span><span class="p">,</span> <span class="s2">"ui"</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">stat_result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">anyio</span><span class="o">.</span><span class="n">to_thread</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">,</span> <span class="n">full_path</span><span class="p">)</span>
@@ -1121,7 +1158,7 @@ window.runMermaid = runMermaid;</script>
                 <span class="c1"># such as /ui//metadata/a/b/c.</span>
                 <span class="c1"># Serve index.html and let the client-side application sort it out.</span>
                 <span class="k">if</span> <span class="n">try_app</span><span class="p">:</span>
-                    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lookup_file</span><span class="p">(</span><span class="s2">"index.html"</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">lookup_file</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">"index.html"</span><span class="p">,</span> <span class="n">try_app</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
                     <span class="k">return</span> <span class="n">response</span>
                 <span class="k">raise</span> <span class="n">HTTPException</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="n">HTTP_404_NOT_FOUND</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
@@ -1168,11 +1205,13 @@ window.runMermaid = runMermaid;</script>
             <span class="c1"># comments. But they are served as JSON because that is easy to deal with</span>
             <span class="c1"># on the client side.</span>
             <span class="n">ui_settings</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">TILED_UI_SETTINGS</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
-            <span class="k">if</span> <span class="n">root_path</span> <span class="o">:=</span> <span class="n">server_settings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"root_path"</span><span class="p">,</span> <span class="s2">""</span><span class="p">):</span>
-                <span class="n">ui_settings</span><span class="p">[</span><span class="s2">"api_url"</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">root_path</span><span class="si">}{</span><span class="n">ui_settings</span><span class="p">[</span><span class="s1">'api_url'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
 
             <span class="nd">@app</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/tiled-ui-settings"</span><span class="p">)</span>
-            <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">tiled_ui_settings</span><span class="p">():</span>
+            <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">tiled_ui_settings</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">):</span>
+                <span class="n">root_path</span> <span class="o">=</span> <span class="n">normalize_root_path</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">scope</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"root_path"</span><span class="p">))</span>
+                <span class="n">api_url</span> <span class="o">=</span> <span class="n">ui_settings</span><span class="p">[</span><span class="s2">"api_url"</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">root_path</span> <span class="ow">and</span> <span class="n">api_url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"/"</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="n">ui_settings</span><span class="p">,</span> <span class="s2">"api_url"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">root_path</span><span class="si">}{</span><span class="n">api_url</span><span class="si">}</span><span class="s2">"</span><span class="p">}</span>
                 <span class="k">return</span> <span class="n">ui_settings</span>
 
     <span class="nd">@app</span><span class="o">.</span><span class="n">exception_handler</span><span class="p">(</span><span class="n">Conflicts</span><span class="p">)</span>
