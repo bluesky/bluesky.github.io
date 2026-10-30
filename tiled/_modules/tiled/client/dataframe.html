@@ -953,10 +953,18 @@ window.runMermaid = runMermaid;</script>
         <span class="c1"># This builds a single-partition dask dataframe from one delayed object,</span>
         <span class="c1"># so `divisions` must have length len(dfs) + 1 == 2 regardless of how many</span>
         <span class="c1"># partitions the full dataset has.</span>
+        <span class="c1">#</span>
+        <span class="c1"># The pandas dtypes in `meta` come from the Arrow schema recorded when</span>
+        <span class="c1"># the table was written, and may differ from those of the data the</span>
+        <span class="c1"># server sends: in particular, string columns are `object` in the</span>
+        <span class="c1"># schema but may arrive as `string` depending on how the server reads</span>
+        <span class="c1"># its storage. So the partition is not checked against `meta`, as in</span>
+        <span class="c1"># `read`.</span>
         <span class="k">return</span> <span class="n">dask</span><span class="o">.</span><span class="n">dataframe</span><span class="o">.</span><span class="n">from_delayed</span><span class="p">(</span>
             <span class="p">[</span><span class="n">dask</span><span class="o">.</span><span class="n">delayed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_partition</span><span class="p">)(</span><span class="n">partition</span><span class="p">,</span> <span class="n">columns</span><span class="p">)],</span>
             <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">,</span>
             <span class="n">divisions</span><span class="o">=</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">verify_meta</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
@@ -1156,7 +1164,10 @@ window.runMermaid = runMermaid;</script>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Access one partition of the DataFrame. Optionally select a subset of the columns.</span>
 <span class="sd">        """</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">read_partition</span><span class="p">(</span><span class="n">partition</span><span class="p">,</span> <span class="n">columns</span><span class="p">)</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span></div>
+        <span class="n">npartitions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structure</span><span class="p">()</span><span class="o">.</span><span class="n">npartitions</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">partition</span> <span class="o">&lt;</span> <span class="n">npartitions</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"partition </span><span class="si">{</span><span class="n">partition</span><span class="si">}</span><span class="s2"> out of range"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_partition</span><span class="p">(</span><span class="n">partition</span><span class="p">,</span> <span class="n">columns</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DataFrameClient.read">
