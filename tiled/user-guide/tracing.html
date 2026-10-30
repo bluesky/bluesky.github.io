@@ -964,6 +964,71 @@ Tempo in the example stack), which store them and make them available to
 search and visualize.</p></li>
 </ol>
 </section>
+<section id="finding-the-trace-of-a-request">
+<h2>Finding the trace of a request<a class="headerlink" href="#finding-the-trace-of-a-request" title="Link to this heading">#</a></h2>
+<p>Each traced response carries the request’s trace ID (32 hexadecimal digits) in
+the <code class="docutils literal notranslate"><span class="pre">X-Tiled-Trace-ID</span></code> header, next to the <code class="docutils literal notranslate"><span class="pre">X-Tiled-Request-ID</span></code> correlation ID.
+The server’s log lines for the request show both IDs, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="mi">3</span><span class="n">f2a9c1e04b7d816</span> <span class="mi">0</span><span class="n">af7651916cd43dd8448eb211c80319c</span><span class="p">]</span> <span class="mf">127.0.0.1</span><span class="p">:</span><span class="mi">52344</span> <span class="p">(</span><span class="n">singleuser</span><span class="p">)</span> <span class="o">-</span> <span class="s2">"GET /api/v1/metadata/ HTTP/1.1"</span> <span class="mi">200</span> <span class="n">OK</span>
+</pre></div>
+</div>
+<p>To open a trace, paste its ID into the search box at the top of the Jaeger UI,
+or into a TraceQL query in Grafana’s Explore view (Tempo data source).</p>
+<p>If you only have the correlation ID (for example, from a client error message
+for a <code class="docutils literal notranslate"><span class="pre">4xx</span></code> response, or from logs that do not include the trace ID), search
+for it instead: it is recorded in the request’s span as the <code class="docutils literal notranslate"><span class="pre">tiled.request_id</span></code>
+attribute. In the Jaeger UI, enter <code class="docutils literal notranslate"><span class="pre">tiled.request_id=3f2a9c1e04b7d816</span></code> under
+<strong>Tags</strong>; in Grafana, use the TraceQL query
+<code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">span.tiled.request_id</span> <span class="pre">=</span> <span class="pre">&quot;3f2a9c1e04b7d816&quot;</span> <span class="pre">}</span></code>.</p>
+<section id="when-a-request-fails">
+<h3>When a request fails<a class="headerlink" href="#when-a-request-fails" title="Link to this heading">#</a></h3>
+<p>When the server returns an error, the Python client includes both IDs in the
+exception message, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Server</span> <span class="n">error</span> <span class="s1">'500 Internal Server Error'</span> <span class="k">for</span> <span class="n">url</span> <span class="s1">'http://localhost:8000/api/v1/...'</span>
+<span class="n">For</span> <span class="n">more</span> <span class="n">information</span><span class="p">,</span> <span class="n">server</span> <span class="n">admin</span> <span class="n">can</span> <span class="n">search</span> <span class="n">server</span> <span class="n">logs</span> <span class="k">for</span> <span class="n">correlation</span> <span class="n">ID</span> <span class="mi">3</span><span class="n">f2a9c1e04b7d816</span> <span class="ow">and</span> <span class="n">traces</span> <span class="k">for</span> <span class="n">trace</span> <span class="n">ID</span> <span class="mi">0</span><span class="n">af7651916cd43dd8448eb211c80319c</span><span class="o">.</span>
+</pre></div>
+</div>
+</section>
+<section id="when-a-request-is-slow">
+<h3>When a request is slow<a class="headerlink" href="#when-a-request-is-slow" title="Link to this heading">#</a></h3>
+<p>Record the client’s requests while running the slow operation, then print how
+long each took and its trace ID:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">tiled.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">record_history</span>
+
+<span class="k">with</span> <span class="n">record_history</span><span class="p">()</span> <span class="k">as</span> <span class="n">history</span><span class="p">:</span>
+    <span class="o">...</span>  <span class="c1"># the slow operation, e.g. c["some/array"].read()</span>
+
+<span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="n">history</span><span class="o">.</span><span class="n">responses</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">elapsed</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"x-tiled-trace-id"</span><span class="p">)</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<p>Alternatively, <code class="docutils literal notranslate"><span class="pre">tiled.client.show_logs()</span></code> logs every request and response,
+including its headers, with timestamps.</p>
+<p>Without a trace ID at hand, search the backend for slow requests instead: in
+the Jaeger UI, set <strong>Min Duration</strong> (e.g. <code class="docutils literal notranslate"><span class="pre">1s</span></code>) when searching the <strong>tiled</strong>
+service; in Grafana, use a TraceQL query such as
+<code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">resource.service.name</span> <span class="pre">=</span> <span class="pre">&quot;tiled&quot;</span> <span class="pre">&amp;&amp;</span> <span class="pre">kind</span> <span class="pre">=</span> <span class="pre">server</span> <span class="pre">&amp;&amp;</span> <span class="pre">duration</span> <span class="pre">&gt;</span> <span class="pre">1s</span> <span class="pre">}</span></code>.</p>
+</section>
+<section id="when-there-is-no-trace-id">
+<h3>When there is no trace ID<a class="headerlink" href="#when-there-is-no-trace-id" title="Link to this heading">#</a></h3>
+<p>The header and the trace ID in the logs are omitted when there is no trace to
+look up:</p>
+<ul class="simple">
+<li><p>tracing is disabled on the server;</p></li>
+<li><p>the URL is excluded from tracing (<code class="docutils literal notranslate"><span class="pre">OTEL_PYTHON_FASTAPI_EXCLUDED_URLS</span></code>);</p></li>
+<li><p>the request is not sampled, i.e. the trace is deliberately not recorded.</p></li>
+</ul>
+<p>A client that is itself traced (for example, another service instrumented with
+OpenTelemetry) sends its own trace ID with each request, in the standard
+<a class="reference external" href="https://www.w3.org/TR/trace-context/#traceparent-header"><code class="docutils literal notranslate"><span class="pre">traceparent</span></code></a> header.
+Tiled then adds its spans to the client’s trace instead of starting a new one,
+so the response carries the client’s trace ID, and the trace shows the work on
+both sides. Whether such a request is sampled is decided by the client. Ordinary
+clients, including the Tiled Python client, do not send this header.</p>
+</section>
+</section>
 <section id="try-it-with-the-example-stack">
 <h2>Try it with the example stack<a class="headerlink" href="#try-it-with-the-example-stack" title="Link to this heading">#</a></h2>
 <p>Tiled ships example configuration that runs an OpenTelemetry Collector and
@@ -1071,6 +1136,12 @@ See <a class="reference internal" href="metrics.html"><span class="std std-doc">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enabling-tracing">Enabling tracing</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sampling">Sampling</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-does-it-work">How does it work?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#finding-the-trace-of-a-request">Finding the trace of a request</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#when-a-request-fails">When a request fails</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#when-a-request-is-slow">When a request is slow</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#when-there-is-no-trace-id">When there is no trace ID</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#try-it-with-the-example-stack">Try it with the example stack</a></li>
 </ul>
   </nav></div>
