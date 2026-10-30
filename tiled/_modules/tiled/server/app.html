@@ -788,6 +788,7 @@ window.runMermaid = runMermaid;</script>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextvars</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.metadata</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
@@ -880,6 +881,7 @@ window.runMermaid = runMermaid;</script>
 <span class="n">CSRF_QUERY_PARAMETER</span> <span class="o">=</span> <span class="s2">"csrf"</span>
 
 <span class="n">MINIMUM_SUPPORTED_PYTHON_CLIENT_VERSION</span> <span class="o">=</span> <span class="n">packaging</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">"0.1.0a104"</span><span class="p">)</span>
+<span class="n">FASTAPI_VERSION</span> <span class="o">=</span> <span class="n">packaging</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">Version</span><span class="p">(</span><span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="s2">"fastapi"</span><span class="p">))</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 <span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="s2">"INFO"</span><span class="p">)</span>
@@ -1098,7 +1100,17 @@ window.runMermaid = runMermaid;</script>
         <span class="k">finally</span><span class="p">:</span>
             <span class="k">await</span> <span class="n">shutdown_event</span><span class="p">()</span>
 
-    <span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">(</span><span class="n">lifespan</span><span class="o">=</span><span class="n">lifespan</span><span class="p">,</span> <span class="n">strict_content_type</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1"># FastAPI &gt;=0.142 ships built-in OpenTelemetry support that, when</span>
+    <span class="c1"># `OTEL_EXPORTER_OTLP_ENDPOINT` (or a related variable) is set,</span>
+    <span class="c1"># auto-registers its own OTLP export pipeline on the global tracer</span>
+    <span class="c1"># provider. Tiled configures and manages its own tracing pipeline (see</span>
+    <span class="c1"># `_setup_opentelemetry_tracing`), so FastAPI's auto-configuration</span>
+    <span class="c1"># would register a second exporter and emit every span twice. Opt out.</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">lifespan</span><span class="o">=</span><span class="n">lifespan</span><span class="p">,</span> <span class="n">strict_content_type</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">FASTAPI_VERSION</span> <span class="o">&gt;=</span> <span class="n">packaging</span><span class="o">.</span><span class="n">version</span><span class="o">.</span><span class="n">Version</span><span class="p">(</span><span class="s2">"0.142"</span><span class="p">):</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"telemetry"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"auto_configure"</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+
+    <span class="n">app</span> <span class="o">=</span> <span class="n">FastAPI</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="c1"># Healthcheck for deployment to containerized systems, needs to preempt other responses.</span>
     <span class="c1"># Standardized for Kubernetes, but also used by other systems.</span>
@@ -1921,8 +1933,46 @@ window.runMermaid = runMermaid;</script>
         <span class="n">generator</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span>
     <span class="p">)</span>
 
+    <span class="n">_setup_opentelemetry_tracing</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">app</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_setup_opentelemetry_tracing</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Enable OpenTelemetry request tracing when an OTLP endpoint is configured.</span>
+
+<span class="sd">    Tracing is activated only when the standard `OTEL_EXPORTER_OTLP_ENDPOINT`</span>
+<span class="sd">    environment variable is set, so it is off by default and adds no overhead</span>
+<span class="sd">    unless explicitly enabled. Spans are exported over OTLP/HTTP.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">"OTEL_EXPORTER_OTLP_ENDPOINT"</span><span class="p">):</span>
+        <span class="k">return</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry</span><span class="w"> </span><span class="kn">import</span> <span class="n">trace</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.exporter.otlp.proto.http.trace_exporter</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">OTLPSpanExporter</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.instrumentation.fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">FastAPIInstrumentor</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.sdk.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resource</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.sdk.trace</span><span class="w"> </span><span class="kn">import</span> <span class="n">TracerProvider</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.sdk.trace.export</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchSpanProcessor</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">"OTEL_EXPORTER_OTLP_ENDPOINT is set but the OpenTelemetry packages "</span>
+            <span class="s2">"are not installed; tracing is disabled."</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Configure the global tracer provider once per process.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">trace</span><span class="o">.</span><span class="n">get_tracer_provider</span><span class="p">(),</span> <span class="n">TracerProvider</span><span class="p">):</span>
+        <span class="n">resource</span> <span class="o">=</span> <span class="n">Resource</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">"service.name"</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">"OTEL_SERVICE_NAME"</span><span class="p">,</span> <span class="s2">"tiled"</span><span class="p">)}</span>
+        <span class="p">)</span>
+        <span class="n">provider</span> <span class="o">=</span> <span class="n">TracerProvider</span><span class="p">(</span><span class="n">resource</span><span class="o">=</span><span class="n">resource</span><span class="p">)</span>
+        <span class="n">provider</span><span class="o">.</span><span class="n">add_span_processor</span><span class="p">(</span><span class="n">BatchSpanProcessor</span><span class="p">(</span><span class="n">OTLPSpanExporter</span><span class="p">()))</span>
+        <span class="n">trace</span><span class="o">.</span><span class="n">set_tracer_provider</span><span class="p">(</span><span class="n">provider</span><span class="p">)</span>
+    <span class="n">FastAPIInstrumentor</span><span class="o">.</span><span class="n">instrument_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="build_app_from_config">
