@@ -890,6 +890,11 @@ Prometheus scrapes Tiled’s metrics endpoint. Dashed arrows show how the same
 Collector could also carry OpenTelemetry’s other two signals — <strong>metrics</strong> and
 <strong>logs</strong> — over OTLP to backends such as Prometheus and Loki. Those paths are
 not currently enabled.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Database-query spans are emitted only for PostgreSQL (via asyncpg and ADBC);
+tracing with SQLite-backed catalogs is not supported.</p>
+</div>
 <section id="enabling-tracing">
 <h2>Enabling tracing<a class="headerlink" href="#enabling-tracing" title="Link to this heading">#</a></h2>
 <p>Tracing is <strong>disabled by default</strong>. It is turned on by setting the standard
@@ -915,6 +920,37 @@ directly). Related environment variables:</p>
 </tbody>
 </table>
 </div>
+</section>
+<section id="sampling">
+<h2>Sampling<a class="headerlink" href="#sampling" title="Link to this heading">#</a></h2>
+<p>By default every request is traced in full. That is convenient for trying it out
+but can be a lot of data in production, especially since each request emits a
+span per database query. Sampling is controlled by the standard OpenTelemetry
+environment variables:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>Purpose</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">OTEL_TRACES_SAMPLER</span></code></p></td>
+<td><p>Sampling strategy. Default <code class="docutils literal notranslate"><span class="pre">parentbased_always_on</span></code> (trace everything). Use <code class="docutils literal notranslate"><span class="pre">parentbased_traceidratio</span></code> to keep a fraction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">OTEL_TRACES_SAMPLER_ARG</span></code></p></td>
+<td><p>Argument for the sampler; for the ratio samplers, the fraction of traces to keep (0.0-1.0).</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For example, to keep 10% of traces:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">OTEL_TRACES_SAMPLER</span><span class="o">=</span><span class="n">parentbased_traceidratio</span>
+<span class="n">OTEL_TRACES_SAMPLER_ARG</span><span class="o">=</span><span class="mf">0.1</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">parentbased_*</span></code> samplers make the decision once at the start of a trace and
+apply it to all of that trace’s spans, so a sampled request keeps its database
+and cache spans together with the rest of the trace.</p>
 </section>
 <section id="how-does-it-work">
 <h2>How does it work?<a class="headerlink" href="#how-does-it-work" title="Link to this heading">#</a></h2>
@@ -959,6 +995,21 @@ waterfall.</p></li>
 <a class="reference external" href="https://grafana.com/docs/tempo/latest/traceql/">TraceQL</a>, for example
 <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">resource.service.name</span> <span class="pre">=</span> <span class="pre">&quot;tiled&quot;</span> <span class="pre">}</span></code>.</p></li>
 </ul>
+<p>Each trace also includes spans for the <strong>PostgreSQL</strong> queries (against the
+catalog, storage, and authentication databases), <strong>Redis</strong> commands (for the
+streaming cache), and any <strong>outbound HTTP</strong> calls Tiled makes while serving the
+request (OIDC authentication, webhooks, and external policy servers, via
+httpx). These are client spans emitted by Tiled, so they share the <code class="docutils literal notranslate"><span class="pre">tiled</span></code>
+service, but they carry a <code class="docutils literal notranslate"><span class="pre">db.system</span></code> attribute (<code class="docutils literal notranslate"><span class="pre">postgresql</span></code> or <code class="docutils literal notranslate"><span class="pre">redis</span></code>) — or,
+for HTTP calls, the target host — that distinguishes them from Tiled’s own
+<code class="docutils literal notranslate"><span class="pre">tiled.*</span></code> spans. The Collector drops transaction-control statements
+(<code class="docutils literal notranslate"><span class="pre">BEGIN</span></code>/<code class="docutils literal notranslate"><span class="pre">COMMIT</span></code>/<code class="docutils literal notranslate"><span class="pre">ROLLBACK</span></code>) to keep traces concise and readable.</p>
+<p>Filter spans by the <code class="docutils literal notranslate"><span class="pre">db.system</span></code> attribute (Grafana’s span filters, or Jaeger’s
+find-within-trace box) to highlight the database and cache work. Grafana’s
+<strong>Service Graph</strong> (Explore → Tempo) also renders Tiled’s dependencies as nodes:
+each Postgres database (<code class="docutils literal notranslate"><span class="pre">tiled_catalog</span></code>, <code class="docutils literal notranslate"><span class="pre">tiled_storage</span></code>, authn) by <code class="docutils literal notranslate"><span class="pre">db.name</span></code>,
+<code class="docutils literal notranslate"><span class="pre">redis</span></code>, and outbound HTTP — webhook deliveries grouped under one <code class="docutils literal notranslate"><span class="pre">webhooks</span></code>
+node, other calls (e.g. OIDC) named by host.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The bundled Collector also scrapes Tiled’s <code class="docutils literal notranslate"><span class="pre">/api/v1/metrics</span></code> endpoint and
@@ -1018,6 +1069,7 @@ See <a class="reference internal" href="metrics.html"><span class="std std-doc">
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enabling-tracing">Enabling tracing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sampling">Sampling</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-does-it-work">How does it work?</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#try-it-with-the-example-stack">Try it with the example stack</a></li>
 </ul>

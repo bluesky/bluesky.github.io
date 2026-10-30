@@ -1974,6 +1974,50 @@ window.runMermaid = runMermaid;</script>
         <span class="n">trace</span><span class="o">.</span><span class="n">set_tracer_provider</span><span class="p">(</span><span class="n">provider</span><span class="p">)</span>
     <span class="n">FastAPIInstrumentor</span><span class="o">.</span><span class="n">instrument_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 
+    <span class="c1"># Emit spans for calls to the PostgreSQL driver (asyncpg), Redis, and</span>
+    <span class="c1"># outbound HTTP (httpx: OIDC, webhooks, external policy servers). These</span>
+    <span class="c1"># patch the libraries globally, so they are no-ops until a request uses them.</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.instrumentation.asyncpg</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncPGInstrumentor</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">AsyncPGInstrumentor</span><span class="p">()</span><span class="o">.</span><span class="n">instrument</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.instrumentation.redis</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisInstrumentor</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">RedisInstrumentor</span><span class="p">()</span><span class="o">.</span><span class="n">instrument</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Tiled's HTTP clients (webhook delivery, OIDC, external access</span>
+        <span class="c1"># policies) are httpx2 clients, which the httpx instrumentation traces</span>
+        <span class="c1"># through its httpx2 instrumentor (0.65b0 or newer).</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.instrumentation.httpx</span><span class="w"> </span><span class="kn">import</span> <span class="n">HTTPX2ClientInstrumentor</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_set_peer_service</span><span class="p">(</span><span class="n">span</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+            <span class="c1"># Name the downstream dependency so it becomes its own node in the</span>
+            <span class="c1"># Tempo service graph (via peer.service) and is filterable in Jaeger.</span>
+            <span class="c1"># Bundle every webhook delivery under a single 'webhooks' node; name</span>
+            <span class="c1"># other outbound calls (OIDC, external policy servers) by their host.</span>
+            <span class="k">if</span> <span class="n">span</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">span</span><span class="o">.</span><span class="n">is_recording</span><span class="p">():</span>
+                <span class="k">return</span>
+            <span class="k">if</span> <span class="s2">"x-tiled-event-id"</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span>
+                <span class="n">span</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">"peer.service"</span><span class="p">,</span> <span class="s2">"webhooks"</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">host</span><span class="p">:</span>
+                <span class="n">span</span><span class="o">.</span><span class="n">set_attribute</span><span class="p">(</span><span class="s2">"peer.service"</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">host</span><span class="p">)</span>
+
+        <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_set_peer_service_async</span><span class="p">(</span><span class="n">span</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+            <span class="n">_set_peer_service</span><span class="p">(</span><span class="n">span</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+
+        <span class="n">HTTPX2ClientInstrumentor</span><span class="p">()</span><span class="o">.</span><span class="n">instrument</span><span class="p">(</span>
+            <span class="n">request_hook</span><span class="o">=</span><span class="n">_set_peer_service</span><span class="p">,</span>
+            <span class="n">async_request_hook</span><span class="o">=</span><span class="n">_set_peer_service_async</span><span class="p">,</span>
+        <span class="p">)</span>
+
 
 <div class="viewcode-block" id="build_app_from_config">
 <a class="viewcode-back" href="../../../reference/generated/tiled.server.app.build_app_from_config.html#tiled.server.app.build_app_from_config">[docs]</a>
