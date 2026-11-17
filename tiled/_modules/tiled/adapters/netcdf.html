@@ -6,7 +6,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tiled.adapters.netcdf &#8212; tiled 0.2.22b1 documentation</title>
+    <title>tiled.adapters.netcdf &#8212; tiled main documentation</title>
   
   
   
@@ -43,7 +43,7 @@
 
     <script src="../../../_static/jquery.js?v=5d32c60e"></script>
     <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-    <script src="../../../_static/documentation_options.js?v=b6891cf7"></script>
+    <script src="../../../_static/documentation_options.js?v=a8da1a53"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -414,7 +414,7 @@ window.runMermaid = runMermaid;</script>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="0.2.22b1" />
+  <meta name="docsearch:version" content="main" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -486,8 +486,8 @@ window.runMermaid = runMermaid;</script>
       
     
     
-    <img src="../../../_static/tiled-logo.svg" class="logo__image only-light" alt="tiled 0.2.22b1 documentation - Home"/>
-    <img src="../../../_static/tiled-logo.svg" class="logo__image only-dark pst-js-only" alt="tiled 0.2.22b1 documentation - Home"/>
+    <img src="../../../_static/tiled-logo.svg" class="logo__image only-light" alt="tiled main documentation - Home"/>
+    <img src="../../../_static/tiled-logo.svg" class="logo__image only-dark pst-js-only" alt="tiled main documentation - Home"/>
   
   
 </a></div>
@@ -785,7 +785,8 @@ window.runMermaid = runMermaid;</script>
                 <article class="bd-article">
                   
   <h1>Source code for tiled.adapters.netcdf</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span>
@@ -817,15 +818,26 @@ window.runMermaid = runMermaid;</script>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">NetCDFAdapter</span><span class="p">(</span><span class="n">TableAdapter</span><span class="p">):</span>
+    <span class="c1"># The catalog passes the directories of its readable storage to</span>
+    <span class="c1"># from_catalog as `readable_directories`.</span>
+    <span class="n">accepts_readable_directories</span> <span class="o">=</span> <span class="kc">True</span>
+
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_catalog</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">data_source</span><span class="p">:</span> <span class="n">DataSource</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
         <span class="n">node</span><span class="p">:</span> <span class="n">Node</span><span class="p">,</span>
         <span class="o">/</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"NetCDFAdapter"</span><span class="p">:</span>
         <span class="n">filepath</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_source</span><span class="o">.</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data_uri</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">readable_directories</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># A NetCDF-4 file is an HDF5 file, which can make the library read</span>
+            <span class="c1"># other files. A server reads only the file that was registered.</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">.hdf5</span><span class="w"> </span><span class="kn">import</span> <span class="n">require_self_contained</span>
+
+            <span class="n">require_self_contained</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">read_netcdf</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
 </pre></div>

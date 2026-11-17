@@ -6,7 +6,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tiled.adapters.hdf5 &#8212; tiled 0.2.22b1 documentation</title>
+    <title>tiled.adapters.hdf5 &#8212; tiled main documentation</title>
   
   
   
@@ -43,7 +43,7 @@
 
     <script src="../../../_static/jquery.js?v=5d32c60e"></script>
     <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-    <script src="../../../_static/documentation_options.js?v=b6891cf7"></script>
+    <script src="../../../_static/documentation_options.js?v=a8da1a53"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -414,7 +414,7 @@ window.runMermaid = runMermaid;</script>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="0.2.22b1" />
+  <meta name="docsearch:version" content="main" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -486,8 +486,8 @@ window.runMermaid = runMermaid;</script>
       
     
     
-    <img src="../../../_static/tiled-logo.svg" class="logo__image only-light" alt="tiled 0.2.22b1 documentation - Home"/>
-    <img src="../../../_static/tiled-logo.svg" class="logo__image only-dark pst-js-only" alt="tiled 0.2.22b1 documentation - Home"/>
+    <img src="../../../_static/tiled-logo.svg" class="logo__image only-light" alt="tiled main documentation - Home"/>
+    <img src="../../../_static/tiled-logo.svg" class="logo__image only-dark pst-js-only" alt="tiled main documentation - Home"/>
   
   
 </a></div>
@@ -787,15 +787,18 @@ window.runMermaid = runMermaid;</script>
   <h1>Source code for tiled.adapters.hdf5</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">builtins</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">posixpath</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">cachetools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dask.array</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">h5py</span>
@@ -827,9 +830,318 @@ window.runMermaid = runMermaid;</script>
 <span class="n">HDF5_BROKEN_LINK</span> <span class="o">=</span> <span class="n">Sentinel</span><span class="p">(</span><span class="s2">"HDF5_BROKEN_LINK"</span><span class="p">)</span>
 <span class="n">MIN_CHUNK_SIZE</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># Minimum chunk size along the concatenation axis</span>
 
+<span class="c1"># Limits on following a virtual dataset through its sources.</span>
+<span class="n">MAX_VIRTUAL_DEPTH</span> <span class="o">=</span> <span class="mi">16</span>
+<span class="n">MAX_VIRTUAL_SOURCES</span> <span class="o">=</span> <span class="mi">10_000</span>
+<span class="c1"># Virtual datasets whose sources were checked, with the state of every file</span>
+<span class="c1"># that the result depends on, as it was when the file was looked at.</span>
+<span class="n">FileState</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="n">_CHECKED_VIRTUAL</span><span class="p">:</span> <span class="n">cachetools</span><span class="o">.</span><span class="n">LRUCache</span><span class="p">[</span>
+    <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="o">...</span><span class="p">]],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FileState</span><span class="p">]]</span>
+<span class="p">]</span> <span class="o">=</span> <span class="n">cachetools</span><span class="o">.</span><span class="n">LRUCache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1024</span><span class="p">)</span>
+<span class="n">_CHECKED_VIRTUAL_LOCK</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_directories</span><span class="p">(</span><span class="n">directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">directories</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resolved</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">())</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+            <span class="k">continue</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">resolved</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_in_directories</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">bytes</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span> <span class="n">directories</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="s2">"Tell whether a path, with '..' and symbolic links resolved, is in a directory."</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">resolved</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">fsdecode</span><span class="p">(</span><span class="n">path</span><span class="p">))</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">resolved</span><span class="o">.</span><span class="n">is_relative_to</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">directories</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_file_state</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FileState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What identifies the current content of a file, or None where there is none.</span>
+
+<span class="sd">    The change time is included because, unlike the modification time, it</span>
+<span class="sd">    cannot be set to an earlier value.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">stat</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">stat</span><span class="o">.</span><span class="n">st_ino</span><span class="p">,</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="p">,</span> <span class="n">stat</span><span class="o">.</span><span class="n">st_ctime_ns</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_files_unchanged</span><span class="p">(</span><span class="n">states</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FileState</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">_file_state</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="o">==</span> <span class="n">state</span> <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_printf_name</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="s2">"Fill in the block number in a printf-style name of a virtual dataset source."</span>
+    <span class="k">return</span> <span class="n">name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"</span><span class="si">%%</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"</span><span class="se">\0</span><span class="s2">"</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"%b"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">block</span><span class="p">))</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"</span><span class="se">\0</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"%"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_open_source</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">:</span>
+    <span class="s2">"Open a source file of a virtual dataset, to look at what it refers to in turn."</span>
+    <span class="k">return</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r"</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ReferenceGuard</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Refuse HDF5 objects whose data is, or may be, outside of given directories.</span>
+
+<span class="sd">    An HDF5 file can make the library read other files: an external link names</span>
+<span class="sd">    an object in another file, a virtual dataset maps onto datasets in other</span>
+<span class="sd">    files, and a dataset can keep its raw data in any other file. A server that</span>
+<span class="sd">    serves a file it did not write follows these only into the directories it</span>
+<span class="sd">    is configured to read, and does not follow the last kind at all.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    filename :</span>
+<span class="sd">        The file that was opened.</span>
+<span class="sd">    directories :</span>
+<span class="sd">        The directories that may be read. None lifts every restriction, for</span>
+<span class="sd">        use on one's own files.</span>
+<span class="sd">    open_kwargs :</span>
+<span class="sd">        Passed to h5py.File when a source of a virtual dataset is opened.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">open_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">fspath</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">restricted</span> <span class="o">=</span> <span class="n">directories</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_directories</span> <span class="o">=</span> <span class="n">directories</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">open_kwargs</span> <span class="o">=</span> <span class="n">open_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">directories</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+        <span class="c1"># Resolved only if a file refers to another one. Most do not.</span>
+        <span class="k">return</span> <span class="n">_resolve_directories</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_directories</span> <span class="ow">or</span> <span class="p">())</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">follow_virtual</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Raise BrokenLink unless the object may be read.</span>
+
+<span class="sd">        With follow_virtual=False the sources of a virtual dataset are not</span>
+<span class="sd">        looked at. That leaves the costly part for when the dataset is opened.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">restricted</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="p">(</span><span class="n">h5py</span><span class="o">.</span><span class="n">Group</span><span class="p">,</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">)):</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="n">follow_virtual</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">budget</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">obj</span><span class="p">:</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Group</span> <span class="o">|</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span>
+        <span class="n">opened</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">follow_virtual</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">budget</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+        <span class="n">states</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FileState</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Check one object.</span>
+
+<span class="sd">        states, when given, belongs to the virtual dataset through which this</span>
+<span class="sd">        object was reached. Every file that the result for this object depends</span>
+<span class="sd">        on is added to it, so that the outer result is re-checked when any</span>
+<span class="sd">        file below it changes.</span>
+<span class="sd">        """</span>
+        <span class="c1"># An external link was followed if the object is in another file than</span>
+        <span class="c1"># the one that was opened. HDF5 reports the name of the file it found.</span>
+        <span class="n">home</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">fsdecode</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">home</span> <span class="o">!=</span> <span class="n">opened</span>
+            <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">home</span><span class="p">)</span> <span class="o">!=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">opened</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">_in_directories</span><span class="p">(</span><span class="n">home</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">directories</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">BrokenLink</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> is reached through a link to a file outside of the "</span>
+                <span class="s2">"storage that this server reads."</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">external</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BrokenLink</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"The data of </span><span class="si">{</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> is stored in an external file, which "</span>
+                <span class="s2">"this server does not read."</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">is_virtual</span> <span class="ow">and</span> <span class="n">follow_virtual</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">home</span><span class="p">),</span> <span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">directories</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">_CHECKED_VIRTUAL_LOCK</span><span class="p">:</span>
+                <span class="n">checked</span> <span class="o">=</span> <span class="n">_CHECKED_VIRTUAL</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">checked</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">_files_unchanged</span><span class="p">(</span><span class="n">checked</span><span class="p">):</span>
+                <span class="n">checked</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_check_virtual_sources</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">checked</span><span class="p">,</span> <span class="n">depth</span><span class="p">,</span> <span class="n">budget</span><span class="p">)</span>
+                <span class="k">with</span> <span class="n">_CHECKED_VIRTUAL_LOCK</span><span class="p">:</span>
+                    <span class="n">_CHECKED_VIRTUAL</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">checked</span>
+            <span class="k">if</span> <span class="n">states</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">states</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">checked</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_virtual_sources</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span>
+        <span class="n">states</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FileState</span><span class="p">]],</span>
+        <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">budget</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="s2">"Check every source of a virtual dataset. Record the files looked at."</span>
+        <span class="k">if</span> <span class="n">depth</span> <span class="o">&gt;=</span> <span class="n">MAX_VIRTUAL_DEPTH</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BrokenLink</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"The virtual dataset </span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> is nested too deeply to check."</span>
+            <span class="p">)</span>
+        <span class="n">home</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">(),</span> <span class="n">os</span><span class="o">.</span><span class="n">fsdecode</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">filename</span><span class="p">))</span>
+        <span class="n">states</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">home</span><span class="p">,</span> <span class="n">_file_state</span><span class="p">(</span><span class="n">home</span><span class="p">)))</span>
+        <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">virtual_sources</span><span class="p">():</span>
+            <span class="n">printf_style</span> <span class="o">=</span> <span class="s2">"%b"</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">file_name</span> <span class="ow">or</span> <span class="s2">"%b"</span> <span class="ow">in</span> <span class="n">source</span><span class="o">.</span><span class="n">dset_name</span>
+            <span class="c1"># A printf-style source stands for blocks 0, 1, 2, ... up to the</span>
+            <span class="c1"># first one that does not exist.</span>
+            <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">count</span><span class="p">():</span>
+                <span class="n">budget</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">budget</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">MAX_VIRTUAL_SOURCES</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">BrokenLink</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"The virtual dataset </span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> has too many "</span>
+                        <span class="s2">"sources to check."</span>
+                    <span class="p">)</span>
+                <span class="n">found</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_virtual_source</span><span class="p">(</span>
+                    <span class="n">dataset</span><span class="p">,</span>
+                    <span class="n">home</span><span class="p">,</span>
+                    <span class="n">_printf_name</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">file_name</span><span class="p">,</span> <span class="n">block</span><span class="p">),</span>
+                    <span class="n">_printf_name</span><span class="p">(</span><span class="n">source</span><span class="o">.</span><span class="n">dset_name</span><span class="p">,</span> <span class="n">block</span><span class="p">),</span>
+                    <span class="n">states</span><span class="p">,</span>
+                    <span class="n">depth</span><span class="p">,</span>
+                    <span class="n">budget</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">printf_style</span> <span class="ow">and</span> <span class="n">found</span><span class="p">):</span>
+                    <span class="k">break</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_virtual_source</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span>
+        <span class="n">home</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">states</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FileState</span><span class="p">]],</span>
+        <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">budget</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="s2">"Check one source dataset. Return False if it does not exist."</span>
+        <span class="k">if</span> <span class="n">file_name</span> <span class="o">==</span> <span class="s2">"."</span><span class="p">:</span>
+            <span class="c1"># The source is in the same file as the virtual dataset.</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">source</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">file</span><span class="p">[</span><span class="n">dataset_name</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_check</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">home</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">budget</span><span class="p">,</span> <span class="n">states</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="c1"># HDF5 looks for the source file in several places and reads the first</span>
+        <span class="c1"># one it finds. Every place where a file exists must be acceptable.</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">_virtual_source_candidates</span><span class="p">(</span><span class="n">home</span><span class="p">,</span> <span class="n">file_name</span><span class="p">):</span>
+            <span class="c1"># The result depends on this file, also on its being absent.</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="n">_file_state</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">states</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">path</span><span class="p">,</span> <span class="n">state</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_in_directories</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">directories</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">BrokenLink</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"The virtual dataset </span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> has a source file "</span>
+                    <span class="s2">"outside of the storage that this server reads."</span>
+                <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">file</span> <span class="o">=</span> <span class="n">_open_source</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">open_kwargs</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">BrokenLink</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"A source file of the virtual dataset </span><span class="si">{</span><span class="n">dataset</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> cannot "</span>
+                    <span class="s2">"be opened to check it."</span>
+                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">err</span>
+            <span class="k">with</span> <span class="n">file</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">source</span> <span class="o">=</span> <span class="n">file</span><span class="p">[</span><span class="n">dataset_name</span><span class="p">]</span>
+                <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_check</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">budget</span><span class="p">,</span> <span class="n">states</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">found</span>  <span class="c1"># If False, HDF5 uses the fill value.</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_virtual_source_candidates</span><span class="p">(</span><span class="n">home</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""The paths where HDF5 may look for a source file of a virtual dataset.</span>
+
+<span class="sd">    Given the name of the file that holds the virtual dataset, as it was</span>
+<span class="sd">    opened, and the name of the source file as stored in it. HDF5 tries an</span>
+<span class="sd">    absolute name as it is. Otherwise, and also if there is no file by the</span>
+<span class="sd">    absolute name, it looks for the name, or the last part of the absolute</span>
+<span class="sd">    name, under each prefix in HDF5_VDS_PREFIX, next to the file that holds</span>
+<span class="sd">    the virtual dataset, in the working directory of the process, and next to</span>
+<span class="sd">    the file that the name of the holding file leads to, if that name is a</span>
+<span class="sd">    symbolic link.</span>
+
+<span class="sd">    Paths are not normalized here: a `..` is resolved by the filesystem when</span>
+<span class="sd">    a candidate is looked up, as HDF5 resolves it, so that a link on the way</span>
+<span class="sd">    is followed the same.</span>
+<span class="sd">    """</span>
+    <span class="n">cwd</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span>
+    <span class="c1"># Where HDF5 looks for a relative name: the directory part of the name of</span>
+    <span class="c1"># the holding file, which it makes absolute without resolving anything.</span>
+    <span class="n">home_directory</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cwd</span><span class="p">,</span> <span class="n">home</span><span class="p">))</span>
+    <span class="n">candidates</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isabs</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">file_name</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"/"</span><span class="p">,</span> <span class="s2">"</span><span class="se">\\</span><span class="s2">"</span><span class="p">):</span>
+        <span class="c1"># HDF5 counts a name that starts at a root as absolute, also on</span>
+        <span class="c1"># Windows, where Python requires a drive as well.</span>
+        <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">file_name</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">prefix</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"HDF5_VDS_PREFIX"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">pathsep</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">prefix</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">prefix</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"$</span><span class="si">{ORIGIN}</span><span class="s2">"</span><span class="p">):</span>
+            <span class="n">prefix</span> <span class="o">=</span> <span class="n">home_directory</span> <span class="o">+</span> <span class="n">prefix</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="s2">"$</span><span class="si">{ORIGIN}</span><span class="s2">"</span><span class="p">)</span> <span class="p">:]</span>
+        <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">file_name</span><span class="p">))</span>
+    <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">home_directory</span><span class="p">,</span> <span class="n">file_name</span><span class="p">))</span>
+    <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cwd</span><span class="p">,</span> <span class="n">file_name</span><span class="p">))</span>
+    <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">realpath</span><span class="p">(</span><span class="n">home</span><span class="p">)),</span> <span class="n">file_name</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">candidates</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">require_self_contained</span><span class="p">(</span><span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Raise BrokenLink if an HDF5 file refers to any other file.</span>
+
+<span class="sd">    This is for files that another library reads, such as NetCDF-4 files,</span>
+<span class="sd">    where each object cannot be checked as it is opened. Such files have no</span>
+<span class="sd">    use for external links, virtual datasets or external raw storage. A file</span>
+<span class="sd">    that is not in the HDF5 format is passed.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">h5py</span><span class="o">.</span><span class="n">is_hdf5</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">visit</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">external</span> <span class="ow">or</span> <span class="n">obj</span><span class="o">.</span><span class="n">is_virtual</span><span class="p">:</span>
+                <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Group</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># A committed datatype refers to no file.</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">obj</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">getlink</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">h5py</span><span class="o">.</span><span class="n">ExternalLink</span><span class="p">):</span>
+                <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">obj</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">'/'</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">"</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r"</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="c1"># visititems does not call the function on the root group.</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">visit</span><span class="p">(</span><span class="s2">"/"</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span> <span class="ow">or</span> <span class="n">file</span><span class="o">.</span><span class="n">visititems</span><span class="p">(</span><span class="n">visit</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">BrokenLink</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="si">}</span><span class="s2"> refers to another file, which this server does not read "</span>
+            <span class="s2">"for this format."</span>
+        <span class="p">)</span>
+
 
 <span class="k">def</span><span class="w"> </span><span class="nf">parse_hdf5_tree</span><span class="p">(</span>
     <span class="n">tree</span><span class="p">:</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span> <span class="o">|</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Group</span> <span class="o">|</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span>
+    <span class="n">check</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span> <span class="o">|</span> <span class="n">Sentinel</span><span class="p">]</span> <span class="o">|</span> <span class="n">Sentinel</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Parse an HDF5 file or group into a nested dictionary structure</span>
 
@@ -839,6 +1151,9 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">    ----------</span>
 <span class="sd">    tree : h5py.File or h5py.Group</span>
 <span class="sd">        The file or group to parse</span>
+<span class="sd">    check : callable, optional</span>
+<span class="sd">        Called with each object and follow_virtual=False. An object for which it</span>
+<span class="sd">        raises BrokenLink is recorded as a broken link. See ReferenceGuard.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -851,7 +1166,12 @@ window.runMermaid = runMermaid;</script>
         <span class="k">return</span> <span class="n">HDF5_DATASET</span>
 
     <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">tree</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="n">res</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">HDF5_BROKEN_LINK</span> <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">parse_hdf5_tree</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">check</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">check</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">follow_virtual</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">BrokenLink</span><span class="p">:</span>
+                <span class="n">val</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">res</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">HDF5_BROKEN_LINK</span> <span class="k">if</span> <span class="n">val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">parse_hdf5_tree</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">check</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">res</span>
 
@@ -862,10 +1182,16 @@ window.runMermaid = runMermaid;</script>
     <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
     <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">,</span>
     <span class="n">locking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Get attributes of an HDF5 dataset"""</span>
     <span class="n">d</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">get_hdf5_attrs_and_soft_link</span><span class="p">(</span>
-        <span class="n">file_uri</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+        <span class="n">file_uri</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">,</span>
+        <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+        <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+        <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">d</span>
 
@@ -876,6 +1202,7 @@ window.runMermaid = runMermaid;</script>
     <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
     <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">,</span>
     <span class="n">locking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">JSON</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Get attributes of an HDF5 dataset and the target of the soft link it is reached through</span>
 
@@ -885,9 +1212,17 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">    """</span>
     <span class="n">file_path</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">file_uri</span><span class="p">)</span>
     <span class="n">key</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span> <span class="k">if</span> <span class="n">dataset</span> <span class="k">else</span> <span class="s2">""</span>
-    <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+    <span class="n">opened</span> <span class="o">=</span> <span class="n">h5open</span><span class="p">(</span>
+        <span class="n">file_path</span><span class="p">,</span>
+        <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+        <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+        <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">opened</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
         <span class="n">link</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">getlink</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">if</span> <span class="n">key</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="n">node</span> <span class="o">=</span> <span class="n">file</span><span class="p">[</span><span class="n">dataset</span><span class="p">]</span> <span class="k">if</span> <span class="n">dataset</span> <span class="k">else</span> <span class="n">file</span>
+        <span class="n">opened</span><span class="o">.</span><span class="n">guard</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
         <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="s2">"attrs"</span><span class="p">,</span> <span class="p">{}))</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Empty</span><span class="p">):</span>
@@ -928,18 +1263,28 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">    It also raises BrokenLink if the requested dataset does not exist in the file at all (e.g. a registered</span>
 <span class="sd">    dataset was never written or has been removed), in which case h5py raises:</span>
 <span class="sd">    KeyError: "Unable to synchronously open object (object 'y' doesn't exist)"</span>
+
+<span class="sd">    If `readable_directories` is given, it raises BrokenLink as well when the object refers to data in a file</span>
+<span class="sd">    outside of those directories, or keeps its raw data in an external file. See ReferenceGuard.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">filename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"r"</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">guard</span> <span class="o">=</span> <span class="n">ReferenceGuard</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">readable_directories</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span> <span class="o">|</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Group</span> <span class="o">|</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Dataset</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__enter__</span><span class="p">()</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="k">else</span> <span class="bp">self</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="k">else</span> <span class="bp">self</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">guard</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">obj</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="fm">__exit__</span><span class="p">(</span><span class="o">*</span><span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">())</span>
             <span class="k">raise</span>
@@ -974,6 +1319,9 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">        group that holds the link. False by default, so an export writes the data.</span>
 <span class="sd">    """</span>
 
+    <span class="c1"># The catalog passes the directories of its readable storage to from_catalog as `readable_directories`.</span>
+    <span class="n">accepts_readable_directories</span> <span class="o">=</span> <span class="kc">True</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">array</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
@@ -993,6 +1341,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
         <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">,</span>
         <span class="n">locking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dask</span><span class="o">.</span><span class="n">array</span><span class="o">.</span><span class="n">Array</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Lazily load arrays from possibly multiple HDF5 files and concatenate them along the first axis</span>
 
@@ -1010,23 +1359,28 @@ window.runMermaid = runMermaid;</script>
 <span class="sd">            The HDF5 library version to use</span>
 <span class="sd">        locking : bool</span>
 <span class="sd">            Whether to use file locking when accessing the files</span>
+<span class="sd">        readable_directories : list, optional</span>
+<span class="sd">            If given, data that the files refer to in other files is read</span>
+<span class="sd">            only from these directories. See ReferenceGuard.</span>
 <span class="sd">        """</span>
+        <span class="n">open_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
+        <span class="p">)</span>
 
         <span class="c1"># Define helper functions for reading and getting specs of HDF5 arrays</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">_read_hdf5_array</span><span class="p">(</span>
             <span class="n">fpath</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span> <span class="nb">slice</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">builtins</span><span class="o">.</span><span class="n">slice</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
         <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span>
-                <span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
-            <span class="p">)</span> <span class="k">as</span> <span class="n">ds</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span><span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="o">**</span><span class="n">open_kwargs</span><span class="p">)</span> <span class="k">as</span> <span class="n">ds</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">ds</span><span class="p">[</span><span class="nb">slice</span><span class="p">]</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">_get_hdf5_specs</span><span class="p">(</span>
             <span class="n">fpath</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">numpy</span><span class="o">.</span><span class="n">dtype</span><span class="p">]:</span>
-            <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span>
-                <span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
-            <span class="p">)</span> <span class="k">as</span> <span class="n">ds</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span><span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="o">**</span><span class="n">open_kwargs</span><span class="p">)</span> <span class="k">as</span> <span class="n">ds</span><span class="p">:</span>
                 <span class="n">result</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">chunks</span> <span class="ow">or</span> <span class="n">ds</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">dtype</span>
             <span class="k">return</span> <span class="n">result</span>
 
@@ -1059,9 +1413,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">is_vlen_string</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">check_string_dtype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
             <span class="k">def</span><span class="w"> </span><span class="nf">_read_as_bytes</span><span class="p">(</span><span class="n">fpath</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">:</span>
-                <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span>
-                    <span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
-                <span class="p">)</span> <span class="k">as</span> <span class="n">ds</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span><span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="o">**</span><span class="n">open_kwargs</span><span class="p">)</span> <span class="k">as</span> <span class="n">ds</span><span class="p">:</span>
                     <span class="k">if</span> <span class="n">is_vlen_string</span><span class="p">:</span>
                         <span class="c1"># Coerce vlen-string object array to fixed-length bytes</span>
                         <span class="k">return</span> <span class="n">numpy</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ds</span><span class="p">[()],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bytes</span><span class="p">)</span>
@@ -1167,6 +1519,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
         <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">,</span>
         <span class="n">locking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"HDF5ArrayAdapter"</span><span class="p">:</span>
         <span class="n">structure</span> <span class="o">=</span> <span class="n">data_source</span><span class="o">.</span><span class="n">structure</span>
         <span class="n">assets</span> <span class="o">=</span> <span class="n">data_source</span><span class="o">.</span><span class="n">assets</span>
@@ -1176,7 +1529,12 @@ window.runMermaid = runMermaid;</script>
         <span class="n">file_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span> <span class="k">for</span> <span class="n">uri</span> <span class="ow">in</span> <span class="n">data_uris</span><span class="p">]</span>
 
         <span class="n">array</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lazy_load_hdf5_array</span><span class="p">(</span>
-            <span class="o">*</span><span class="n">file_paths</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+            <span class="o">*</span><span class="n">file_paths</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">slice</span><span class="p">:</span>
@@ -1197,7 +1555,12 @@ window.runMermaid = runMermaid;</script>
 
         <span class="c1"># Pull additional metadata from the file attributes</span>
         <span class="n">attrs</span><span class="p">,</span> <span class="n">soft_link</span> <span class="o">=</span> <span class="n">get_hdf5_attrs_and_soft_link</span><span class="p">(</span>
-            <span class="n">data_uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+            <span class="n">data_uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">metadata</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">metadata_</span><span class="p">)</span>
         <span class="n">metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">attrs</span><span class="p">)</span>
@@ -1220,11 +1583,17 @@ window.runMermaid = runMermaid;</script>
         <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
         <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">,</span>
         <span class="n">locking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"HDF5ArrayAdapter"</span><span class="p">:</span>
         <span class="n">file_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path_from_uri</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span> <span class="k">for</span> <span class="n">uri</span> <span class="ow">in</span> <span class="n">data_uris</span><span class="p">]</span>
 
         <span class="n">array</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">lazy_load_hdf5_array</span><span class="p">(</span>
-            <span class="o">*</span><span class="n">file_paths</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+            <span class="o">*</span><span class="n">file_paths</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="c1"># Apply slice and squeeze operations, if specified</span>
@@ -1238,7 +1607,12 @@ window.runMermaid = runMermaid;</script>
         <span class="c1"># Construct the structure and pull additional metadata from the file attributes</span>
         <span class="n">structure</span> <span class="o">=</span> <span class="n">ArrayStructure</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
         <span class="n">attrs</span><span class="p">,</span> <span class="n">soft_link</span> <span class="o">=</span> <span class="n">get_hdf5_attrs_and_soft_link</span><span class="p">(</span>
-            <span class="n">data_uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+            <span class="n">data_uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">structure</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">attrs</span><span class="p">,</span> <span class="n">soft_link</span><span class="o">=</span><span class="n">soft_link</span> <span class="ow">or</span> <span class="kc">False</span><span class="p">)</span>
@@ -1280,6 +1654,9 @@ window.runMermaid = runMermaid;</script>
 
 <span class="sd">    """</span>
 
+    <span class="c1"># The catalog passes the directories of its readable storage to from_catalog as `readable_directories`.</span>
+    <span class="n">accepts_readable_directories</span> <span class="o">=</span> <span class="kc">True</span>
+
 <div class="viewcode-block" id="HDF5Adapter.__init__">
 <a class="viewcode-back" href="../../../reference/generated/tiled.adapters.hdf5.HDF5Adapter.html#tiled.adapters.hdf5.HDF5Adapter.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -1319,6 +1696,7 @@ window.runMermaid = runMermaid;</script>
         <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
         <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">,</span>
         <span class="n">locking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># Optional kwargs for HDF5ArrayAdapter</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"HDF5Adapter | HDF5ArrayAdapter"</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -1333,6 +1711,7 @@ window.runMermaid = runMermaid;</script>
                 <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
                 <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
                 <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+                <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
                 <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">)</span>
 
@@ -1345,10 +1724,16 @@ window.runMermaid = runMermaid;</script>
             <span class="n">ast</span><span class="o">.</span><span class="n">data_uri</span> <span class="k">for</span> <span class="n">ast</span> <span class="ow">in</span> <span class="n">assets</span> <span class="k">if</span> <span class="n">ast</span><span class="o">.</span><span class="n">parameter</span> <span class="o">==</span> <span class="s2">"data_uris"</span>
         <span class="p">]</span> <span class="ow">or</span> <span class="p">[</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data_uri</span><span class="p">]</span>
         <span class="n">file_path</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_uris</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span>
-            <span class="n">file_path</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
-        <span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-            <span class="n">tree</span> <span class="o">=</span> <span class="n">parse_hdf5_tree</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+        <span class="n">opened</span> <span class="o">=</span> <span class="n">h5open</span><span class="p">(</span>
+            <span class="n">file_path</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">opened</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">tree</span> <span class="o">=</span> <span class="n">parse_hdf5_tree</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">opened</span><span class="o">.</span><span class="n">guard</span><span class="o">.</span><span class="n">check</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">tree</span> <span class="o">==</span> <span class="n">HDF5_DATASET</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1365,6 +1750,7 @@ window.runMermaid = runMermaid;</script>
             <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
             <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
             <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@classmethod</span>
@@ -1375,11 +1761,20 @@ window.runMermaid = runMermaid;</script>
         <span class="n">swmr</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">SWMR_DEFAULT</span><span class="p">,</span>
         <span class="n">libver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">,</span>
         <span class="n">locking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">readable_directories</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>  <span class="c1"># Optional kwargs for HDF5ArrayAdapter</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"HDF5Adapter | HDF5ArrayAdapter"</span><span class="p">:</span>
         <span class="n">fpath</span> <span class="o">=</span> <span class="n">path_from_uri</span><span class="p">(</span><span class="n">data_uris</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="k">with</span> <span class="n">h5open</span><span class="p">(</span><span class="n">fpath</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
-            <span class="n">tree</span> <span class="o">=</span> <span class="n">parse_hdf5_tree</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+        <span class="n">opened</span> <span class="o">=</span> <span class="n">h5open</span><span class="p">(</span>
+            <span class="n">fpath</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">opened</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">tree</span> <span class="o">=</span> <span class="n">parse_hdf5_tree</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">opened</span><span class="o">.</span><span class="n">guard</span><span class="o">.</span><span class="n">check</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">tree</span> <span class="o">==</span> <span class="n">HDF5_DATASET</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">HDF5ArrayAdapter</span><span class="o">.</span><span class="n">from_uris</span><span class="p">(</span>
@@ -1388,18 +1783,29 @@ window.runMermaid = runMermaid;</script>
                 <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
                 <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
                 <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+                <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
                 <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">tree</span><span class="p">,</span> <span class="o">*</span><span class="n">data_uris</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span> <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span> <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span> <span class="n">locking</span><span class="o">=</span><span class="n">locking</span>
+            <span class="n">tree</span><span class="p">,</span>
+            <span class="o">*</span><span class="n">data_uris</span><span class="p">,</span>
+            <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">swmr</span><span class="o">=</span><span class="n">swmr</span><span class="p">,</span>
+            <span class="n">libver</span><span class="o">=</span><span class="n">libver</span><span class="p">,</span>
+            <span class="n">locking</span><span class="o">=</span><span class="n">locking</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="n">readable_directories</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">node_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">JSON</span><span class="p">:</span>
-        <span class="n">d</span> <span class="o">=</span> <span class="n">get_hdf5_attrs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">get_hdf5_attrs</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">uris</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="p">,</span>
+            <span class="n">readable_directories</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"readable_directories"</span><span class="p">),</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="n">d</span><span class="p">,</span> <span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">metadata</span><span class="p">()}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
