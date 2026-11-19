@@ -788,6 +788,7 @@ window.runMermaid = runMermaid;</script>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">enum</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
@@ -874,6 +875,11 @@ window.runMermaid = runMermaid;</script>
 
 
 
+<span class="c1"># The unit of a datetime or timedelta dtype, as numpy writes it: an optional</span>
+<span class="c1"># count and a unit code in brackets, such as "[ns]" or "[10m]".</span>
+<span class="n">DT_UNITS_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"^\[\d*(Y|M|W|D|h|m|s|ms|us|ns|ps|fs|as)\]$"</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="BuiltinDtype">
 <a class="viewcode-back" href="../../../reference/generated/tiled.structures.array.BuiltinDtype.html#tiled.structures.array.BuiltinDtype">[docs]</a>
 <span class="nd">@dataclass</span>
@@ -882,6 +888,18 @@ window.runMermaid = runMermaid;</script>
     <span class="n">kind</span><span class="p">:</span> <span class="n">Kind</span>
     <span class="n">itemsize</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">dt_units</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># dt_units goes into the dtype string, which can also come from a</span>
+        <span class="c1"># client, so it is held to what numpy writes there.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt_units</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">datetime</span><span class="p">,</span> <span class="n">Kind</span><span class="o">.</span><span class="n">timedelta</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"dt_units is only valid for datetime and timedelta kinds, "</span>
+                    <span class="sa">f</span><span class="s2">"not </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">kind</span><span class="o">.</span><span class="n">value</span><span class="si">!r}</span><span class="s2">."</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">DT_UNITS_PATTERN</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dt_units</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid dt_units </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">dt_units</span><span class="si">!r}</span><span class="s2">."</span><span class="p">)</span>
 
     <span class="n">_endianness_map</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"&gt;"</span><span class="p">:</span> <span class="s2">"big"</span><span class="p">,</span>
