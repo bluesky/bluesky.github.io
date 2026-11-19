@@ -804,7 +804,13 @@ window.runMermaid = runMermaid;</script>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..structures.data_source</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataSource</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">UNCHANGED</span><span class="p">,</span> <span class="n">DictView</span><span class="p">,</span> <span class="n">ListView</span><span class="p">,</span> <span class="n">patch_mimetypes</span><span class="p">,</span> <span class="n">safe_json_dump</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.metadata_update</span><span class="w"> </span><span class="kn">import</span> <span class="n">apply_update_patch</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span> <span class="n">handle_error</span><span class="p">,</span> <span class="n">normalize_specs</span><span class="p">,</span> <span class="n">retry_context</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MSGPACK_MIME_TYPE</span><span class="p">,</span>
+    <span class="n">handle_error</span><span class="p">,</span>
+    <span class="n">normalize_specs</span><span class="p">,</span>
+    <span class="n">retry_context</span><span class="p">,</span>
+    <span class="n">should_retry_if_unprocessed</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="c1"># TODO: Duplicated from  tiled.type_aliases to prevent importing numpy</span>
 <span class="c1"># After #1407 replace AnyAdapter with the BaseClass and remove this redefinition</span>
@@ -874,6 +880,7 @@ window.runMermaid = runMermaid;</script>
             <span class="k">if</span> <span class="n">offset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
             <span class="k">if</span> <span class="n">item_</span><span class="o">.</span><span class="n">stop</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">limit</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="n">params</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"?page[offset]=</span><span class="si">{</span><span class="n">offset</span><span class="si">}</span><span class="s2">"</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">limit</span> <span class="o">=</span> <span class="n">item_</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">offset</span>
@@ -893,9 +900,12 @@ window.runMermaid = runMermaid;</script>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">content</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">content</span><span class="p">[</span><span class="s2">"data"</span><span class="p">])</span>
+                <span class="k">if</span> <span class="n">limit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">])</span> <span class="o">&gt;=</span> <span class="n">limit</span><span class="p">:</span>
+                    <span class="c1"># The limit caps only the first page, so stop here.</span>
+                    <span class="k">break</span>
                 <span class="n">next_page_url</span> <span class="o">=</span> <span class="n">content</span><span class="p">[</span><span class="s2">"links"</span><span class="p">][</span><span class="s2">"next"</span><span class="p">]</span>
 
-            <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">result</span><span class="p">[</span><span class="s2">"data"</span><span class="p">][:</span><span class="n">limit</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># Fetch all the revisions, one page at a time, rather than one request</span>
@@ -1654,7 +1664,14 @@ window.runMermaid = runMermaid;</script>
         <span class="k">if</span> <span class="n">drop_revision</span><span class="p">:</span>
             <span class="n">params</span><span class="p">[</span><span class="s2">"drop_revision"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
 
-        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">retry_context</span><span class="p">():</span>
+        <span class="c1"># A JSON Patch may hold operations that are not idempotent, such as</span>
+        <span class="c1"># appending to a list, so it is retried only when the server cannot</span>
+        <span class="c1"># have processed it. A merge patch sets values, so it can be repeated.</span>
+        <span class="k">if</span> <span class="n">content_type</span> <span class="o">==</span> <span class="n">patch_mimetypes</span><span class="o">.</span><span class="n">JSON_PATCH</span><span class="p">:</span>
+            <span class="n">attempts</span> <span class="o">=</span> <span class="n">retry_context</span><span class="p">(</span><span class="n">on</span><span class="o">=</span><span class="n">should_retry_if_unprocessed</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">attempts</span> <span class="o">=</span> <span class="n">retry_context</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="n">attempts</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">attempt</span><span class="p">:</span>
                 <span class="n">content</span> <span class="o">=</span> <span class="n">handle_error</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">http_client</span><span class="o">.</span><span class="n">patch</span><span class="p">(</span>
